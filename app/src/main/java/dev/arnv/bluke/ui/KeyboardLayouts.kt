@@ -29,7 +29,27 @@ enum class CaseColor(val displayName: String, val caseColor: Color, val metallic
     WHITE("White", Color(0xFFF9FAFB), false),
     BEIGE("Beige", Color(0xFFE6DFD3), false),
     ROSE_GOLD("Rose Gold", Color(0xFFE8C3B9), true),
-    LIGHT_GOLD("Light Gold", Color(0xFFEAD0A8), true)
+    LIGHT_GOLD("Light Gold", Color(0xFFEAD0A8), true),
+    CUSTOM("Custom", Color(0xFF3F51B5), false);
+
+    fun getActualColor(sharedPrefs: android.content.SharedPreferences): Color {
+        return if (this == CUSTOM) {
+            val r = sharedPrefs.getInt("custom_case_color_r", 63)
+            val g = sharedPrefs.getInt("custom_case_color_g", 81)
+            val b = sharedPrefs.getInt("custom_case_color_b", 181)
+            Color(r, g, b)
+        } else {
+            this.caseColor
+        }
+    }
+
+    fun getActualMetallic(sharedPrefs: android.content.SharedPreferences): Boolean {
+        return if (this == CUSTOM) {
+            sharedPrefs.getBoolean("custom_case_color_metallic", false)
+        } else {
+            this.metallic
+        }
+    }
 }
 
 data class KeyboardPalette(

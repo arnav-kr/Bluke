@@ -89,6 +89,7 @@ fun HomeScreen(
     var isHapticsEnabled by remember { mutableStateOf(sharedPrefs.getBoolean("haptics_enabled", true)) }
     var keySensitivity by remember { mutableStateOf(sharedPrefs.getFloat("key_sensitivity", 6f)) }
     var lockSyncMode by remember { mutableStateOf(sharedPrefs.getString("lock_sync_mode", "host") ?: "host") }
+    var launchMode by rememberSaveable { mutableStateOf(sharedPrefs.getInt("launch_mode", 0)) }
 
     // Mute state
     var isMuted by rememberSaveable { mutableStateOf(!sharedPrefs.getBoolean("key_sound_enabled", true)) }
@@ -106,6 +107,17 @@ fun HomeScreen(
                 isHapticsEnabled = sharedPrefs.getBoolean("haptics_enabled", true)
                 keySensitivity = sharedPrefs.getFloat("key_sensitivity", 6f)
                 lockSyncMode = sharedPrefs.getString("lock_sync_mode", "host") ?: "host"
+                val enabledModes = listOf(0, 1, 2).filter { mode ->
+                    val modeStr = when (mode) {
+                        0 -> "keyboard"
+                        1 -> "touchpad"
+                        2 -> "gamepad"
+                        else -> "keyboard"
+                    }
+                    sharedPrefs.getStringSet("cycle_connection_modes", setOf("keyboard", "touchpad"))?.contains(modeStr) == true
+                }.ifEmpty { listOf(0) }
+                val savedLaunchMode = sharedPrefs.getInt("launch_mode", 0)
+                launchMode = if (enabledModes.contains(savedLaunchMode)) savedLaunchMode else enabledModes.first()
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
@@ -259,16 +271,17 @@ fun HomeScreen(
         label = "screen_navigation"
     ) { keyboardActive ->
         if (keyboardActive) {
-            // Hoist Case Brush to completely paint the landscape bezel and make the entire screen our anodized chassis
             val caseColor = selectedCaseColor
-            val caseBrush = if (caseColor.metallic) {
+            val caseColorVal = caseColor.getActualColor(sharedPrefs)
+            val caseMetallic = caseColor.getActualMetallic(sharedPrefs)
+            val caseBrush = if (caseMetallic) {
                 Brush.linearGradient(
                     colors = listOf(
-                        caseColor.caseColor,
-                        caseColor.caseColor.copy(alpha = 0.85f),
-                        caseColor.caseColor.copy(alpha = 0.7f),
-                        caseColor.caseColor,
-                        caseColor.caseColor.copy(alpha = 0.9f)
+                        caseColorVal,
+                        caseColorVal.copy(alpha = 0.85f),
+                        caseColorVal.copy(alpha = 0.7f),
+                        caseColorVal,
+                        caseColorVal.copy(alpha = 0.9f)
                     ),
                     start = Offset(0f, 0f),
                     end = Offset(500f, 500f)
@@ -276,387 +289,493 @@ fun HomeScreen(
             } else {
                 Brush.linearGradient(
                     colors = listOf(
-                        caseColor.caseColor,
-                        caseColor.caseColor.copy(alpha = 0.92f)
+                        caseColorVal,
+                        caseColorVal.copy(alpha = 0.92f)
                     )
                 )
             }
 
-            // Seamless full-screen canvas acting as the aluminum keyboard plate and chassis
-            Column(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(caseBrush)
-                    .padding(bottom = 6.dp),
-                verticalArrangement = Arrangement.SpaceBetween,
-                horizontalAlignment = Alignment.CenterHorizontally
-            ) {
-                // 1. Sleek Frosted Glass Top Settings Bar (KBSim Web Style Toggles Toolbar)
-                Row(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(38.dp)
-                        .background(Color.Black.copy(alpha = 0.45f))
-                        .padding(horizontal = 8.dp, vertical = 2.dp),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    // Left Section: Exit, Connection status and Reconnect Button
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        // Exit Button (Pill style to match other buttons)
-                        Row(
-                            modifier = Modifier
-                                .height(28.dp)
-                                .clip(RoundedCornerShape(6.dp))
-                                .background(Color.White.copy(alpha = 0.15f))
-                                .clickable { isKeyboardActive = false }
-                                .padding(horizontal = 8.dp)
-                                .testTag("exit_keyboard_btn"),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Close,
-                                contentDescription = "Exit",
-                                tint = Color.White,
-                                modifier = Modifier.size(10.dp)
-                            )
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text(
-                                text = "Close",
-                                color = Color.White,
-                                fontSize = 9.sp,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
-
-                        // Status LED and connection details
-                        val statusLedColor = if (isConnected) Color(0xFF39FF14) else Color(0xFFFF9800)
-                        // Use collected state (not .value) so UI reacts to changes from background
-                        val connectedDevNow by btManager.connectedDevice.collectAsState()
-                        val activeDevice = connectedDevNow ?: lastConnectedDevice
-                        val deviceName = activeDevice?.name ?: "No Host"
-                        
-                        Box(
-                            modifier = Modifier
-                                .size(6.dp)
-                                .clip(CircleShape)
-                                .background(statusLedColor)
-                        )
-                        
-                        Text(
-                            text = deviceName,
-                            color = Color.White,
-                            fontSize = 11.sp,
-                            fontWeight = FontWeight.Bold,
-                            fontFamily = FontFamily.SansSerif
-                        )
-                        
-                        Text(
-                            text = if (isConnected) "[connected]" else "[offline]",
-                            color = Color.White.copy(alpha = 0.5f), // grayscale font
-                            fontSize = 9.sp, // reduced size
-                            fontWeight = FontWeight.Normal,
-                            fontFamily = FontFamily.SansSerif
-                        )
-                        
-                        // Reconnect Button
-                        if (!isConnected && lastConnectedDevice != null) {
-                            Row(
-                                modifier = Modifier
-                                    .height(28.dp)
-                                    .clip(RoundedCornerShape(6.dp))
-                                    .background(Color.White.copy(alpha = 0.15f))
-                                    .clickable {
-                                        lastConnectedDevice?.let { dev ->
-                                            btManager.connectDevice(dev)
-                                        }
+            when (launchMode) {
+                1, 2 -> {
+                    val darkScheme = androidx.compose.material3.darkColorScheme(
+                        primary = MaterialTheme.colorScheme.primary,
+                        background = Color(0xFF141218),
+                        surface = Color(0xFF141218),
+                        surfaceVariant = Color(0xFF2B2930),
+                        onBackground = Color(0xFFE6E0E9),
+                        onSurface = Color(0xFFE6E0E9),
+                        onSurfaceVariant = Color(0xFFCBC4D0)
+                    )
+                    MaterialTheme(colorScheme = darkScheme) {
+                        when (launchMode) {
+                            1 -> {
+                                TouchpadView(
+                                    btManager = btManager,
+                                    onClose = { isKeyboardActive = false },
+                                    launchMode = launchMode,
+                                    onModeChange = { newMode -> 
+                                        launchMode = newMode
+                                        sharedPrefs.edit().putInt("launch_mode", newMode).apply()
+                                    },
+                                    sharedPrefs = sharedPrefs,
+                                    caseBrush = caseBrush,
+                                    selectedCaseColor = selectedCaseColor,
+                                    onCaseColorChange = { newColor ->
+                                        selectedCaseColor = newColor
+                                        soundSynth.playRelease()
                                     }
-                                    .padding(horizontal = 8.dp),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(4.dp)
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.Refresh,
-                                    contentDescription = "Reconnect",
-                                    tint = Color.White,
-                                    modifier = Modifier.size(11.dp)
-                                )
-                                Text(
-                                    text = "Reconnect",
-                                    color = Color.White,
-                                    fontSize = 9.sp,
-                                    fontWeight = FontWeight.Bold
                                 )
                             }
-                        }
-                    }
-
-                    // Right Section: lock LEDs indicators, configuration pills, and mute button
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        // 1. Keyboard Status Lock LEDs Panel
-                        Row(
-                            modifier = Modifier
-                                .height(28.dp)
-                                .clip(RoundedCornerShape(6.dp))
-                                .background(Color.White.copy(alpha = 0.15f))
-                                .padding(horizontal = 8.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(10.dp)
-                        ) {
-                            // CAPS
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(4.dp),
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(4.dp))
-                                    .clickable {
-                                        if (isConnected) {
-                                            btManager.sendKey(0x39, true)
-                                            btManager.sendKey(0x39, false)
-                                            if (lockSyncMode == "device") {
-                                                isCapsLockActive = !isCapsLockActive
-                                            }
-                                        } else {
-                                            isCapsLockActive = !isCapsLockActive
-                                        }
-                                    }
-                                    .padding(horizontal = 4.dp, vertical = 2.dp)
-                            ) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(5.dp)
-                                        .clip(CircleShape)
-                                        .background(if (isCapsLockActive) Color(0xFF39FF14) else Color.White.copy(alpha = 0.15f))
-                                )
-                                Text(
-                                    text = "CAPS",
-                                    color = if (isCapsLockActive) Color.White else Color.White.copy(alpha = 0.4f),
-                                    fontSize = 8.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    fontFamily = FontFamily.SansSerif,
-                                    style = androidx.compose.ui.text.TextStyle(
-                                        platformStyle = androidx.compose.ui.text.PlatformTextStyle(includeFontPadding = false)
-                                    )
+                            2 -> {
+                                GamepadView(
+                                    btManager = btManager,
+                                    onClose = { isKeyboardActive = false },
+                                    launchMode = launchMode,
+                                    onModeChange = { newMode -> 
+                                        launchMode = newMode
+                                        sharedPrefs.edit().putInt("launch_mode", newMode).apply()
+                                    },
+                                    sharedPrefs = sharedPrefs,
+                                    caseBrush = caseBrush
                                 )
                             }
-                            
-                            // NUM
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(4.dp),
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(4.dp))
-                                    .clickable {
-                                        if (isConnected) {
-                                            btManager.sendKey(0x53, true)
-                                            btManager.sendKey(0x53, false)
-                                            if (lockSyncMode == "device") {
-                                                isNumLockActive = !isNumLockActive
-                                            }
-                                        } else {
-                                            isNumLockActive = !isNumLockActive
-                                        }
-                                    }
-                                    .padding(horizontal = 4.dp, vertical = 2.dp)
-                            ) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(5.dp)
-                                        .clip(CircleShape)
-                                        .background(if (isNumLockActive) Color(0xFF39FF14) else Color.White.copy(alpha = 0.15f))
-                                )
-                                Text(
-                                    text = "NUM",
-                                    color = if (isNumLockActive) Color.White else Color.White.copy(alpha = 0.4f),
-                                    fontSize = 8.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    fontFamily = FontFamily.SansSerif,
-                                    style = androidx.compose.ui.text.TextStyle(
-                                        platformStyle = androidx.compose.ui.text.PlatformTextStyle(includeFontPadding = false)
-                                    )
-                                )
-                            }
-                            
-                            // SCR
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(4.dp),
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(4.dp))
-                                    .clickable {
-                                        if (isConnected) {
-                                            btManager.sendKey(0x47, true)
-                                            btManager.sendKey(0x47, false)
-                                            if (lockSyncMode == "device") {
-                                                isScrollLockActive = !isScrollLockActive
-                                            }
-                                        } else {
-                                            isScrollLockActive = !isScrollLockActive
-                                        }
-                                    }
-                                    .padding(horizontal = 4.dp, vertical = 2.dp)
-                            ) {
-                                Box(
-                                    modifier = Modifier
-                                        .size(5.dp)
-                                        .clip(CircleShape)
-                                        .background(if (isScrollLockActive) Color(0xFF39FF14) else Color.White.copy(alpha = 0.15f))
-                                )
-                                Text(
-                                    text = "SCR",
-                                    color = if (isScrollLockActive) Color.White else Color.White.copy(alpha = 0.4f),
-                                    fontSize = 8.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    fontFamily = FontFamily.SansSerif,
-                                    style = androidx.compose.ui.text.TextStyle(
-                                        platformStyle = androidx.compose.ui.text.PlatformTextStyle(includeFontPadding = false)
-                                    )
-                                )
-                            }
-                        }
-
-                        // 2. Layout Selector Pill
-                        Row(
-                            modifier = Modifier
-                                .height(28.dp)
-                                .clip(RoundedCornerShape(6.dp))
-                                .background(Color.White.copy(alpha = 0.15f))
-                                .clickable {
-                                    val nextIndex = (selectedLayoutType.ordinal + 1) % KeyboardLayoutType.values().size
-                                    selectedLayoutType = KeyboardLayoutType.values()[nextIndex]
-                                    soundSynth.playPress()
-                                }
-                                .padding(horizontal = 8.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Keyboard,
-                                contentDescription = "Layout",
-                                tint = Color.White.copy(alpha = 0.9f),
-                                modifier = Modifier.size(10.dp)
-                            )
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text(
-                                text = selectedLayoutType.displayName,
-                                color = Color.White,
-                                fontSize = 9.sp,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
-
-                        // 3. Switch Selector Pill
-                        val currentSwitch = soundSynth.getCurrentSwitch()
-                        Row(
-                            modifier = Modifier
-                                .height(28.dp)
-                                .clip(RoundedCornerShape(6.dp))
-                                .background(Color.White.copy(alpha = 0.15f))
-                                .clickable {
-                                    val nextIndex = (currentSwitch.ordinal + 1) % SwitchType.values().size
-                                    val nextSwitch = SwitchType.values()[nextIndex]
-                                    soundSynth.changeSwitchType(nextSwitch)
-                                    soundSynth.playPress()
-                                }
-                                .padding(horizontal = 8.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.MusicNote,
-                                contentDescription = "Switch",
-                                tint = Color.White.copy(alpha = 0.9f),
-                                modifier = Modifier.size(10.dp)
-                            )
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text(
-                                text = currentSwitch.displayName,
-                                color = Color.White,
-                                fontSize = 9.sp,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
-
-                        // 4. Case Color Selector Pill
-                        Row(
-                            modifier = Modifier
-                                .height(28.dp)
-                                .clip(RoundedCornerShape(6.dp))
-                                .background(Color.White.copy(alpha = 0.15f))
-                                .clickable {
-                                    val nextIndex = (selectedCaseColor.ordinal + 1) % CaseColor.values().size
-                                    selectedCaseColor = CaseColor.values()[nextIndex]
-                                    soundSynth.playRelease()
-                                }
-                                .padding(horizontal = 8.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Box(
-                                modifier = Modifier
-                                    .size(8.dp)
-                                    .clip(CircleShape)
-                                    .background(selectedCaseColor.caseColor)
-                                    .border(0.5.dp, Color.White, CircleShape)
-                            )
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text(
-                                text = selectedCaseColor.displayName,
-                                color = Color.White,
-                                fontSize = 9.sp,
-                                fontWeight = FontWeight.Bold
-                            )
-                        }
-
-                        // 5. Mute Speaker Button (Squarish, height 28dp, radius 6dp)
-                        Box(
-                            modifier = Modifier
-                                .size(28.dp)
-                                .clip(RoundedCornerShape(6.dp))
-                                .background(Color.White.copy(alpha = 0.15f))
-                                .clickable {
-                                    val muted = !isMuted
-                                    isMuted = muted
-                                    soundSynth.setMute(muted)
-                                    sharedPrefs.edit().putBoolean("key_sound_enabled", !muted).apply()
-                                }
-                                .testTag("mute_toggle"),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            Icon(
-                                imageVector = if (isMuted) Icons.AutoMirrored.Filled.VolumeOff else Icons.AutoMirrored.Filled.VolumeUp,
-                                contentDescription = "Mute",
-                                tint = Color.White,
-                                modifier = Modifier.size(14.dp)
-                            )
                         }
                     }
                 }
+                else -> {
+                    // Seamless full-screen canvas acting as the aluminum keyboard plate and chassis
+                    Column(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .background(caseBrush)
+                            .padding(bottom = 6.dp),
+                        verticalArrangement = Arrangement.SpaceBetween,
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        // 1. Sleek Frosted Glass Top Settings Bar (KBSim Web Style Toggles Toolbar)
+                        Row(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(38.dp)
+                                .background(Color.Black.copy(alpha = 0.45f))
+                                .padding(horizontal = 8.dp, vertical = 2.dp),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            // Left Section: Exit, Connection status and Reconnect Button
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                // Exit Button (Pill style to match other buttons)
+                                Row(
+                                    modifier = Modifier
+                                        .height(28.dp)
+                                        .clip(RoundedCornerShape(6.dp))
+                                        .background(Color.White.copy(alpha = 0.15f))
+                                        .clickable { isKeyboardActive = false }
+                                        .padding(horizontal = 8.dp)
+                                        .testTag("exit_keyboard_btn"),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Close,
+                                        contentDescription = "Exit",
+                                        tint = Color.White,
+                                        modifier = Modifier.size(10.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text(
+                                        text = "Close",
+                                        color = Color.White,
+                                        fontSize = 9.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
 
-                // 2. Main Mechanical Keyboard Chassis (centered with custom margins)
-                Box(
-                    modifier = Modifier
-                        .weight(1f)
-                        .fillMaxWidth()
-                        .padding(horizontal = 6.dp, vertical = 2.dp),
-                    contentAlignment = Alignment.Center
-                ) {
-                    KeyboardView(
-                        layoutType = selectedLayoutType,
-                        caseColor = selectedCaseColor,
-                        activePressedKeys = activePressedKeys,
-                        isConnected = isConnected,
-                        rgbMode = selectedRgbMode,
-                        timeProgress = rgbTimeProgress,
-                        isCapsLockActive = isCapsLockActive,
-                        isNumLockActive = isNumLockActive,
-                        isScrollLockActive = isScrollLockActive,
-                        keySensitivity = keySensitivity,
-                        onKeyPressChange = { code, press -> handleLocalKeyPress(code, press) }
-                    )
+                                // Rotating Mode Switcher
+                                Row(
+                                    modifier = Modifier
+                                        .height(28.dp)
+                                        .clip(RoundedCornerShape(6.dp))
+                                        .background(Color.White.copy(alpha = 0.15f))
+                                        .clickable {
+                                            val enabledModes = listOf(0, 1, 2).filter { mode ->
+                                                val modeStr = when (mode) {
+                                                    0 -> "keyboard"
+                                                    1 -> "touchpad"
+                                                    2 -> "gamepad"
+                                                    else -> "keyboard"
+                                                }
+                                                sharedPrefs.getStringSet("cycle_connection_modes", setOf("keyboard", "touchpad"))?.contains(modeStr) == true
+                                            }.ifEmpty { listOf(0) }
+                                            val currentIndexInEnabled = enabledModes.indexOf(launchMode)
+                                            val nextIndex = (currentIndexInEnabled + 1) % enabledModes.size
+                                            val nextMode = enabledModes[nextIndex]
+                                            launchMode = nextMode
+                                            sharedPrefs.edit().putInt("launch_mode", nextMode).apply()
+                                            if (isHapticsEnabled) {
+                                                view.performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS)
+                                            }
+                                        }
+                                        .padding(horizontal = 8.dp)
+                                        .testTag("keyboard_mode_cycle_btn"),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Keyboard,
+                                        contentDescription = "Switch Mode",
+                                        tint = Color.White,
+                                        modifier = Modifier.size(11.dp)
+                                    )
+                                    Text(
+                                        text = "Keyboard Mode",
+                                        color = Color.White,
+                                        fontSize = 9.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+
+                                // Status LED and connection details
+                                val statusLedColor = if (isConnected) Color(0xFF39FF14) else Color(0xFFFF9800)
+                                // Use collected state (not .value) so UI reacts to changes from background
+                                val connectedDevNow by btManager.connectedDevice.collectAsState()
+                                val activeDevice = connectedDevNow ?: lastConnectedDevice
+                                val deviceName = activeDevice?.name ?: "No Host"
+                                
+                                Box(
+                                    modifier = Modifier
+                                        .size(6.dp)
+                                        .clip(CircleShape)
+                                        .background(statusLedColor)
+                                )
+                                
+                                Text(
+                                    text = deviceName,
+                                    color = Color.White,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    fontFamily = FontFamily.SansSerif
+                                )
+                                
+                                Text(
+                                    text = if (isConnected) "[connected]" else "[offline]",
+                                    color = Color.White.copy(alpha = 0.5f), // grayscale font
+                                    fontSize = 9.sp, // reduced size
+                                    fontWeight = FontWeight.Normal,
+                                    fontFamily = FontFamily.SansSerif
+                                )
+                                
+                                // Reconnect Button
+                                if (!isConnected && lastConnectedDevice != null) {
+                                    Row(
+                                        modifier = Modifier
+                                            .height(28.dp)
+                                            .clip(RoundedCornerShape(6.dp))
+                                            .background(Color.White.copy(alpha = 0.15f))
+                                            .clickable {
+                                                lastConnectedDevice?.let { dev ->
+                                                    btManager.connectDevice(dev)
+                                                }
+                                            }
+                                            .padding(horizontal = 8.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Refresh,
+                                            contentDescription = "Reconnect",
+                                            tint = Color.White,
+                                            modifier = Modifier.size(11.dp)
+                                        )
+                                        Text(
+                                            text = "Reconnect",
+                                            color = Color.White,
+                                            fontSize = 9.sp,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    }
+                                }
+                            }
+
+                            // Right Section: lock LEDs indicators, configuration pills, and mute button
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
+                                // 1. Keyboard Status Lock LEDs Panel
+                                Row(
+                                    modifier = Modifier
+                                        .height(28.dp)
+                                        .clip(RoundedCornerShape(6.dp))
+                                        .background(Color.White.copy(alpha = 0.15f))
+                                        .padding(horizontal = 8.dp),
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                ) {
+                                    // CAPS
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                        modifier = Modifier
+                                            .clip(RoundedCornerShape(4.dp))
+                                            .clickable {
+                                                if (isConnected) {
+                                                    btManager.sendKey(0x39, true)
+                                                    btManager.sendKey(0x39, false)
+                                                    if (lockSyncMode == "device") {
+                                                        isCapsLockActive = !isCapsLockActive
+                                                    }
+                                                } else {
+                                                    isCapsLockActive = !isCapsLockActive
+                                                }
+                                            }
+                                            .padding(horizontal = 4.dp, vertical = 2.dp)
+                                    ) {
+                                        Box(
+                                            modifier = Modifier
+                                                .size(5.dp)
+                                                .clip(CircleShape)
+                                                .background(if (isCapsLockActive) Color(0xFF39FF14) else Color.White.copy(alpha = 0.15f))
+                                        )
+                                        Text(
+                                            text = "CAPS",
+                                            color = if (isCapsLockActive) Color.White else Color.White.copy(alpha = 0.4f),
+                                            fontSize = 8.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            fontFamily = FontFamily.SansSerif,
+                                            style = androidx.compose.ui.text.TextStyle(
+                                                platformStyle = androidx.compose.ui.text.PlatformTextStyle(includeFontPadding = false)
+                                            )
+                                        )
+                                    }
+                                    
+                                    // NUM
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                        modifier = Modifier
+                                            .clip(RoundedCornerShape(4.dp))
+                                            .clickable {
+                                                if (isConnected) {
+                                                    btManager.sendKey(0x53, true)
+                                                    btManager.sendKey(0x53, false)
+                                                    if (lockSyncMode == "device") {
+                                                        isNumLockActive = !isNumLockActive
+                                                    }
+                                                } else {
+                                                    isNumLockActive = !isNumLockActive
+                                                }
+                                            }
+                                            .padding(horizontal = 4.dp, vertical = 2.dp)
+                                    ) {
+                                        Box(
+                                            modifier = Modifier
+                                                .size(5.dp)
+                                                .clip(CircleShape)
+                                                .background(if (isNumLockActive) Color(0xFF39FF14) else Color.White.copy(alpha = 0.15f))
+                                        )
+                                        Text(
+                                            text = "NUM",
+                                            color = if (isNumLockActive) Color.White else Color.White.copy(alpha = 0.4f),
+                                            fontSize = 8.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            fontFamily = FontFamily.SansSerif,
+                                            style = androidx.compose.ui.text.TextStyle(
+                                                platformStyle = androidx.compose.ui.text.PlatformTextStyle(includeFontPadding = false)
+                                            )
+                                        )
+                                    }
+                                    
+                                    // SCR
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                        modifier = Modifier
+                                            .clip(RoundedCornerShape(4.dp))
+                                            .clickable {
+                                                if (isConnected) {
+                                                    btManager.sendKey(0x47, true)
+                                                    btManager.sendKey(0x47, false)
+                                                    if (lockSyncMode == "device") {
+                                                        isScrollLockActive = !isScrollLockActive
+                                                    }
+                                                } else {
+                                                    isScrollLockActive = !isScrollLockActive
+                                                }
+                                            }
+                                            .padding(horizontal = 4.dp, vertical = 2.dp)
+                                    ) {
+                                        Box(
+                                            modifier = Modifier
+                                                .size(5.dp)
+                                                .clip(CircleShape)
+                                                .background(if (isScrollLockActive) Color(0xFF39FF14) else Color.White.copy(alpha = 0.15f))
+                                        )
+                                        Text(
+                                            text = "SCR",
+                                            color = if (isScrollLockActive) Color.White else Color.White.copy(alpha = 0.4f),
+                                            fontSize = 8.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            fontFamily = FontFamily.SansSerif,
+                                            style = androidx.compose.ui.text.TextStyle(
+                                                platformStyle = androidx.compose.ui.text.PlatformTextStyle(includeFontPadding = false)
+                                            )
+                                        )
+                                    }
+                                }
+
+                                // 2. Layout Selector Pill
+                                Row(
+                                    modifier = Modifier
+                                        .height(28.dp)
+                                        .clip(RoundedCornerShape(6.dp))
+                                        .background(Color.White.copy(alpha = 0.15f))
+                                        .clickable {
+                                            val enabledLayouts = KeyboardLayoutType.values().filter { layout ->
+                                                sharedPrefs.getStringSet("cycle_keyboard_layouts", KeyboardLayoutType.values().map { it.name }.toSet())?.contains(layout.name) == true
+                                            }.ifEmpty { listOf(selectedLayoutType) }
+                                            val currentIndexInEnabled = enabledLayouts.indexOf(selectedLayoutType)
+                                            val nextIndex = (currentIndexInEnabled + 1) % enabledLayouts.size
+                                            selectedLayoutType = enabledLayouts[nextIndex]
+                                            soundSynth.playPress()
+                                        }
+                                        .padding(horizontal = 8.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Keyboard,
+                                        contentDescription = "Layout",
+                                        tint = Color.White.copy(alpha = 0.9f),
+                                        modifier = Modifier.size(10.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text(
+                                        text = selectedLayoutType.displayName,
+                                        color = Color.White,
+                                        fontSize = 9.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+
+                                // 3. Switch Selector Pill
+                                val currentSwitch = soundSynth.getCurrentSwitch()
+                                Row(
+                                    modifier = Modifier
+                                        .height(28.dp)
+                                        .clip(RoundedCornerShape(6.dp))
+                                        .background(Color.White.copy(alpha = 0.15f))
+                                        .clickable {
+                                            val enabledSwitches = SwitchType.values().filter { switch ->
+                                                sharedPrefs.getStringSet("cycle_key_sounds", SwitchType.values().map { it.name }.toSet())?.contains(switch.name) == true
+                                            }.ifEmpty { listOf(currentSwitch) }
+                                            val currentIndexInEnabled = enabledSwitches.indexOf(currentSwitch)
+                                            val nextIndex = (currentIndexInEnabled + 1) % enabledSwitches.size
+                                            val nextSwitch = enabledSwitches[nextIndex]
+                                            soundSynth.changeSwitchType(nextSwitch)
+                                            soundSynth.playPress()
+                                        }
+                                        .padding(horizontal = 8.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.MusicNote,
+                                        contentDescription = "Switch",
+                                        tint = Color.White.copy(alpha = 0.9f),
+                                        modifier = Modifier.size(10.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text(
+                                        text = currentSwitch.displayName,
+                                        color = Color.White,
+                                        fontSize = 9.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+
+                                // 4. Case Color Selector Pill
+                                Row(
+                                    modifier = Modifier
+                                        .height(28.dp)
+                                        .clip(RoundedCornerShape(6.dp))
+                                        .background(Color.White.copy(alpha = 0.15f))
+                                        .clickable {
+                                            val enabledColors = CaseColor.values().filter { color ->
+                                                sharedPrefs.getStringSet("cycle_case_colors", CaseColor.values().map { it.name }.toSet())?.contains(color.name) == true
+                                            }.ifEmpty { listOf(selectedCaseColor) }
+                                            val currentIndexInEnabled = enabledColors.indexOf(selectedCaseColor)
+                                            val nextIndex = (currentIndexInEnabled + 1) % enabledColors.size
+                                            selectedCaseColor = enabledColors[nextIndex]
+                                            soundSynth.playRelease()
+                                        }
+                                        .padding(horizontal = 8.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(8.dp)
+                                            .clip(CircleShape)
+                                            .background(selectedCaseColor.getActualColor(sharedPrefs))
+                                            .border(0.5.dp, Color.White, CircleShape)
+                                    )
+                                    Spacer(modifier = Modifier.width(4.dp))
+                                    Text(
+                                        text = selectedCaseColor.displayName,
+                                        color = Color.White,
+                                        fontSize = 9.sp,
+                                        fontWeight = FontWeight.Bold
+                                    )
+                                }
+
+                                // 5. Mute Speaker Button (Squarish, height 28dp, radius 6dp)
+                                Box(
+                                    modifier = Modifier
+                                        .size(28.dp)
+                                        .clip(RoundedCornerShape(6.dp))
+                                        .background(Color.White.copy(alpha = 0.15f))
+                                        .clickable {
+                                            val muted = !isMuted
+                                            isMuted = muted
+                                            soundSynth.setMute(muted)
+                                            sharedPrefs.edit().putBoolean("key_sound_enabled", !muted).apply()
+                                        }
+                                        .testTag("mute_toggle"),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        imageVector = if (isMuted) Icons.AutoMirrored.Filled.VolumeOff else Icons.AutoMirrored.Filled.VolumeUp,
+                                        contentDescription = "Mute",
+                                        tint = Color.White,
+                                        modifier = Modifier.size(14.dp)
+                                    )
+                                }
+                            }
+                        }
+
+                        // 2. Main Mechanical Keyboard Chassis (centered with custom margins)
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .fillMaxWidth()
+                                .padding(horizontal = 6.dp, vertical = 2.dp),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            KeyboardView(
+                                layoutType = selectedLayoutType,
+                                caseColor = selectedCaseColor,
+                                activePressedKeys = activePressedKeys,
+                                isConnected = isConnected,
+                                rgbMode = selectedRgbMode,
+                                timeProgress = rgbTimeProgress,
+                                isCapsLockActive = isCapsLockActive,
+                                isNumLockActive = isNumLockActive,
+                                isScrollLockActive = isScrollLockActive,
+                                keySensitivity = keySensitivity,
+                                onKeyPressChange = { code, press -> handleLocalKeyPress(code, press) }
+                            )
+                        }
+                    }
                 }
             }
         } else {
@@ -1092,28 +1211,79 @@ fun HomeScreen(
                             .navigationBarsPadding()
                             .padding(start = 16.dp, end = 16.dp, top = 24.dp, bottom = 24.dp)
                     ) {
-                        Button(
-                            onClick = { isKeyboardActive = true },
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .height(64.dp)
-                                .testTag("start_keyboard_btn"),
-                            shape = CircleShape,
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = MaterialTheme.colorScheme.primary
-                            )
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Icon(
-                                imageVector = Icons.Default.KeyboardArrowUp,
-                                contentDescription = "Start board",
-                                modifier = Modifier.size(24.dp)
-                            )
-                            Spacer(modifier = Modifier.width(12.dp))
-                            Text(
-                                text = "Launch Keyboard",
-                                style = MaterialTheme.typography.titleMedium,
-                                fontWeight = FontWeight.Bold
-                            )
+                            // Circular Mode Toggle Indicator Button
+                            IconButton(
+                                onClick = {
+                                    val enabledModes = listOf(0, 1, 2).filter { mode ->
+                                        val modeStr = when (mode) {
+                                            0 -> "keyboard"
+                                            1 -> "touchpad"
+                                            2 -> "gamepad"
+                                            else -> "keyboard"
+                                        }
+                                        sharedPrefs.getStringSet("cycle_connection_modes", setOf("keyboard", "touchpad"))?.contains(modeStr) == true
+                                    }.ifEmpty { listOf(0) }
+                                    val currentIndex = enabledModes.indexOf(launchMode).coerceAtLeast(0)
+                                    val nextMode = enabledModes[(currentIndex + 1) % enabledModes.size]
+                                    launchMode = nextMode
+                                    sharedPrefs.edit().putInt("launch_mode", nextMode).apply()
+                                    if (isHapticsEnabled) {
+                                        view.performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS)
+                                    }
+                                },
+                                modifier = Modifier
+                                    .size(64.dp)
+                                    .clip(CircleShape)
+                                    .background(MaterialTheme.colorScheme.secondaryContainer)
+                                    .testTag("mode_toggle_btn")
+                            ) {
+                                val modeIcon = when (launchMode) {
+                                    1 -> Icons.Default.Mouse
+                                    2 -> Icons.Default.SportsEsports
+                                    else -> Icons.Default.Keyboard
+                                }
+                                Icon(
+                                    imageVector = modeIcon,
+                                    contentDescription = "Cycle Input Mode",
+                                    tint = MaterialTheme.colorScheme.onSecondaryContainer,
+                                    modifier = Modifier.size(26.dp)
+                                )
+                            }
+
+                            // Dynamic Launch Option button
+                            Button(
+                                onClick = { isKeyboardActive = true },
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .height(64.dp)
+                                    .testTag("start_keyboard_btn"),
+                                shape = CircleShape,
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = MaterialTheme.colorScheme.primary
+                                )
+                            ) {
+                                val launchText = when (launchMode) {
+                                    1 -> "Launch Touchpad"
+                                    2 -> "Launch Gamepad"
+                                    else -> "Launch Keyboard"
+                                }
+                                Icon(
+                                    imageVector = Icons.Default.KeyboardArrowUp,
+                                    contentDescription = "Launch Icon",
+                                    modifier = Modifier.size(24.dp)
+                                )
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Text(
+                                    text = launchText,
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
                         }
                     }
 

@@ -30,6 +30,21 @@ sealed class BluetoothState {
 
 class BluetoothKeyboardManager(private val context: Context) {
 
+    private val reportExecutor = Executors.newSingleThreadExecutor()
+
+    private fun submitReport(dev: BluetoothDevice, reportId: Int, report: ByteArray) {
+        val hid = hidDeviceProfile
+        if (hid != null) {
+            reportExecutor.submit {
+                try {
+                    hid.sendReport(dev, reportId, report)
+                } catch (e: Exception) {
+                    Log.e("BluetoothKeyboard", "Error transmitting HID report ID $reportId", e)
+                }
+            }
+        }
+    }
+
     private val _serviceState = MutableStateFlow<BluetoothState>(BluetoothState.ReadyDisconnected)
     val serviceState: StateFlow<BluetoothState> = _serviceState
 
@@ -170,7 +185,7 @@ class BluetoothKeyboardManager(private val context: Context) {
         }
     }
 
-    // Standard Keyboard HID Descriptor definition (Wired/Bluetooth Keyboard standard)
+    // Composite Keyboard, Mouse/Trackpad & Gamepad HID Descriptor definition
     private val hidDescriptor = byteArrayOf(
         0x05.toByte(), 0x01.toByte(),         // USAGE_PAGE (Generic Desktop)
         0x09.toByte(), 0x06.toByte(),         // USAGE (Keyboard)
@@ -204,12 +219,72 @@ class BluetoothKeyboardManager(private val context: Context) {
         0x19.toByte(), 0x00.toByte(),         //   USAGE_MINIMUM (Reserved)
         0x29.toByte(), 0x65.toByte(),         //   USAGE_MAXIMUM (Keyboard Application)
         0x81.toByte(), 0x00.toByte(),         //   INPUT (Data,Ary,Abs) - Keycodes (6 bytes)
+        0xc0.toByte(),                        // END_COLLECTION
+
+        // Mouse/Trackpad (Report ID 2)
+        0x05.toByte(), 0x01.toByte(),         // USAGE_PAGE (Generic Desktop)
+        0x09.toByte(), 0x02.toByte(),         // USAGE (Mouse)
+        0xa1.toByte(), 0x01.toByte(),         // COLLECTION (Application)
+        0x85.toByte(), 0x02.toByte(),         //   REPORT_ID (2)
+        0x09.toByte(), 0x01.toByte(),         //   USAGE (Pointer)
+        0xa1.toByte(), 0x00.toByte(),         //   COLLECTION (Physical)
+        0x05.toByte(), 0x09.toByte(),         //     USAGE_PAGE (Button)
+        0x19.toByte(), 0x01.toByte(),         //     USAGE_MINIMUM (Button 1)
+        0x29.toByte(), 0x03.toByte(),         //     USAGE_MAXIMUM (Button 3)
+        0x15.toByte(), 0x00.toByte(),         //     LOGICAL_MINIMUM (0)
+        0x25.toByte(), 0x01.toByte(),         //     LOGICAL_MAXIMUM (1)
+        0x95.toByte(), 0x03.toByte(),         //     REPORT_COUNT (3)
+        0x75.toByte(), 0x01.toByte(),         //     REPORT_SIZE (1)
+        0x81.toByte(), 0x02.toByte(),         //     INPUT (Data,Var,Abs) - L, R, M clicks
+        0x95.toByte(), 0x01.toByte(),         //     REPORT_COUNT (1)
+        0x75.toByte(), 0x05.toByte(),         //     REPORT_SIZE (5)
+        0x81.toByte(), 0x03.toByte(),         //     INPUT (Cnst,Var,Abs) - padding
+        0x05.toByte(), 0x01.toByte(),         //     USAGE_PAGE (Generic Desktop)
+        0x09.toByte(), 0x30.toByte(),         //     USAGE (X)
+        0x09.toByte(), 0x31.toByte(),         //     USAGE (Y)
+        0x15.toByte(), 0x81.toByte(),         //     LOGICAL_MINIMUM (-127)
+        0x25.toByte(), 0x7f.toByte(),         //     LOGICAL_MAXIMUM (127)
+        0x75.toByte(), 0x08.toByte(),         //     REPORT_SIZE (8)
+        0x95.toByte(), 0x02.toByte(),         //     REPORT_COUNT (2)
+        0x81.toByte(), 0x06.toByte(),         //     INPUT (Data,Var,Rel) - delta X and Y movement
+        0x09.toByte(), 0x38.toByte(),         //     USAGE (Wheel)
+        0x15.toByte(), 0x81.toByte(),         //     LOGICAL_MINIMUM (-127)
+        0x25.toByte(), 0x7f.toByte(),         //     LOGICAL_MAXIMUM (127)
+        0x75.toByte(), 0x08.toByte(),         //     REPORT_SIZE (8)
+        0x95.toByte(), 0x01.toByte(),         //     REPORT_COUNT (1)
+        0x81.toByte(), 0x06.toByte(),         //     INPUT (Data,Var,Rel) - scroll wheel
+        0xc0.toByte(),                        //   END_COLLECTION
+        0xc0.toByte(),                        // END_COLLECTION
+
+        // Gamepad (Report ID 3)
+        0x05.toByte(), 0x01.toByte(),         // USAGE_PAGE (Generic Desktop)
+        0x09.toByte(), 0x05.toByte(),         // USAGE (Gamepad)
+        0xa1.toByte(), 0x01.toByte(),         // COLLECTION (Application)
+        0x85.toByte(), 0x03.toByte(),         //   REPORT_ID (3)
+        0x05.toByte(), 0x09.toByte(),         //   USAGE_PAGE (Button)
+        0x19.toByte(), 0x01.toByte(),         //     USAGE_MINIMUM (Button 1)
+        0x29.toByte(), 0x10.toByte(),         //     USAGE_MAXIMUM (Button 16)
+        0x15.toByte(), 0x00.toByte(),         //     LOGICAL_MINIMUM (0)
+        0x25.toByte(), 0x01.toByte(),         //     LOGICAL_MAXIMUM (1)
+        0x75.toByte(), 0x01.toByte(),         //     REPORT_SIZE (1)
+        0x95.toByte(), 0x10.toByte(),         //     REPORT_COUNT (16)
+        0x81.toByte(), 0x02.toByte(),         //     INPUT (Data,Var,Abs) - 16 Buttons (2 bytes)
+        0x05.toByte(), 0x01.toByte(),         //     USAGE_PAGE (Generic Desktop)
+        0x09.toByte(), 0x30.toByte(),         //     USAGE (X)
+        0x09.toByte(), 0x31.toByte(),         //     USAGE (Y)
+        0x09.toByte(), 0x32.toByte(),         //     USAGE (Z)
+        0x09.toByte(), 0x35.toByte(),         //     USAGE (Rz)
+        0x15.toByte(), 0x81.toByte(),         //     LOGICAL_MINIMUM (-127)
+        0x25.toByte(), 0x7f.toByte(),         //     LOGICAL_MAXIMUM (127)
+        0x75.toByte(), 0x08.toByte(),         //     REPORT_SIZE (8)
+        0x95.toByte(), 0x04.toByte(),         //     REPORT_COUNT (4)
+        0x81.toByte(), 0x02.toByte(),         //     INPUT (Data,Var,Abs) - 4 Axes (X, Y, Z, Rz)
         0xc0.toByte()                         // END_COLLECTION
     )
 
     private val sdpSettings = BluetoothHidDeviceAppSdpSettings(
-        "KBSim Keyboard",
-        "KBSim Mechanical Keyboard Controller",
+        "KBSim Controller",
+        "KBSim Keyboard, Mouse and Gamepad",
         "KBSim Inc",
         BluetoothHidDevice.SUBCLASS1_KEYBOARD,
         hidDescriptor
@@ -671,12 +746,36 @@ class BluetoothKeyboardManager(private val context: Context) {
         }
 
         // Transmit HID report
-        if (dev != null && hid != null) {
-            try {
-                hid.sendReport(dev, reportId, report)
-            } catch (e: Exception) {
-                Log.e("BluetoothKeyboard", "Error transmitting HID report", e)
-            }
+        if (dev != null) {
+            submitReport(dev, reportId, report)
+        }
+    }
+
+    @SuppressLint("MissingPermission")
+    fun sendMouseReport(buttons: Byte, x: Byte, y: Byte, wheel: Byte) {
+        val dev = _connectedDevice.value
+        if (dev != null) {
+            val report = ByteArray(4)
+            report[0] = buttons
+            report[1] = x
+            report[2] = y
+            report[3] = wheel
+            submitReport(dev, 2, report) // Mouse report ID is 2
+        }
+    }
+
+    @SuppressLint("MissingPermission")
+    fun sendGamepadReport(buttonMask: UShort, leftX: Byte, leftY: Byte, rightX: Byte, rightY: Byte) {
+        val dev = _connectedDevice.value
+        if (dev != null) {
+            val report = ByteArray(6)
+            report[0] = (buttonMask.toInt() and 0xFF).toByte()
+            report[1] = ((buttonMask.toInt() shr 8) and 0xFF).toByte()
+            report[2] = leftX
+            report[3] = leftY
+            report[4] = rightX
+            report[5] = rightY
+            submitReport(dev, 3, report) // Gamepad report ID is 3
         }
     }
 
