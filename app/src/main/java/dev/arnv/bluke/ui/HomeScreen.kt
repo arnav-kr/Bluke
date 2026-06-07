@@ -87,6 +87,8 @@ fun HomeScreen(
     
     val view = LocalView.current
     var isHapticsEnabled by remember { mutableStateOf(sharedPrefs.getBoolean("haptics_enabled", true)) }
+    var keySensitivity by remember { mutableStateOf(sharedPrefs.getFloat("key_sensitivity", 6f)) }
+    var lockSyncMode by remember { mutableStateOf(sharedPrefs.getString("lock_sync_mode", "host") ?: "host") }
 
     // Mute state
     var isMuted by rememberSaveable { mutableStateOf(!sharedPrefs.getBoolean("key_sound_enabled", true)) }
@@ -102,6 +104,8 @@ fun HomeScreen(
                 isMuted = !soundEnabled
                 soundSynth.setMute(!soundEnabled)
                 isHapticsEnabled = sharedPrefs.getBoolean("haptics_enabled", true)
+                keySensitivity = sharedPrefs.getFloat("key_sensitivity", 6f)
+                lockSyncMode = sharedPrefs.getString("lock_sync_mode", "host") ?: "host"
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
@@ -136,8 +140,8 @@ fun HomeScreen(
     val systemNumLock by btManager.numLockState.collectAsState()
     val systemScrollLock by btManager.scrollLockState.collectAsState()
 
-    LaunchedEffect(isConnected, systemCapsLock, systemNumLock, systemScrollLock) {
-        if (isConnected) {
+    LaunchedEffect(isConnected, systemCapsLock, systemNumLock, systemScrollLock, lockSyncMode) {
+        if (isConnected && lockSyncMode == "host") {
             isCapsLockActive = systemCapsLock
             isNumLockActive = systemNumLock
             isScrollLockActive = systemScrollLock
@@ -217,9 +221,9 @@ fun HomeScreen(
                 soundSynth.playPress(keyCode)
                 btManager.sendKey(keyCode, true)
 
-                // Only toggle status indicators locally if we are disconnected.
-                // If connected, we wait for the Host OS to send an LED Output Report (to ensure true sync).
-                if (!isConnected) {
+                // Only toggle status indicators locally if we are disconnected OR in device-controlled mode.
+                // In Host-Controlled mode, we wait for the Host OS to send an LED Output Report (to ensure true sync).
+                if (!isConnected || lockSyncMode == "device") {
                     when (keyCode) {
                         0x39 -> isCapsLockActive = !isCapsLockActive // KEY_CAPSLOCK
                         0x47 -> isScrollLockActive = !isScrollLockActive // KEY_SCROLLLOCK
@@ -408,7 +412,21 @@ fun HomeScreen(
                             // CAPS
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(4.dp))
+                                    .clickable {
+                                        if (isConnected) {
+                                            btManager.sendKey(0x39, true)
+                                            btManager.sendKey(0x39, false)
+                                            if (lockSyncMode == "device") {
+                                                isCapsLockActive = !isCapsLockActive
+                                            }
+                                        } else {
+                                            isCapsLockActive = !isCapsLockActive
+                                        }
+                                    }
+                                    .padding(horizontal = 4.dp, vertical = 2.dp)
                             ) {
                                 Box(
                                     modifier = Modifier
@@ -431,7 +449,21 @@ fun HomeScreen(
                             // NUM
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(4.dp))
+                                    .clickable {
+                                        if (isConnected) {
+                                            btManager.sendKey(0x53, true)
+                                            btManager.sendKey(0x53, false)
+                                            if (lockSyncMode == "device") {
+                                                isNumLockActive = !isNumLockActive
+                                            }
+                                        } else {
+                                            isNumLockActive = !isNumLockActive
+                                        }
+                                    }
+                                    .padding(horizontal = 4.dp, vertical = 2.dp)
                             ) {
                                 Box(
                                     modifier = Modifier
@@ -454,7 +486,21 @@ fun HomeScreen(
                             // SCR
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                modifier = Modifier
+                                    .clip(RoundedCornerShape(4.dp))
+                                    .clickable {
+                                        if (isConnected) {
+                                            btManager.sendKey(0x47, true)
+                                            btManager.sendKey(0x47, false)
+                                            if (lockSyncMode == "device") {
+                                                isScrollLockActive = !isScrollLockActive
+                                            }
+                                        } else {
+                                            isScrollLockActive = !isScrollLockActive
+                                        }
+                                    }
+                                    .padding(horizontal = 4.dp, vertical = 2.dp)
                             ) {
                                 Box(
                                     modifier = Modifier
@@ -608,6 +654,7 @@ fun HomeScreen(
                         isCapsLockActive = isCapsLockActive,
                         isNumLockActive = isNumLockActive,
                         isScrollLockActive = isScrollLockActive,
+                        keySensitivity = keySensitivity,
                         onKeyPressChange = { code, press -> handleLocalKeyPress(code, press) }
                     )
                 }
@@ -651,7 +698,7 @@ fun HomeScreen(
                 Box(
                     modifier = Modifier
                         .fillMaxSize()
-                        .padding(innerPadding)
+                        .padding(top = innerPadding.calculateTopPadding())
                         .background(MaterialTheme.colorScheme.background)
                 ) {
                     if (btState is BluetoothState.BluetoothOff || btState is BluetoothState.Unsupported) {
@@ -699,7 +746,9 @@ fun HomeScreen(
 
                         val currentlyConnectedStateState by btManager.connectedDevice.collectAsState()
                         LazyColumn(
-                            modifier = Modifier.fillMaxSize(),
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .navigationBarsPadding(),
                             contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 24.dp, bottom = 100.dp),
                             verticalArrangement = Arrangement.spacedBy(16.dp)
                         ) {
@@ -1040,6 +1089,7 @@ fun HomeScreen(
                                     colors = listOf(Color.Transparent, MaterialTheme.colorScheme.background, MaterialTheme.colorScheme.background)
                                 )
                             )
+                            .navigationBarsPadding()
                             .padding(start = 16.dp, end = 16.dp, top = 24.dp, bottom = 24.dp)
                     ) {
                         Button(

@@ -543,7 +543,7 @@ class BluetoothKeyboardManager(private val context: Context) {
 
         override fun onSetReport(device: BluetoothDevice, type: Byte, id: Byte, data: ByteArray) {
             super.onSetReport(device, type, id, data)
-            if (type == BluetoothHidDevice.REPORT_TYPE_OUTPUT) {
+            if (type == BluetoothHidDevice.REPORT_TYPE_OUTPUT && id == 1.toByte()) {
                 parseLedReport(data)
             }
             try {
@@ -555,7 +555,9 @@ class BluetoothKeyboardManager(private val context: Context) {
 
         override fun onInterruptData(device: BluetoothDevice, reportId: Byte, data: ByteArray) {
             super.onInterruptData(device, reportId, data)
-            parseLedReport(data)
+            if (reportId == 1.toByte()) {
+                parseLedReport(data)
+            }
         }
 
         private fun parseLedReport(data: ByteArray?) {

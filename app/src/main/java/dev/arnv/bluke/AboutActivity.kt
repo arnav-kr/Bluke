@@ -48,6 +48,13 @@ class AboutActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         
+        val versionName = try {
+            val packageInfo = packageManager.getPackageInfo(packageName, 0)
+            packageInfo.versionName ?: "1.0.1"
+        } catch (e: Exception) {
+            "1.0.1"
+        }
+        
         setContent {
             MyApplicationTheme {
                 val context = LocalContext.current
@@ -106,7 +113,7 @@ class AboutActivity : ComponentActivity() {
                         )
                         
                         Text(
-                            text = "Version 1.0.0",
+                            text = "Version $versionName",
                             style = MaterialTheme.typography.bodyLarge,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.padding(bottom = 8.dp)

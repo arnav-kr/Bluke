@@ -30,6 +30,7 @@ fun KeyboardView(
     isCapsLockActive: Boolean,
     isNumLockActive: Boolean,
     isScrollLockActive: Boolean,
+    keySensitivity: Float = 6f,
     onKeyPressChange: (Int, Boolean) -> Unit
 ) {
     val palette = Colorways.PALETTES[layoutType] ?: Colorways.PALETTES[KeyboardLayoutType.OBLIVION_75]!!
@@ -86,7 +87,7 @@ fun KeyboardView(
                                 eventChanges.forEach { change ->
                                     if (change.pressed) {
                                         val pos = change.position
-                                        val touchRadius = 6.dp.toPx()
+                                        val touchRadius = keySensitivity.dp.toPx()
                                         
                                         // Find all keys that intersect the touch radius
                                         val intersectedKeys = allKeys.filter { key ->
