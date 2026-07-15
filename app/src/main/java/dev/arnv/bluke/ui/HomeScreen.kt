@@ -136,12 +136,18 @@ fun HomeScreen(
     val bondedDevices by btManager.bondedDevices.collectAsState()
     val scannedDevices by btManager.scannedDevices.collectAsState()
     val isScanning by btManager.isScanning.collectAsState()
-    
+
+    // Optional WiFi transport status (additive; independent of Bluetooth)
+    val wifiManager = remember { dev.arnv.bluke.network.WifiInputManager.getInstance(context) }
+    val wifiState by wifiManager.connectionState.collectAsState()
+    val isWifiConnected = wifiState is dev.arnv.bluke.network.WifiState.Connected
+    val wifiHostName = (wifiState as? dev.arnv.bluke.network.WifiState.Connected)?.receiverName
+
     // Active pressed keys set for visually pressing keycaps
     val activePressedKeys = remember { mutableStateListOf<Int>() }
 
-    // Connection helper declared at outer scope
-    val isConnected = btState is BluetoothState.Connected
+    // Connection helper declared at outer scope (Bluetooth host OR WiFi receiver)
+    val isConnected = btState is BluetoothState.Connected || isWifiConnected
 
     // Lock Indicator State variables - single source of truth, reactive to local presses and system LED reports
     var isCapsLockActive by rememberSaveable { mutableStateOf(false) }
@@ -442,7 +448,7 @@ fun HomeScreen(
                                 // Use collected state (not .value) so UI reacts to changes from background
                                 val connectedDevNow by btManager.connectedDevice.collectAsState()
                                 val activeDevice = connectedDevNow ?: lastConnectedDevice
-                                val deviceName = activeDevice?.name ?: "No Host"
+                                val deviceName = activeDevice?.name ?: wifiHostName ?: "No Host"
                                 
                                 Box(
                                     modifier = Modifier
@@ -804,7 +810,12 @@ fun HomeScreen(
                             }
                         },
                         actions = {
-                            IconButton(onClick = { 
+                            IconButton(onClick = {
+                                context.startActivity(Intent(context, dev.arnv.bluke.network.WifiRemoteActivity::class.java))
+                            }) {
+                                Icon(Icons.Default.Wifi, contentDescription = "WiFi Remote")
+                            }
+                            IconButton(onClick = {
                                 context.startActivity(Intent(context, dev.arnv.bluke.SettingsActivity::class.java))
                             }) {
                                 Icon(Icons.Default.Settings, contentDescription = "Settings")
@@ -871,6 +882,46 @@ fun HomeScreen(
                             contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 24.dp, bottom = 100.dp),
                             verticalArrangement = Arrangement.spacedBy(16.dp)
                         ) {
+                            // WiFi connection banner (shown above the Bluetooth area when a
+                            // WiFi receiver is connected)
+                            if (isWifiConnected) {
+                                item {
+                                    Card(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        shape = RoundedCornerShape(24.dp),
+                                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
+                                    ) {
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth().padding(16.dp),
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.Wifi,
+                                                contentDescription = "WiFi",
+                                                tint = MaterialTheme.colorScheme.onPrimaryContainer
+                                            )
+                                            Spacer(Modifier.width(16.dp))
+                                            Column(modifier = Modifier.weight(1f)) {
+                                                Text(
+                                                    text = "Connected over WiFi",
+                                                    style = MaterialTheme.typography.titleMedium,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = MaterialTheme.colorScheme.onPrimaryContainer
+                                                )
+                                                Text(
+                                                    text = wifiHostName ?: "Receiver",
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f)
+                                                )
+                                            }
+                                            TextButton(onClick = { wifiManager.disconnect() }) {
+                                                Text("Disconnect")
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
                             // Unified Top Scan & Status Card
                             item {
                                 Card(

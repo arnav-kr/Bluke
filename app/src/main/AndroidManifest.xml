@@ -11,6 +11,9 @@
     <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
     <uses-permission android:name="android.permission.VIBRATE" />
 
+    <uses-permission android:name="android.permission.INTERNET" />
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+
     <application
         android:allowBackup="true"
         android:dataExtractionRules="@xml/data_extraction_rules"
@@ -41,6 +44,7 @@
         <activity android:name=".LicensesActivity" android:theme="@style/Theme.MyApplication" />
         <activity android:name=".HelpActivity" android:theme="@style/Theme.MyApplication" />
         <activity android:name=".OnboardingActivity" android:theme="@style/Theme.MyApplication" />
+        <activity android:name=".network.WifiRemoteActivity" android:theme="@style/Theme.MyApplication" />
     </application>
 
 </manifest>
