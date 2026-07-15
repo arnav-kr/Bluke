@@ -11,6 +11,7 @@ import android.content.BroadcastReceiver
 import android.content.Context
 import android.content.Intent
 import dev.arnv.bluke.R
+import dev.arnv.bluke.network.WifiInputManager
 import android.content.IntentFilter
 import android.os.Build
 import android.util.Log
@@ -649,6 +650,8 @@ class BluetoothKeyboardManager(private val context: Context) {
                     lastConnectedDevice = device
                     _serviceState.value = BluetoothState.Connected(device.name ?: "Paired Host")
                     _statusMessage.value = "Link established with '${device.name ?: "Host"}'! Keyboard active."
+                    // Bluetooth takes priority: drop any active WiFi link
+                    WifiInputManager.onBluetoothConnected()
                     updateBondedDevices()
                 }
                 BluetoothProfile.STATE_DISCONNECTED -> {
@@ -812,6 +815,8 @@ class BluetoothKeyboardManager(private val context: Context) {
             report[j + 2] = activeKeys[j]
         }
 
+        WifiInputManager.mirror(reportId, report)
+
         // Transmit HID report
         if (dev != null) {
             submitReport(dev, reportId, report)
@@ -821,12 +826,14 @@ class BluetoothKeyboardManager(private val context: Context) {
     @SuppressLint("MissingPermission")
     fun sendMouseReport(buttons: Byte, x: Byte, y: Byte, wheel: Byte) {
         val dev = _connectedDevice.value
+        val report = ByteArray(4)
+        report[0] = buttons
+        report[1] = x
+        report[2] = y
+        report[3] = wheel
+
+        WifiInputManager.mirror(2, report)
         if (dev != null) {
-            val report = ByteArray(4)
-            report[0] = buttons
-            report[1] = x
-            report[2] = y
-            report[3] = wheel
             submitReport(dev, 2, report) // Mouse report ID is 2
         }
     }
@@ -846,15 +853,17 @@ class BluetoothKeyboardManager(private val context: Context) {
         gyroZ: Short = 0
     ) {
         val dev = _connectedDevice.value
+        val report = ByteArray(7)
+        report[0] = (buttonMask and 0xFF).toByte()
+        report[1] = ((buttonMask shr 8) and 0xFF).toByte()
+        report[2] = ((buttonMask shr 16) and 0xFF).toByte()
+        report[3] = leftX
+        report[4] = leftY
+        report[5] = rightX
+        report[6] = rightY
+
+        WifiInputManager.mirror(3, report)
         if (dev != null) {
-            val report = ByteArray(7)
-            report[0] = (buttonMask and 0xFF).toByte()
-            report[1] = ((buttonMask shr 8) and 0xFF).toByte()
-            report[2] = ((buttonMask shr 16) and 0xFF).toByte()
-            report[3] = leftX
-            report[4] = leftY
-            report[5] = rightX
-            report[6] = rightY
             submitReport(dev, 3, report) // Gamepad report ID is 3
         }
     }

@@ -20,6 +20,15 @@ Bluke turns your Android device into a driverless, wireless Bluetooth HID mechan
 * **Switch sound synthesis**: Generates mechanical switch acoustics (Cherry MX Brown, Holy Panda, Alpaca, Kailh Box Navy, Buckling Spring, and Topre) in real-time.
 * **Themes and case colors**: Includes built-in presets (Olivia, Dracula, Oblivion, Retro, Cafe, and Mizu) and selectable case colors.
 * **System integration**: Supports system haptics, OLED black mode, and Material You dynamic color schemes.
+* **WiFi Remote (optional)**: Control a PC over the local network when Bluetooth isn't available, by running a small receiver on the computer. See below.
+
+
+## WiFi Remote (local network)
+In addition to the driverless Bluetooth HID mode, Bluke can send keyboard, touchpad, and gamepad input to a PC over the same WiFi/LAN. Unlike Bluetooth, computers don't accept keyboard input from the network natively, so this mode requires a lightweight **receiver** running on the PC — it advertises itself for auto-discovery and injects the received input into the operating system.
+
+- **Usage**: Start the receiver on your PC, then open Bluke and tap the **WiFi** icon in the top bar. Pick the auto-discovered PC (or enter its IP manually) and confirm the PIN shown by the receiver. Both devices must be on the same network.
+- **Priority**: When a Bluetooth host connects, the WiFi link is dropped automatically so input is only ever sent to one host.
+- **Receivers**: A native single-executable receiver for **Windows** and a cross-platform **Python** receiver (Linux/macOS) are provided. See the **[receiver setup guide](desktop/README.md)** for build and run instructions.
 
 
 ## Requirement
