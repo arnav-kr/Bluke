@@ -13,6 +13,8 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Bluetooth
 import androidx.compose.material.icons.filled.BluetoothConnected
 import androidx.compose.material.icons.filled.ErrorOutline
+import androidx.compose.material.icons.filled.KeyboardAlt
+import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -131,13 +133,36 @@ class HelpActivity : ComponentActivity() {
                         )
 
                         StepSection(
-                            icon = Icons.Default.ErrorOutline, 
+                            icon = Icons.Default.ErrorOutline,
                             title = "Connection Fault",
                             isWarning = true,
                             steps = listOf(
                                 "Indicates a stale pairing link.",
                                 "Unpair the phone from your computer's Bluetooth settings.",
                                 "Unpair the computer from the phone."
+                            )
+                        )
+
+                        StepSection(
+                            icon = Icons.Default.Language,
+                            title = "Wrong Characters Appear",
+                            isWarning = true,
+                            steps = listOf(
+                                "Bluke sends key positions, not letters - your computer decides what each position means.",
+                                "Set 'Host Keyboard Layout' in Behavior settings to match your computer's layout.",
+                                "A y/z swap or odd punctuation almost always means the layout is wrong.",
+                                "Only US QWERTY is hardware-verified; please report mistakes in the others."
+                            )
+                        )
+
+                        StepSection(
+                            icon = Icons.Default.KeyboardAlt,
+                            title = "Using Your Own Keyboard",
+                            steps = listOf(
+                                "Enable 'Use System Keyboard' in Behavior settings, or tap 'System IME' on the keyboard screen.",
+                                "Type with Gboard, SwiftKey or Samsung Keyboard to keep autocorrect and suggestions.",
+                                "'Send clipboard' types your phone's clipboard out to the host.",
+                                "Emoji and other characters with no key are skipped unless you enable Unicode entry."
                             )
                         )
                         

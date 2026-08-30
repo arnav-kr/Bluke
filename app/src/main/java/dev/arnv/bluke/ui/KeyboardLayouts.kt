@@ -264,6 +264,13 @@ object KeyboardLayouts {
     const val KEY_UP = 0x52
     const val KEY_NUMLOCK = 0x53
 
+    /**
+     * The extra key ISO keyboards have that ANSI ones do not (usually left of Z, or next to Enter).
+     * Non-US layouts rely on it heavily for punctuation, so it is needed to type for those hosts
+     * even though no ANSI keycap layout in this app draws it.
+     */
+    const val KEY_NONUS_BACKSLASH = 0x64
+
     // Modifiers (Bits in byte 0)
     const val MOD_LCTRL = 0xE0
     const val MOD_LSHIFT = 0xE1

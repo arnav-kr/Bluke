@@ -76,6 +76,11 @@ fun HomeScreen(
     var keySensitivity by remember { mutableFloatStateOf(sharedPrefs.getFloat("key_sensitivity", 6f)) }
     var lockSyncMode by remember { mutableStateOf(sharedPrefs.getString("lock_sync_mode", "host") ?: "host") }
     var launchMode by rememberSaveable { mutableIntStateOf(sharedPrefs.getInt("launch_mode", 0)) }
+    // The keyboard layout configured on the *host*, which decides how our scancodes are decoded.
+    var hostLayoutId by remember { mutableStateOf(sharedPrefs.getString("host_layout", HostLayouts.DEFAULT.id)) }
+    var unicodeEntryModeId by remember { mutableStateOf(sharedPrefs.getString("unicode_entry_mode", "off")) }
+    // The user's configured extra key rows for System Keyboard mode.
+    var imeKeyRows by remember { mutableStateOf(ImeKeyBar.load(sharedPrefs)) }
 
     // Sound synth switch state
     var currentSwitch by remember { mutableStateOf(soundSynth.getCurrentSwitch()) }
@@ -99,15 +104,10 @@ fun HomeScreen(
                 isHapticsEnabled = sharedPrefs.getBoolean("haptics_enabled", true)
                 keySensitivity = sharedPrefs.getFloat("key_sensitivity", 6f)
                 lockSyncMode = sharedPrefs.getString("lock_sync_mode", "host") ?: "host"
-                val enabledModes = listOf(0, 1, 2).filter { mode ->
-                    val modeStr = when (mode) {
-                        0 -> "keyboard"
-                        1 -> "touchpad"
-                        2 -> "gamepad"
-                        else -> "keyboard"
-                    }
-                    sharedPrefs.getStringSet("cycle_connection_modes", setOf("keyboard", "touchpad", "gamepad"))?.contains(modeStr) == true
-                }.ifEmpty { listOf(0) }
+                hostLayoutId = sharedPrefs.getString("host_layout", HostLayouts.DEFAULT.id)
+                unicodeEntryModeId = sharedPrefs.getString("unicode_entry_mode", "off")
+                imeKeyRows = ImeKeyBar.load(sharedPrefs)
+                val enabledModes = InputModes.enabled(sharedPrefs)
                 val savedLaunchMode = sharedPrefs.getInt("launch_mode", 0)
                 launchMode = if (enabledModes.contains(savedLaunchMode)) savedLaunchMode else enabledModes.first()
                 devModeRefreshTrigger++
@@ -223,6 +223,10 @@ fun HomeScreen(
         }
     }
 
+    // System Keyboard mode needs the soft keyboard, which cannot share the screen with a
+    // forced-landscape immersive plate - so it stays portrait, like the config screen.
+    val immersiveKeyboard = isKeyboardActive && launchMode != InputModes.SYSTEM_KEYBOARD
+
     // Show Toast for connection errors, timeouts, rejections, or pairing failures
     LaunchedEffect(btMessage) {
         val lowerMessage = btMessage.lowercase()
@@ -237,10 +241,10 @@ fun HomeScreen(
     }
 
     // Toggle orientation and full-screen layout helper automatically
-    LaunchedEffect(isKeyboardActive) {
+    LaunchedEffect(immersiveKeyboard) {
         val activity = context as? Activity ?: return@LaunchedEffect
         val window = activity.window ?: return@LaunchedEffect
-        if (isKeyboardActive) {
+        if (immersiveKeyboard) {
             try {
                 activity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
             } catch (e: Exception) {
@@ -351,7 +355,7 @@ fun HomeScreen(
             }
 
             when (launchMode) {
-                1, 2 -> {
+                InputModes.TOUCHPAD, InputModes.GAMEPAD -> {
                     val darkScheme = darkColorScheme(
                         primary = MaterialTheme.colorScheme.primary,
                         background = Color(0xFF141218),
@@ -363,7 +367,7 @@ fun HomeScreen(
                     )
                     MaterialTheme(colorScheme = darkScheme) {
                         when (launchMode) {
-                            1 -> {
+                            InputModes.TOUCHPAD -> {
                                 TouchpadView(
                                     btManager = btManager,
                                     onClose = { isKeyboardActive = false },
@@ -381,7 +385,7 @@ fun HomeScreen(
                                     }
                                 )
                             }
-                            2 -> {
+                            InputModes.GAMEPAD -> {
                                 GamepadView(
                                     btManager = btManager,
                                     onClose = { isKeyboardActive = false },
@@ -396,6 +400,23 @@ fun HomeScreen(
                             }
                         }
                     }
+                }
+                InputModes.SYSTEM_KEYBOARD -> {
+                    // Stays portrait and keeps the system bars: this mode needs the soft keyboard,
+                    // which cannot share the screen with the immersive landscape plate.
+                    ImeInputView(
+                        isConnected = isConnected,
+                        hostLayout = HostLayouts.byId(hostLayoutId),
+                        unicodeMode = UnicodeEntry.UnicodeEntryMode.byId(unicodeEntryModeId),
+                        onStroke = { code, press -> handleLocalKeyPress(code, press) },
+                        onClose = { isKeyboardActive = false },
+                        onCycleMode = {
+                            val nextMode = InputModes.next(sharedPrefs, launchMode)
+                            launchMode = nextMode
+                            sharedPrefs.edit { putInt("launch_mode", nextMode) }
+                        },
+                        keyRows = ImeKeyBar.resolve(imeKeyRows)
+                    )
                 }
                 else -> {
                     // Seamless full-screen canvas acting as the aluminum keyboard plate and chassis
@@ -455,18 +476,7 @@ fun HomeScreen(
                                         .clip(RoundedCornerShape(6.dp))
                                         .background(Color.White.copy(alpha = 0.15f))
                                         .clickable {
-                                            val enabledModes = listOf(0, 1, 2).filter { mode ->
-                                                val modeStr = when (mode) {
-                                                    0 -> "keyboard"
-                                                    1 -> "touchpad"
-                                                    2 -> "gamepad"
-                                                    else -> "keyboard"
-                                                }
-                                                sharedPrefs.getStringSet("cycle_connection_modes", setOf("keyboard", "touchpad", "gamepad"))?.contains(modeStr) == true
-                                            }.ifEmpty { listOf(0) }
-                                            val currentIndexInEnabled = enabledModes.indexOf(launchMode)
-                                            val nextIndex = (currentIndexInEnabled + 1) % enabledModes.size
-                                            val nextMode = enabledModes[nextIndex]
+                                            val nextMode = InputModes.next(sharedPrefs, launchMode)
                                             launchMode = nextMode
                                             sharedPrefs.edit { putInt("launch_mode", nextMode) }
                                             if (isHapticsEnabled) {
@@ -485,7 +495,7 @@ fun HomeScreen(
                                         modifier = Modifier.size(11.dp)
                                     )
                                     Text(
-                                        text = "Keyboard Mode",
+                                        text = "${InputModes.displayName(InputModes.KEYBOARD)} Mode",
                                         color = Color.White,
                                         fontSize = 9.sp,
                                         fontWeight = FontWeight.Bold
@@ -1316,17 +1326,7 @@ fun HomeScreen(
                             // Circular Mode Toggle Indicator Button
                             IconButton(
                                 onClick = {
-                                    val enabledModes = listOf(0, 1, 2).filter { mode ->
-                                        val modeStr = when (mode) {
-                                            0 -> "keyboard"
-                                            1 -> "touchpad"
-                                            2 -> "gamepad"
-                                            else -> "keyboard"
-                                        }
-                                        sharedPrefs.getStringSet("cycle_connection_modes", setOf("keyboard", "touchpad", "gamepad"))?.contains(modeStr) == true
-                                    }.ifEmpty { listOf(0) }
-                                    val currentIndex = enabledModes.indexOf(launchMode).coerceAtLeast(0)
-                                    val nextMode = enabledModes[(currentIndex + 1) % enabledModes.size]
+                                    val nextMode = InputModes.next(sharedPrefs, launchMode)
                                     launchMode = nextMode
                                     sharedPrefs.edit { putInt("launch_mode", nextMode) }
                                     if (isHapticsEnabled) {
@@ -1340,8 +1340,11 @@ fun HomeScreen(
                                     .testTag("mode_toggle_btn")
                             ) {
                                 val modeIcon = when (launchMode) {
-                                    1 -> Icons.Default.Mouse
-                                    2 -> Icons.Default.SportsEsports
+                                    InputModes.TOUCHPAD -> Icons.Default.Mouse
+                                    InputModes.GAMEPAD -> Icons.Default.SportsEsports
+                                    // A phone, not a second keyboard glyph: KeyboardAlt is almost
+                                    // indistinguishable from Keyboard at this size.
+                                    InputModes.SYSTEM_KEYBOARD -> Icons.Default.PhoneAndroid
                                     else -> Icons.Default.Keyboard
                                 }
                                 Icon(
@@ -1364,11 +1367,7 @@ fun HomeScreen(
                                     containerColor = MaterialTheme.colorScheme.primary
                                 )
                             ) {
-                                val launchText = when (launchMode) {
-                                    1 -> "Launch Touchpad"
-                                    2 -> "Launch Gamepad"
-                                    else -> "Launch Keyboard"
-                                }
+                                val launchText = "Launch ${InputModes.displayName(launchMode)}"
                                 Icon(
                                     imageVector = Icons.Default.KeyboardArrowUp,
                                     contentDescription = "Launch Icon",

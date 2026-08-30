@@ -20,6 +20,13 @@ Bluke turns your Android device into a driverless, wireless Bluetooth HID mechan
 * **Switch sound synthesis**: Generates mechanical switch acoustics (Cherry MX Brown, Holy Panda, Alpaca, Kailh Box Navy, Buckling Spring, and Topre) in real-time.
 * **Themes and case colors**: Includes built-in presets (Olivia, Dracula, Oblivion, Retro, Cafe, and Mizu) and selectable case colors.
 * **System integration**: Supports system haptics, OLED black mode, and Material You dynamic color schemes.
+* **Bring your own keyboard**: Optionally type with your installed IME (Gboard, SwiftKey, Samsung Keyboard, ...) instead of the on-screen keycaps, so autocorrect, word suggestions, and the clipboard and translate panels stay available. Committed text is relayed to the host as keystrokes.
+* **Host keyboard layouts**: Because HID transmits key positions rather than characters, the host's own layout decides what arrives. Select it from US QWERTY, UK, German, Hungarian, French AZERTY, Italian, Spanish, Swedish/Finnish, Norwegian or Danish to type accented characters correctly. See the note below on verification.
+* **Clipboard relay**: Send your phone's clipboard to the host as keystrokes - useful for passwords, URLs, or text your host layout cannot otherwise reach.
+* **Unicode entry fallback**: Optionally type characters with no key on the host layout (emoji, Greek, ...) via the host OS's Unicode escape hatch - Linux IBus `Ctrl+Shift+U`, Windows Alt+Numpad, or macOS Unicode Hex Input.
+
+> [!NOTE]
+> Only the **US QWERTY** layout table is verified against real hardware. The other layouts are derived from each locale's published layout and are marked *Unverified* in settings; please report any character that comes out wrong. The Unicode entry modes depend on host OS features that are not available in every application - the clipboard relay is the more dependable route for important text.
 
 
 ## Requirement

@@ -25,8 +25,16 @@ import dev.arnv.bluke.ui.theme.MyApplicationTheme
 import dev.arnv.bluke.ui.KeyboardLayoutType
 import dev.arnv.bluke.sound.SwitchType
 import dev.arnv.bluke.ui.CaseColor
+import dev.arnv.bluke.ui.HostLayouts
+import dev.arnv.bluke.ui.ImeKeyBar
+import dev.arnv.bluke.ui.ImeKeyBarEditorDialog
+import dev.arnv.bluke.ui.InputModes
+import dev.arnv.bluke.ui.UnicodeEntry
 import androidx.compose.material.icons.filled.Keyboard
+import androidx.compose.material.icons.filled.KeyboardAlt
+import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.MusicNote
+import androidx.compose.material.icons.filled.Translate
 import androidx.compose.material.icons.filled.SportsEsports
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.ui.draw.scale
@@ -59,6 +67,16 @@ class BehaviorActivity : ComponentActivity() {
                 var autoConnectEnabled by remember { mutableStateOf(sharedPrefs.getBoolean("auto_connect", true)) }
                 var keySensitivity by remember { mutableFloatStateOf(sharedPrefs.getFloat("key_sensitivity", 6f)) }
                 var lockSyncMode by remember { mutableStateOf(sharedPrefs.getString("lock_sync_mode", "host") ?: "host") }
+                var hostLayoutId by remember {
+                    mutableStateOf(sharedPrefs.getString("host_layout", HostLayouts.DEFAULT.id) ?: HostLayouts.DEFAULT.id)
+                }
+                var unicodeModeId by remember {
+                    mutableStateOf(sharedPrefs.getString("unicode_entry_mode", "off") ?: "off")
+                }
+                var imeKeyRows by remember { mutableStateOf(ImeKeyBar.load(sharedPrefs)) }
+                var showKeyBarDialog by remember { mutableStateOf(false) }
+                var showHostLayoutDialog by remember { mutableStateOf(false) }
+                var showUnicodeDialog by remember { mutableStateOf(false) }
                 
                 val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
 
@@ -135,6 +153,192 @@ class BehaviorActivity : ComponentActivity() {
                                     )
                                 }
                             }
+                        }
+
+                        SettingsCardGroup(
+                            title = "Input Method",
+                            items = listOf(
+                                SettingsItemData(
+                                    title = "Host Keyboard Layout",
+                                    subtitle = HostLayouts.byId(hostLayoutId).let { layout ->
+                                        "Sending as ${layout.displayName}. " +
+                                            if (layout.verified) {
+                                                "Must match the layout set on the computer you are controlling."
+                                            } else {
+                                                "Unverified against hardware - please report any wrong characters."
+                                            }
+                                    },
+                                    icon = { Icon(Icons.Default.Language, null, tint = MaterialTheme.colorScheme.primary) },
+                                    onClick = { showHostLayoutDialog = true }
+                                ),
+                                SettingsItemData(
+                                    title = "Unicode Entry Fallback",
+                                    subtitle = UnicodeEntry.UnicodeEntryMode.byId(unicodeModeId).let {
+                                        "${it.displayName} - ${it.description}"
+                                    },
+                                    icon = { Icon(Icons.Default.Translate, null, tint = MaterialTheme.colorScheme.primary) },
+                                    onClick = { showUnicodeDialog = true }
+                                ),
+                                SettingsItemData(
+                                    title = "Phone Keyboard Extra Keys",
+                                    subtitle = imeKeyRows.let { rows ->
+                                        val keyCount = rows.sumOf { it.size }
+                                        "$keyCount ${if (keyCount == 1) "key" else "keys"} in " +
+                                            "${rows.size} ${if (rows.size == 1) "row" else "rows"}. " +
+                                            "Pin the keys your keyboard hides - pipe, tilde, Home, " +
+                                            "function keys, host shortcuts."
+                                    },
+                                    icon = { Icon(Icons.Default.PhoneAndroid, null, tint = MaterialTheme.colorScheme.primary) },
+                                    onClick = { showKeyBarDialog = true }
+                                )
+                            )
+                        )
+
+                        if (showKeyBarDialog) {
+                            ImeKeyBarEditorDialog(
+                                initialRows = imeKeyRows,
+                                onDismiss = { showKeyBarDialog = false },
+                                onSave = { newRows ->
+                                    ImeKeyBar.save(sharedPrefs, newRows)
+                                    imeKeyRows = ImeKeyBar.load(sharedPrefs)
+                                    showKeyBarDialog = false
+                                }
+                            )
+                        }
+
+                        if (showHostLayoutDialog) {
+                            AlertDialog(
+                                onDismissRequest = { showHostLayoutDialog = false },
+                                title = { Text("Host Keyboard Layout") },
+                                text = {
+                                    Column(modifier = Modifier.fillMaxWidth()) {
+                                        Text(
+                                            text = "Bluke sends key positions, not letters - the computer " +
+                                                "you are controlling decides what each position means. Pick the " +
+                                                "layout that machine is set to.",
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                        HorizontalDivider(
+                                            modifier = Modifier.padding(vertical = 8.dp),
+                                            color = MaterialTheme.colorScheme.outlineVariant
+                                        )
+                                        Column(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .heightIn(max = 320.dp)
+                                                .verticalScroll(rememberScrollState())
+                                        ) {
+                                            HostLayouts.ALL.forEach { layout ->
+                                                Row(
+                                                    modifier = Modifier
+                                                        .fillMaxWidth()
+                                                        .clickable {
+                                                            hostLayoutId = layout.id
+                                                            sharedPrefs.edit().putString("host_layout", layout.id).apply()
+                                                            showHostLayoutDialog = false
+                                                        }
+                                                        .padding(vertical = 6.dp, horizontal = 8.dp),
+                                                    verticalAlignment = Alignment.CenterVertically
+                                                ) {
+                                                    RadioButton(
+                                                        selected = hostLayoutId == layout.id,
+                                                        onClick = {
+                                                            hostLayoutId = layout.id
+                                                            sharedPrefs.edit().putString("host_layout", layout.id).apply()
+                                                            showHostLayoutDialog = false
+                                                        }
+                                                    )
+                                                    Spacer(modifier = Modifier.width(12.dp))
+                                                    Column {
+                                                        Text(
+                                                            text = layout.displayName,
+                                                            style = MaterialTheme.typography.bodyLarge
+                                                        )
+                                                        if (!layout.verified) {
+                                                            Text(
+                                                                text = "Unverified",
+                                                                style = MaterialTheme.typography.bodySmall,
+                                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                            )
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                },
+                                confirmButton = {
+                                    TextButton(onClick = { showHostLayoutDialog = false }) { Text("Close") }
+                                }
+                            )
+                        }
+
+                        if (showUnicodeDialog) {
+                            AlertDialog(
+                                onDismissRequest = { showUnicodeDialog = false },
+                                title = { Text("Unicode Entry Fallback") },
+                                text = {
+                                    Column(modifier = Modifier.fillMaxWidth()) {
+                                        Text(
+                                            text = "How to send characters your host layout has no key " +
+                                                "for, such as emoji or Greek letters. These rely on host OS " +
+                                                "features and do not work everywhere - the Send Clipboard " +
+                                                "button is more dependable for important text.",
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                        HorizontalDivider(
+                                            modifier = Modifier.padding(vertical = 8.dp),
+                                            color = MaterialTheme.colorScheme.outlineVariant
+                                        )
+                                        Column(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .heightIn(max = 320.dp)
+                                                .verticalScroll(rememberScrollState())
+                                        ) {
+                                            UnicodeEntry.UnicodeEntryMode.entries.forEach { mode ->
+                                                Row(
+                                                    modifier = Modifier
+                                                        .fillMaxWidth()
+                                                        .clickable {
+                                                            unicodeModeId = mode.id
+                                                            sharedPrefs.edit().putString("unicode_entry_mode", mode.id).apply()
+                                                            showUnicodeDialog = false
+                                                        }
+                                                        .padding(vertical = 6.dp, horizontal = 8.dp),
+                                                    verticalAlignment = Alignment.CenterVertically
+                                                ) {
+                                                    RadioButton(
+                                                        selected = unicodeModeId == mode.id,
+                                                        onClick = {
+                                                            unicodeModeId = mode.id
+                                                            sharedPrefs.edit().putString("unicode_entry_mode", mode.id).apply()
+                                                            showUnicodeDialog = false
+                                                        }
+                                                    )
+                                                    Spacer(modifier = Modifier.width(12.dp))
+                                                    Column {
+                                                        Text(
+                                                            text = mode.displayName,
+                                                            style = MaterialTheme.typography.bodyLarge
+                                                        )
+                                                        Text(
+                                                            text = mode.description,
+                                                            style = MaterialTheme.typography.bodySmall,
+                                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                        )
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                },
+                                confirmButton = {
+                                    TextButton(onClick = { showUnicodeDialog = false }) { Text("Close") }
+                                }
+                            )
                         }
 
                         SettingsCardGroup(
@@ -222,18 +426,16 @@ class BehaviorActivity : ComponentActivity() {
                                 .joinToString(", ") { it.displayName }
                         }
 
-                        val connectionModesDisplayMap = mapOf(
-                            "keyboard" to "Keyboard",
-                            "touchpad" to "Touchpad",
-                            "gamepad" to "Gamepad"
-                        )
+                        val allModeKeys = (0 until InputModes.ALL_COUNT).map { InputModes.prefKey(it) }
+                        val connectionModesDisplayMap = (0 until InputModes.ALL_COUNT)
+                            .associate { InputModes.prefKey(it) to InputModes.displayName(it) }
                         var activeModesSet by remember {
-                            mutableStateOf(sharedPrefs.getStringSet("cycle_connection_modes", setOf("keyboard", "touchpad", "gamepad")) ?: emptySet())
+                            mutableStateOf(sharedPrefs.getStringSet("cycle_connection_modes", InputModes.DEFAULT_ENABLED) ?: emptySet())
                         }
-                        val modesDescription = if (activeModesSet.size == 3) {
+                        val modesDescription = if (activeModesSet.size == InputModes.ALL_COUNT) {
                             "All input modes active in cycle"
                         } else {
-                            listOf("keyboard", "touchpad", "gamepad")
+                            allModeKeys
                                 .filter { activeModesSet.contains(it) }
                                 .mapNotNull { connectionModesDisplayMap[it] }
                                 .joinToString(", ")
@@ -628,11 +830,9 @@ class BehaviorActivity : ComponentActivity() {
                                     addAll(activeModesSet)
                                 }
                             }
-                            val allModes = listOf(
-                                "keyboard" to "Keyboard Mode",
-                                "touchpad" to "Touchpad Mode",
-                                "gamepad" to "Gamepad Mode"
-                            )
+                            val allModes = (0 until InputModes.ALL_COUNT).map {
+                                InputModes.prefKey(it) to "${InputModes.displayName(it)} Mode"
+                            }
                             AlertDialog(
                                 onDismissRequest = { showModesDialog = false },
                                 title = { Text("Input Modes to Cycle") },

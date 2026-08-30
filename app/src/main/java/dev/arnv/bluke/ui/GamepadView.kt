@@ -438,12 +438,7 @@ fun GamepadView(
                             .clip(RoundedCornerShape(6.dp))
                             .background(Color.White.copy(alpha = 0.15f))
                             .clickable {
-                                val enabledModes = listOf(0, 1, 2).filter { mode ->
-                                    val modeStr = when (mode) { 0 -> "keyboard"; 1 -> "touchpad"; 2 -> "gamepad"; else -> "keyboard" }
-                                    sharedPrefs.getStringSet("cycle_connection_modes", setOf("keyboard", "touchpad", "gamepad"))?.contains(modeStr) == true
-                                }.ifEmpty { listOf(0) }
-                                val idx = enabledModes.indexOf(launchMode)
-                                onModeChange(enabledModes[(idx + 1) % enabledModes.size])
+                                onModeChange(InputModes.next(sharedPrefs, launchMode))
                                 triggerVibration(25)
                             }
                             .padding(horizontal = 8.dp)
