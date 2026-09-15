@@ -379,6 +379,8 @@ class BluetoothKeyboardManager(private val context: Context) {
 
     private val connectSequence = AtomicLong()
     private val pendingConnectRequest = MutableStateFlow<ConnectRequest?>(null)
+    @Volatile
+    private var lastRegistrationFailure: HidFailure? = null
     private var audioProfilesDisconnectedForSession = false
 
     init {
@@ -589,7 +591,7 @@ class BluetoothKeyboardManager(private val context: Context) {
         val dName = device.name ?: device.address
         try {
             if (request.delayMillis > 0) delay(request.delayMillis)
-            val hid = ensureHidReady() ?: return
+            val hid = ensureHidReady(awaitLateCallback = true) ?: return
 
             val currentlyConnected = _connectedDevice.value
             if (currentlyConnected != null && currentlyConnected.address != device.address) {
@@ -658,9 +660,20 @@ class BluetoothKeyboardManager(private val context: Context) {
         }
     }
 
-    private suspend fun ensureHidReady(): BluetoothHidDevice? {
+    private suspend fun ensureHidReady(awaitLateCallback: Boolean = false): BluetoothHidDevice? {
         val hid = bindHidProxy() ?: return null
-        return if (ensureRegistered(hid)) hid else null
+        if (ensureRegistered(hid)) return hid
+        if (!awaitLateCallback || lastRegistrationFailure != HidFailure.REGISTRATION_TIMEOUT) {
+            return null
+        }
+
+        // Some OEM stacks acknowledge registerApp() after every bounded callback window has
+        // elapsed. Keep the latest request suspended instead of issuing an unbounded fourth
+        // registration attempt. A newer request cancels this wait through collectLatest.
+        _statusMessage.value =
+            "HID registration is still pending. Waiting for the system callback..."
+        appRegistrationState.first { it }
+        return hidDeviceProfile ?: bindHidProxy()
     }
 
     @SuppressLint("MissingPermission")
@@ -912,6 +925,7 @@ class BluetoothKeyboardManager(private val context: Context) {
     private suspend fun ensureRegistered(hid: BluetoothHidDevice, forceReset: Boolean = false): Boolean =
         registrationMutex.withLock {
             if (appRegistrationState.value && !forceReset) return@withLock true
+            lastRegistrationFailure = null
             val settings = sdpSettings
             if (settings == null) {
                 _serviceState.value = BluetoothState.ProfileNotSupported
@@ -945,6 +959,7 @@ class BluetoothKeyboardManager(private val context: Context) {
 
                 when (capability) {
                     BluetoothCapability.Available -> {
+                        lastRegistrationFailure = null
                         _lifecycleState.value = HidLifecycleState.Registered
                         return@withLock true
                     }
@@ -972,6 +987,7 @@ class BluetoothKeyboardManager(private val context: Context) {
             }
 
             _lifecycleState.value = HidLifecycleState.Error(lastFailure)
+            lastRegistrationFailure = lastFailure
             _serviceState.value = BluetoothState.ReadyDisconnected
             _statusMessage.value = if (lastFailure == HidFailure.REGISTRATION_TIMEOUT) {
                 "HID registration callback timed out; support is inconclusive. Try toggling Bluetooth."
