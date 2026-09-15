@@ -28,6 +28,8 @@ import androidx.compose.runtime.*
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -60,6 +62,8 @@ fun HomeScreen(
 ) {
     val context = LocalContext.current
     val btLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) {}
+    val homeViewModel: HomeViewModel = viewModel(factory = HomeViewModel.factory(btManager))
+    val homeUiState by homeViewModel.uiState.collectAsStateWithLifecycle()
     
     // UI state
     var selectedLayoutType by rememberSaveable { mutableStateOf(KeyboardLayoutType.OBLIVION_75) }
@@ -121,7 +125,7 @@ fun HomeScreen(
 
     
     // Bluetooth status flows
-    val realBtState by btManager.serviceState.collectAsState()
+    val realBtState = homeUiState.bluetoothState
     
     val btState = remember(realBtState, devModeRefreshTrigger) {
         if (sharedPrefs.getBoolean("is_developer_mode", false)) {
@@ -131,13 +135,13 @@ fun HomeScreen(
         }
         realBtState
     }
-    val btMessage by btManager.statusMessage.collectAsState()
+    val btMessage = homeUiState.statusMessage
     
 
     
-    val bondedDevices by btManager.bondedDevices.collectAsState()
-    val scannedDevices by btManager.scannedDevices.collectAsState()
-    val isScanning by btManager.isScanning.collectAsState()
+    val bondedDevices = homeUiState.bondedDevices
+    val scannedDevices = homeUiState.scannedDevices
+    val isScanning = homeUiState.isScanning
     
     // Active pressed keys set for visually pressing keycaps
     val activePressedKeys = remember { mutableStateListOf<Int>() }
@@ -200,9 +204,9 @@ fun HomeScreen(
     var isNumLockActive by rememberSaveable { mutableStateOf(true) }
     var isScrollLockActive by rememberSaveable { mutableStateOf(false) }
 
-    val systemCapsLock by btManager.capsLockState.collectAsState()
-    val systemNumLock by btManager.numLockState.collectAsState()
-    val systemScrollLock by btManager.scrollLockState.collectAsState()
+    val systemCapsLock = homeUiState.capsLock
+    val systemNumLock = homeUiState.numLock
+    val systemScrollLock = homeUiState.scrollLock
 
     LaunchedEffect(isConnected, systemCapsLock, systemNumLock, systemScrollLock, lockSyncMode) {
         if (isConnected && lockSyncMode == "host") {
@@ -215,9 +219,9 @@ fun HomeScreen(
     // Track last connected device for reconnection
     var lastConnectedDevice by remember { mutableStateOf<BluetoothDevice?>(null) }
 
-    LaunchedEffect(btState) {
+    LaunchedEffect(btState, homeUiState.connectedDevice) {
         if (btState is BluetoothState.Connected) {
-            btManager.connectedDevice.value?.let {
+            homeUiState.connectedDevice?.let {
                 lastConnectedDevice = it
             }
         }
@@ -495,8 +499,7 @@ fun HomeScreen(
                                 // Status LED and connection details
                                 val statusLedColor = if (isConnected) Color(0xFF39FF14) else Color(0xFFFF9800)
                                 // Use collected state (not .value) so UI reacts to changes from background
-                                val connectedDevNow by btManager.connectedDevice.collectAsState()
-                                val activeDevice = connectedDevNow ?: lastConnectedDevice
+                                val activeDevice = homeUiState.connectedDevice ?: lastConnectedDevice
                                 val deviceName = activeDevice?.name ?: "No Host"
                                 
                                 Box(
@@ -887,7 +890,7 @@ fun HomeScreen(
                     } else {
                         var isPairedExpanded by rememberSaveable { mutableStateOf(true) }
                         var isDiscoveredExpanded by rememberSaveable { mutableStateOf(true) }
-                        val connectedDeviceState by btManager.connectedDevice.collectAsState()
+                        val connectedDeviceState = homeUiState.connectedDevice
 
                         LazyColumn(
                             modifier = Modifier
