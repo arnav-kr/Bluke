@@ -16,7 +16,7 @@ Working branch: `refactor`
 - **P2 open — Compose alignment:** Material3 `1.4.0-alpha04` still lifts runtime to `1.8.0-alpha06`; removing the override fails compilation because `ThemeConfig.kt` uses Expressive-only APIs. A BOM/toolchain upgrade was prohibited in this pass.
 - **P2 fixed — resources:** unused resources and three malformed high-density WebPs were removed; adaptive icon background is explicitly `nodpi`.
 - Baseline: `assembleDebug` passed; lint reported 2 errors and 42 warnings; 3 tests passed and zero exercised Bluetooth/HID.
-- Final: `assembleDebug`, `lintDebug`, `lintRelease`, and 13 unit tests pass. Debug lint reports 0 errors/21 warnings; release lint reports 0 errors/20 warnings.
+- Final: `assembleDebug`, production-source `lintDebug`, `lintRelease`, and 33 unit tests pass. The 33 include 18 facade/OEM-behavior contract runs across simulated API 28/31/36. Debug lint reports 0 errors/21 warnings; release lint reports 0 errors/20 warnings.
 - No SDK, AGP, Kotlin, Compose BOM, signing, Fastlane, or F-Droid version/config changes were made. DataStore `1.2.1` is the only new dependency.
 
 ## 2. Repository reconnaissance
@@ -58,6 +58,8 @@ app/src/main/
 │   ├── bluetooth/BluetoothKeyboardManager.kt
 │   ├── bluetooth/GamepadReport.kt
 │   ├── bluetooth/HidLifecycle.kt
+│   ├── bluetooth/HidRegistrationCoordinator.kt
+│   ├── bluetooth/LatestRequestProcessor.kt
 │   ├── data/LayoutRepository.kt
 │   ├── sound/KeyboardSoundSynthesizer.kt
 │   ├── utils/DeveloperLogManager.kt
@@ -89,7 +91,7 @@ gradle/libs.versions.toml
 app/build.gradle.kts
 ```
 
-The refactor adds `BlukeApplication.kt`, `HidLifecycle.kt`, `GamepadReport.kt`, `GamepadInput.kt`, `LayoutRepository.kt`, `HomeViewModel.kt`, `DeviceListSection.kt`, `StatusHeaderCard.kt`, `ProfileNotSupportedScreen.kt`, `values-v31/themes.xml`, and `values-night-v31/themes.xml`.
+The refactor adds `BlukeApplication.kt`, `HidLifecycle.kt`, `HidRegistrationCoordinator.kt`, `LatestRequestProcessor.kt`, `GamepadReport.kt`, `GamepadInput.kt`, `LayoutRepository.kt`, `HomeViewModel.kt`, `DeviceListSection.kt`, `StatusHeaderCard.kt`, `ProfileNotSupportedScreen.kt`, `values-v31/themes.xml`, and `values-night-v31/themes.xml`.
 
 ### 2.2 Kotlin inventory at `main` HEAD
 
@@ -124,7 +126,7 @@ The refactor adds `BlukeApplication.kt`, `HidLifecycle.kt`, `GamepadReport.kt`, 
 
 After extraction, `HomeScreen.kt` is 1,026 lines; the new files are `DeviceListSection.kt` (204), `StatusHeaderCard.kt` (144), and `ProfileNotSupportedScreen.kt` (99). `HomeScreen.kt` remains critical and needs state-hoisting work.
 
-Post-refactor inventory additions/changed counts: `BlukeApplication.kt` 24 (process owner), `bluetooth/HidLifecycle.kt` 87 (state/retry/capability models), `bluetooth/GamepadReport.kt` 39 (pure HID gamepad packing), `ui/GamepadInput.kt` 39 (pure D-pad geometry), `data/LayoutRepository.kt` 65 (DataStore persistence/migration), `ui/HomeViewModel.kt` 102 (immutable Bluetooth UI state), `MainActivity.kt` 80, `BehaviorActivity.kt` 1,039, `BluetoothKeyboardManager.kt` 1,225, `GamepadView.kt` 2,799, and `HomeScreen.kt` 1,031. The original `main` inventory above remains the audit baseline.
+Post-refactor inventory additions/changed counts: `BlukeApplication.kt` 24 (process owner), `bluetooth/HidLifecycle.kt` 87 (state/retry/capability models), `bluetooth/HidRegistrationCoordinator.kt` 74 (facade-backed registration policy), `bluetooth/LatestRequestProcessor.kt` 26 (conflated cancellation policy), `bluetooth/GamepadReport.kt` 39 (pure HID gamepad packing), `ui/GamepadInput.kt` 39 (pure D-pad geometry), `data/LayoutRepository.kt` 65 (DataStore persistence/migration), `ui/HomeViewModel.kt` 102 (immutable Bluetooth UI state), `MainActivity.kt` 80, `BehaviorActivity.kt` 1,039, `BluetoothKeyboardManager.kt` 1,214, `GamepadView.kt` 2,799, and `HomeScreen.kt` 1,031. The original `main` inventory above remains the audit baseline.
 
 ### 2.3 Build configuration
 
@@ -530,7 +532,7 @@ No `CoroutineCreationDuringComposition`, `ProduceStateDoesNotAssignValue`, `Unre
 11. D-pad Hat Switch, gesture pointer ownership, neutral teardown report, and pure packing/geometry tests — complete; physical host validation remains.
 12. Narrow gamepad recomposition scopes and repair effect/callback keys — complete; production-source lint remains clean.
 13. Compose BOM/Material3 alignment — intentionally unchanged at the maintainer's request.
-14. Add a framework Bluetooth facade and run the OEM/API device matrix before release.
+14. Extract a framework-neutral Bluetooth registration facade and latest-request processor — complete; deterministic API 28/31/36 simulations pass. Physical OEM/radio validation remains required before release.
 
 ## 7. Changes intentionally not made
 
@@ -638,7 +640,54 @@ The process cannot access the file because it is being used by another process
 
 The production analyzer and report completed with the same 21 version/SDK warnings and no Gamepad/Home/Compose correctness issue. Unit tests and `assembleDebug` completed separately in 58 seconds. No source or dependency change was made to work around the environmental file lock.
 
-### 7.3 Physical validation matrix
+### 7.3 API/OEM validation matrix
+
+The production registration policy now depends on `BluetoothRegistrationFacade`, with framework calls adapted inside `BluetoothKeyboardManager`. `HidRegistrationCoordinator` owns cleanup, the hard attempt ceiling, callback timeout, retry backoff, and passive late-callback wait. `LatestRequestProcessor` is the production `StateFlow`/`collectLatest` path, not a test duplicate.
+
+Robolectric ran the same facade contract on API 28, 31, and 36. Each API executed these six checks: correct SDK selection, first-attempt callback success, three rejected commands, three accepted commands with no callback, late callback resumption without a fourth command, and existing-registration/forced-reset behavior.
+
+```text
+> .\gradlew.bat :app:testDebugUnitTest --tests "dev.arnv.bluke.bluetooth.BluetoothRegistrationFacadeApi*" --no-daemon --no-parallel --stacktrace
+BUILD SUCCESSFUL in 3m 5s
+30 actionable tasks: 5 executed, 25 up-to-date
+
+BluetoothRegistrationFacadeApi28Test: tests=6 failures=0 errors=0 skipped=0
+BluetoothRegistrationFacadeApi31Test: tests=6 failures=0 errors=0 skipped=0
+BluetoothRegistrationFacadeApi36Test: tests=6 failures=0 errors=0 skipped=0
+```
+
+The first combined run exposed a test-scheduler mistake in the new latest-request test; the real failure was:
+
+```text
+LatestRequestProcessorTest > newerRequestCancelsInFlightWorkAndCompletesLatest FAILED
+java.lang.AssertionError: expected:<[first, latest]> but was:<[first]>
+33 tests completed, 1 failed
+BUILD FAILED in 2m 36s
+```
+
+The test used `advanceUntilIdle()`, which does not drain `backgroundScope` work as assumed. Replacing it with `runCurrent()` made the cancellation assertion deterministic. The corrected full gate is:
+
+```text
+> .\gradlew.bat :app:testDebugUnitTest :app:assembleDebug --no-daemon --no-parallel --warning-mode all
+> Task :app:assembleDebug UP-TO-DATE
+> Task :app:testDebugUnitTest
+BUILD SUCCESSFUL in 51s
+47 actionable tasks: 1 executed, 46 up-to-date
+
+tests=33 failures=0 errors=0 skipped=0
+```
+
+The full `lintDebug` retry still fails before analysis completion on the previously documented external lock of AGP's generated `RuntimeIssueRegistry` cache JAR. Production-source lint excluding only that generated unit-test analyzer succeeds:
+
+```text
+> .\gradlew.bat :app:lintDebug -x :app:lintAnalyzeDebugUnitTest --no-daemon --no-parallel --warning-mode all
+> Task :app:lintReportDebug
+> Task :app:lintDebug
+BUILD SUCCESSFUL in 2m 19s
+28 actionable tasks: 4 executed, 24 up-to-date
+```
+
+#### Physical matrix status
 
 No Android device or AVD was available locally. Real output was:
 
