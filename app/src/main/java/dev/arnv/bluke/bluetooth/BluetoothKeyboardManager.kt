@@ -652,13 +652,7 @@ class BluetoothKeyboardManager(private val context: Context) {
     private fun initProfileListener() {
         _statusMessage.value = "Connecting to HID service profile proxy..."
         _serviceState.value = BluetoothState.ReadyDisconnected
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.P) {
-            Log.e("BluetoothKeyboard", "HID Device profile requires Android 9.0 (API 28) or higher")
-            _serviceState.value = BluetoothState.ProfileNotSupported
-            _statusMessage.value = "Bluetooth HID Device profile requires Android 9 (API 28) or higher."
-            return
-        }
-        
+
         managerScope.launch {
             val hidDeviceProfileConst = 19 // BluetoothProfile.HID_DEVICE is 19
             var success = false
