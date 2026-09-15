@@ -57,6 +57,9 @@ class BehaviorActivity : ComponentActivity() {
                 var hideUnsupportedDevices by remember { mutableStateOf(sharedPrefs.getBoolean("hide_unsupported", true)) }
                 var showMacAddress by remember { mutableStateOf(sharedPrefs.getBoolean("show_mac", false)) }
                 var autoConnectEnabled by remember { mutableStateOf(sharedPrefs.getBoolean("auto_connect", true)) }
+                var disconnectAudioProfiles by remember {
+                    mutableStateOf(sharedPrefs.getBoolean("disconnect_audio_profiles", false))
+                }
                 var keySensitivity by remember { mutableFloatStateOf(sharedPrefs.getFloat("key_sensitivity", 6f)) }
                 var lockSyncMode by remember { mutableStateOf(sharedPrefs.getString("lock_sync_mode", "host") ?: "host") }
                 
@@ -192,6 +195,20 @@ class BehaviorActivity : ComponentActivity() {
                                             onCheckedChange = { 
                                                 autoConnectEnabled = it
                                                 sharedPrefs.edit { putBoolean("auto_connect", it) }
+                                            }
+                                        )
+                                    }
+                                ),
+                                SettingsItemData(
+                                    title = "Prevent Host Audio Routing",
+                                    subtitle = "Optional Linux workaround; disconnects A2DP and headset profiles after HID connects",
+                                    icon = { Icon(Icons.Default.MusicNote, null, tint = MaterialTheme.colorScheme.primary) },
+                                    action = {
+                                        Switch(
+                                            checked = disconnectAudioProfiles,
+                                            onCheckedChange = {
+                                                disconnectAudioProfiles = it
+                                                sharedPrefs.edit { putBoolean("disconnect_audio_profiles", it) }
                                             }
                                         )
                                     }
