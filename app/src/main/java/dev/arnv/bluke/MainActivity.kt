@@ -12,11 +12,6 @@ import dev.arnv.bluke.ui.theme.MyApplicationTheme
 import dev.arnv.bluke.ui.HomeScreen
 
 class MainActivity : ComponentActivity() {
-    companion object {
-        @android.annotation.SuppressLint("StaticFieldLeak")
-        private var btManagerInstance: BluetoothKeyboardManager? = null
-    }
-
     private lateinit var btManager: BluetoothKeyboardManager
     private lateinit var soundSynth: KeyboardSoundSynthesizer
 
@@ -37,19 +32,7 @@ class MainActivity : ComponentActivity() {
             return
         }
 
-        // Initialize or reuse services safely against missing HID framework classes
-        dev.arnv.bluke.utils.DeveloperLogManager.init(applicationContext)
-        
-        if (btManagerInstance == null) {
-            try {
-                btManagerInstance = BluetoothKeyboardManager(applicationContext)
-            } catch (e: Throwable) {
-                android.util.Log.e("MainActivity", "Failed to initialize BluetoothKeyboardManager", e)
-            }
-        }
-        if (btManagerInstance != null) {
-            btManager = btManagerInstance!!
-        }
+        btManager = (application as BlukeApplication).bluetoothKeyboardManager
 
         soundSynth = KeyboardSoundSynthesizer(applicationContext)
 
@@ -92,12 +75,6 @@ class MainActivity : ComponentActivity() {
         super.onDestroy()
         if (::soundSynth.isInitialized) {
             soundSynth.release()
-        }
-        if (isFinishing) {
-            if (::btManager.isInitialized) {
-                btManager.close()
-                btManagerInstance = null
-            }
         }
     }
 }
