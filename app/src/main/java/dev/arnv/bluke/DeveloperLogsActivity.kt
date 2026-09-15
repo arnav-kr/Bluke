@@ -26,6 +26,7 @@ import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
+import androidx.core.content.edit
 import dev.arnv.bluke.ui.theme.MyApplicationTheme
 import dev.arnv.bluke.utils.DeveloperLogManager
 import dev.arnv.bluke.utils.LogType
@@ -129,7 +130,7 @@ class DeveloperLogsActivity : ComponentActivity() {
                                 checked = isAutoSaveEnabled,
                                 onCheckedChange = { 
                                     isAutoSaveEnabled = it
-                                    sharedPrefs.edit().putBoolean("dev_auto_save_logs", it).apply()
+                                    sharedPrefs.edit { putBoolean("dev_auto_save_logs", it) }
                                     DeveloperLogManager.updateAutoSaveConfig(context)
                                 }
                             )

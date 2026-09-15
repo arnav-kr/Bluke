@@ -20,6 +20,7 @@ import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.core.net.toUri
+import androidx.core.content.edit
 import dev.arnv.bluke.ui.SettingsCardGroup
 import dev.arnv.bluke.ui.SettingsItemData
 import dev.arnv.bluke.ui.theme.MyApplicationTheme
@@ -113,15 +114,15 @@ class DeveloperOptionsActivity : ComponentActivity() {
                                 checked = isDevMode,
                                 onCheckedChange = { 
                                     isDevMode = it
-                                    sharedPrefs.edit().putBoolean("is_developer_mode", it).apply()
+                                    sharedPrefs.edit { putBoolean("is_developer_mode", it) }
                                     if (!it) {
                                         // Auto turn off all mocks if dev mode disabled
-                                        sharedPrefs.edit()
-                                            .putBoolean("mock_update_popup", false)
-                                            .putBoolean("mock_bt_disabled", false)
-                                            .putBoolean("mock_device_unsupported", false)
-                                            .putBoolean("mock_hid_unsupported", false)
-                                            .apply()
+                                        sharedPrefs.edit {
+                                            putBoolean("mock_update_popup", false)
+                                            putBoolean("mock_bt_disabled", false)
+                                            putBoolean("mock_device_unsupported", false)
+                                            putBoolean("mock_hid_unsupported", false)
+                                        }
                                         finish() // Exit screen
                                     }
                                 }
@@ -149,7 +150,7 @@ class DeveloperOptionsActivity : ComponentActivity() {
                                             checked = mockUpdatePopup,
                                             onCheckedChange = {
                                                 mockUpdatePopup = it
-                                                sharedPrefs.edit().putBoolean("mock_update_popup", it).apply()
+                                                sharedPrefs.edit { putBoolean("mock_update_popup", it) }
                                             }
                                         )
                                     }
@@ -180,28 +181,28 @@ class DeveloperOptionsActivity : ComponentActivity() {
                                                                 "None" -> {
                                                                     mockBtDisabled = false
                                                                     mockUnsupported = false
-                                                                    sharedPrefs.edit().putBoolean("mock_hid_unsupported", false).apply()
+                                                                    sharedPrefs.edit { putBoolean("mock_hid_unsupported", false) }
                                                                 }
                                                                 "Bluetooth Disabled" -> {
                                                                     mockBtDisabled = true
                                                                     mockUnsupported = false
-                                                                    sharedPrefs.edit().putBoolean("mock_hid_unsupported", false).apply()
+                                                                    sharedPrefs.edit { putBoolean("mock_hid_unsupported", false) }
                                                                 }
                                                                 "Device Unsupported" -> {
                                                                     mockBtDisabled = false
                                                                     mockUnsupported = true
-                                                                    sharedPrefs.edit().putBoolean("mock_hid_unsupported", false).apply()
+                                                                    sharedPrefs.edit { putBoolean("mock_hid_unsupported", false) }
                                                                 }
                                                                 "HID Unsupported" -> {
                                                                     mockBtDisabled = false
                                                                     mockUnsupported = false
-                                                                    sharedPrefs.edit().putBoolean("mock_hid_unsupported", true).apply()
+                                                                    sharedPrefs.edit { putBoolean("mock_hid_unsupported", true) }
                                                                 }
                                                             }
-                                                            sharedPrefs.edit()
-                                                                .putBoolean("mock_bt_disabled", mockBtDisabled)
-                                                                .putBoolean("mock_device_unsupported", mockUnsupported)
-                                                                .apply()
+                                                            sharedPrefs.edit {
+                                                                putBoolean("mock_bt_disabled", mockBtDisabled)
+                                                                putBoolean("mock_device_unsupported", mockUnsupported)
+                                                            }
                                                             expanded = false
                                                         }
                                                     )
