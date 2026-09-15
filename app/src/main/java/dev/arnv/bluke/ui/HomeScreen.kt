@@ -69,7 +69,9 @@ fun HomeScreen(
     var selectedLayoutType by rememberSaveable { mutableStateOf(KeyboardLayoutType.OBLIVION_75) }
     var selectedCaseColor by rememberSaveable { mutableStateOf(CaseColor.BLACK) }
     var isKeyboardActive by rememberSaveable { mutableStateOf(false) }
-    val sharedPrefs = remember { context.getSharedPreferences("app_prefs", Context.MODE_PRIVATE) }
+    val sharedPrefs = remember(context) {
+        context.getSharedPreferences("app_prefs", Context.MODE_PRIVATE)
+    }
     var hideUnknownDevices by remember { mutableStateOf(sharedPrefs.getBoolean("hide_unknown", false)) }
     var hideUnsupportedDevices by remember { mutableStateOf(sharedPrefs.getBoolean("hide_unsupported", true)) }
     var showMacAddress by remember { mutableStateOf(sharedPrefs.getBoolean("show_mac", false)) }
@@ -90,7 +92,7 @@ fun HomeScreen(
     var devModeRefreshTrigger by remember { mutableIntStateOf(0) }
 
     val lifecycleOwner = LocalLifecycleOwner.current
-    DisposableEffect(lifecycleOwner) {
+    DisposableEffect(lifecycleOwner, sharedPrefs, soundSynth) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) {
                 hideUnknownDevices = sharedPrefs.getBoolean("hide_unknown", false)
@@ -148,7 +150,7 @@ fun HomeScreen(
 
     var showUpdateDialog by rememberSaveable { mutableStateOf(false) }
 
-    LaunchedEffect(Unit) {
+    LaunchedEffect(sharedPrefs) {
         val currentVersionCode = dev.arnv.bluke.BuildConfig.VERSION_CODE
         val savedVersionCode = sharedPrefs.getInt("last_run_version_code", 0)
         

@@ -143,7 +143,7 @@ fun GamepadView(
 
     var isEditMode by rememberSaveable { mutableStateOf(false) }
 
-    var isVibrationEnabled by remember {
+    var isVibrationEnabled by remember(sharedPrefs) {
         mutableStateOf(sharedPrefs.getBoolean("gamepad_vibration_enabled", true))
     }
 
@@ -649,8 +649,8 @@ fun GamepadView(
                         ) {
                             GamepadAnalogStick(
                                 label = "L",
-                                isClicked = (buttonMask and (1 shl 10)) != 0,
-                                isHeld = (buttonMask and (1 shl 10)) != 0,
+                                isClicked = { (buttonMask and (1 shl 10)) != 0 },
+                                isHeld = { (buttonMask and (1 shl 10)) != 0 },
                                 onMove = { x, y -> leftStickX = x; leftStickY = y; transmitGamepadState(false) },
                                 onStickClick = { scope.launch { pressButton(10); delay(100L.milliseconds); releaseButton(10) } },
                                 onToggleHold = { hold -> if (hold) pressButton(10) else releaseButton(10) }
@@ -838,8 +838,8 @@ fun GamepadView(
                         ) {
                             GamepadAnalogStick(
                                 label = "R",
-                                isClicked = (buttonMask and (1 shl 11)) != 0,
-                                isHeld = (buttonMask and (1 shl 11)) != 0,
+                                isClicked = { (buttonMask and (1 shl 11)) != 0 },
+                                isHeld = { (buttonMask and (1 shl 11)) != 0 },
                                 onMove = { x, y -> rightStickX = x; rightStickY = y; transmitGamepadState(false) },
                                 onStickClick = { scope.launch { pressButton(11); delay(100L.milliseconds); releaseButton(11) } },
                                 onToggleHold = { hold -> if (hold) pressButton(11) else releaseButton(11) }
@@ -886,8 +886,8 @@ fun GamepadView(
                         ) {
                             GamepadAnalogStick(
                                 label = "L",
-                                isClicked = (buttonMask and (1 shl 10)) != 0,
-                                isHeld = (buttonMask and (1 shl 10)) != 0,
+                                isClicked = { (buttonMask and (1 shl 10)) != 0 },
+                                isHeld = { (buttonMask and (1 shl 10)) != 0 },
                                 onMove = { x, y -> leftStickX = x; leftStickY = y; transmitGamepadState(false) },
                                 onStickClick = { scope.launch { pressButton(10); delay(100L.milliseconds); releaseButton(10) } },
                                 onToggleHold = { hold -> if (hold) pressButton(10) else releaseButton(10) }
@@ -1056,8 +1056,8 @@ fun GamepadView(
                         ) {
                             GamepadAnalogStick(
                                 label = "R",
-                                isClicked = (buttonMask and (1 shl 11)) != 0,
-                                isHeld = (buttonMask and (1 shl 11)) != 0,
+                                isClicked = { (buttonMask and (1 shl 11)) != 0 },
+                                isHeld = { (buttonMask and (1 shl 11)) != 0 },
                                 onMove = { x, y -> rightStickX = x; rightStickY = y; transmitGamepadState(false) },
                                 onStickClick = { scope.launch { pressButton(11); delay(100L.milliseconds); releaseButton(11) } },
                                 onToggleHold = { hold -> if (hold) pressButton(11) else releaseButton(11) }
@@ -1073,26 +1073,32 @@ fun GamepadView(
 
 // ── Sub-Components ──
 
+@Composable
 fun Modifier.gamepadButtonTouch(
     onPress: () -> Unit,
     onRelease: () -> Unit,
     onPressedStateChange: (Boolean) -> Unit
-): Modifier = this.pointerInput(Unit) {
-    awaitEachGesture {
-        val down = awaitFirstDown(requireUnconsumed = false)
-        val targetPointerId = down.id
-        onPressedStateChange(true)
-        onPress()
-        down.consume()
-        while (true) {
-            val event = awaitPointerEvent()
-            val change = event.changes.firstOrNull { it.id == targetPointerId } ?: break
-            if (!change.pressed) {
-                onPressedStateChange(false)
-                onRelease()
-                break
+): Modifier {
+    val currentOnPress by rememberUpdatedState(onPress)
+    val currentOnRelease by rememberUpdatedState(onRelease)
+    val currentOnPressedStateChange by rememberUpdatedState(onPressedStateChange)
+    return this.pointerInput(Unit) {
+        awaitEachGesture {
+            val down = awaitFirstDown(requireUnconsumed = false)
+            val targetPointerId = down.id
+            currentOnPressedStateChange(true)
+            currentOnPress()
+            down.consume()
+            while (true) {
+                val event = awaitPointerEvent()
+                val change = event.changes.firstOrNull { it.id == targetPointerId } ?: break
+                if (!change.pressed) {
+                    currentOnPressedStateChange(false)
+                    currentOnRelease()
+                    break
+                }
+                change.consume()
             }
-            change.consume()
         }
     }
 }
@@ -2131,23 +2137,24 @@ private fun GamepadStickHoldButton(
 @Composable
 private fun GamepadAnalogStick(
     label: String,
-    isClicked: Boolean,
+    isClicked: () -> Boolean,
     modifier: Modifier = Modifier,
-    isHeld: Boolean = false,
+    isHeld: () -> Boolean = { false },
     onMove: (Float, Float) -> Unit,
     onStickClick: () -> Unit,
     onToggleHold: ((Boolean) -> Unit)? = null
 ) {
+    val clicked = isClicked()
+    val held = isHeld()
     var stickOffsetX by remember { mutableFloatStateOf(0f) }
     var stickOffsetY by remember { mutableFloatStateOf(0f) }
-    var isTouchActive by remember { mutableStateOf(false) }
 
-    val currentIsHeld by rememberUpdatedState(isHeld)
+    val currentIsHeld by rememberUpdatedState(held)
     val currentOnStickClick by rememberUpdatedState(onStickClick)
     val currentOnMove by rememberUpdatedState(onMove)
 
     val stickScale by animateFloatAsState(
-        targetValue = if (isClicked || isHeld) 0.90f else 1.0f,
+        targetValue = if (clicked || held) 0.90f else 1.0f,
         animationSpec = spring(stiffness = Spring.StiffnessMedium),
         label = "stickScale"
     )
@@ -2167,7 +2174,6 @@ private fun GamepadAnalogStick(
 
                     awaitEachGesture {
                         val down = awaitFirstDown(requireUnconsumed = false)
-                        isTouchActive = true
                         val pointerId = down.id
                         val downTime = System.currentTimeMillis()
 
@@ -2200,7 +2206,6 @@ private fun GamepadAnalogStick(
                             val change = event.changes.firstOrNull { it.id == pointerId } ?: break
 
                             if (!change.pressed) {
-                                isTouchActive = false
                                 val dragDistance = sqrt((change.position.x - down.position.x) * (change.position.x - down.position.x) + 
                                                         (change.position.y - down.position.y) * (change.position.y - down.position.y))
 
@@ -2305,7 +2310,7 @@ private fun GamepadAnalogStick(
                 )
                 
                 // Shifting central elements for 3D parallax deflection and press look
-                val pressShift = if (isClicked) 1.2.dp.toPx() else 0f
+                val pressShift = if (clicked) 1.2.dp.toPx() else 0f
                 val cupCx = cx + stickOffsetX * 0.12f
                 val cupCy = cy + stickOffsetY * 0.12f + pressShift
                 
@@ -2366,7 +2371,7 @@ private fun GamepadAnalogStick(
         if (onToggleHold != null) {
             GamepadStickHoldButton(
                 label = if (label == "L") "L3" else "R3",
-                isHeld = isHeld,
+                isHeld = held,
                 onToggle = onToggleHold,
                 modifier = Modifier
                     .align(Alignment.TopStart)
@@ -2383,6 +2388,7 @@ private fun GamepadDpad(
     modifier: Modifier = Modifier
 ) {
     var activeDirection by remember { mutableIntStateOf(0) }
+    val currentOnDpadChange by rememberUpdatedState(onDpadChange)
     
     // Physical tilt based on pressed direction (pure pivot rotation)
     var targetRotX = 0f
@@ -2410,14 +2416,14 @@ private fun GamepadDpad(
                         size.height.toFloat(),
                     )
                     activeDirection = currentBit
-                    onDpadChange(currentBit)
+                    currentOnDpadChange(currentBit)
 
                     while (true) {
                         val event = awaitPointerEvent()
                         val change = event.changes.firstOrNull { it.id == targetPointerId } ?: break
                         if (!change.pressed) {
                             activeDirection = 0
-                            onDpadChange(0)
+                            currentOnDpadChange(0)
                             break
                         }
                         change.consume()
@@ -2430,7 +2436,7 @@ private fun GamepadDpad(
                         if (newBit != currentBit) {
                             currentBit = newBit
                             activeDirection = currentBit
-                            onDpadChange(currentBit)
+                            currentOnDpadChange(currentBit)
                         }
                     }
                 }
