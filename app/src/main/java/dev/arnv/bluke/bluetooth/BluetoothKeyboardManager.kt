@@ -28,10 +28,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlinx.coroutines.flow.MutableSharedFlow
-import kotlinx.coroutines.flow.collectLatest
-import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.flow.last
 import kotlinx.coroutines.channels.BufferOverflow
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -389,15 +386,12 @@ class BluetoothKeyboardManager(private val context: Context) {
     )
 
     private val connectSequence = AtomicLong()
-    private val pendingConnectRequest = MutableStateFlow<ConnectRequest?>(null)
+    private val connectRequestProcessor = LatestRequestProcessor(managerScope, ::connectWhenReady)
     @Volatile
     private var lastRegistrationFailure: HidFailure? = null
     private var audioProfilesDisconnectedForSession = false
 
     init {
-        managerScope.launch {
-            pendingConnectRequest.filterNotNull().collectLatest(::connectWhenReady)
-        }
         try {
             checkBluetoothCapabilities()
             registerBondReceiver()
@@ -588,12 +582,12 @@ class BluetoothKeyboardManager(private val context: Context) {
         } else {
             "Connecting to '$dName'..."
         }
-        pendingConnectRequest.value = ConnectRequest(
+        connectRequestProcessor.submit(ConnectRequest(
             sequence = connectSequence.incrementAndGet(),
             device = device,
             skipDisconnect = skipDisconnect,
             delayMillis = delayMs,
-        )
+        ))
     }
 
     @SuppressLint("MissingPermission")
@@ -820,7 +814,7 @@ class BluetoothKeyboardManager(private val context: Context) {
                     // Explicit requests are drained by the latest-wins StateFlow collector once
                     // registrationState becomes true. Only synthesize an automatic request when
                     // the user has not selected a target in this process.
-                    if (pendingConnectRequest.value == null) {
+                    if (connectRequestProcessor.pending.value == null) {
                         // Otherwise, check preference before auto-reconnecting to the last known device
                         val prefs = context.getSharedPreferences("app_prefs", Context.MODE_PRIVATE)
                         val isAutoConnectEnabled = prefs.getBoolean("auto_connect", true)
@@ -945,60 +939,55 @@ class BluetoothKeyboardManager(private val context: Context) {
             }
 
             appRegistrationState.value = false
-            try {
-                hid.unregisterApp()
-            } catch (e: Exception) {
-                Log.w("BluetoothKeyboard", "Stale HID registration cleanup failed", e)
-            }
-            delay(STALE_REGISTRATION_SETTLE_MILLIS)
+            val facade = object : BluetoothRegistrationFacade {
+                override val registrationState: StateFlow<Boolean> = appRegistrationState
 
-            var lastFailure = HidFailure.REGISTRATION_REJECTED
-            for (attempt in 1..retryPolicy.maxAttempts) {
-                _lifecycleState.value = HidLifecycleState.Registering(attempt)
-                _statusMessage.value = "Registering Bluetooth HID application profile (attempt $attempt)..."
-                val capability = BluetoothCapabilityRepository(
-                    registrationState = appRegistrationState,
-                    requestRegistration = {
-                        try {
-                            hid.registerApp(settings, null, null, executor, hidCallback)
-                        } catch (e: Exception) {
-                            Log.w("BluetoothKeyboard", "registerApp attempt $attempt failed", e)
-                            false
-                        }
-                    },
-                ).capability().last()
-
-                when (capability) {
-                    BluetoothCapability.Available -> {
-                        lastRegistrationFailure = null
-                        _lifecycleState.value = HidLifecycleState.Registered
-                        return@withLock true
-                    }
-                    is BluetoothCapability.Inconclusive -> {
-                        lastFailure = HidFailure.REGISTRATION_TIMEOUT
-                        Log.w(
-                            "BluetoothKeyboard",
-                            "No onAppStatusChanged(true) within ${capability.timeoutMillis}ms; capability remains inconclusive",
-                        )
-                    }
-                    BluetoothCapability.RegistrationRejected -> {
-                        lastFailure = HidFailure.REGISTRATION_REJECTED
-                    }
-                    BluetoothCapability.Checking -> Unit
-                }
-
-                if (attempt < retryPolicy.maxAttempts) {
+                override fun unregisterApp() {
                     try {
                         hid.unregisterApp()
                     } catch (e: Exception) {
-                        Log.w("BluetoothKeyboard", "Registration retry cleanup failed", e)
+                        Log.w("BluetoothKeyboard", "HID registration cleanup failed", e)
                     }
-                    delay(retryPolicy.delayMillis(attempt, Random.nextDouble(-1.0, 1.0)))
+                }
+
+                override fun registerApp(): Boolean =
+                    try {
+                        hid.registerApp(settings, null, null, executor, hidCallback)
+                    } catch (e: Exception) {
+                        Log.w("BluetoothKeyboard", "registerApp failed", e)
+                        false
+                    }
+            }
+            val result = HidRegistrationCoordinator(
+                facade = facade,
+                retryPolicy = retryPolicy,
+                initialCleanupDelayMillis = STALE_REGISTRATION_SETTLE_MILLIS,
+            ).register(forceReset = forceReset) { attempt ->
+                _lifecycleState.value = HidLifecycleState.Registering(attempt)
+                _statusMessage.value =
+                    "Registering Bluetooth HID application profile (attempt $attempt)..."
+            }
+
+            when (result) {
+                is RegistrationResult.Registered -> {
+                    lastRegistrationFailure = null
+                    _lifecycleState.value = HidLifecycleState.Registered
+                    return@withLock true
+                }
+                is RegistrationResult.TimedOut -> {
+                    lastRegistrationFailure = HidFailure.REGISTRATION_TIMEOUT
+                    Log.w(
+                        "BluetoothKeyboard",
+                        "No onAppStatusChanged(true) within ${result.timeoutMillis}ms; capability remains inconclusive",
+                    )
+                }
+                is RegistrationResult.Rejected -> {
+                    lastRegistrationFailure = HidFailure.REGISTRATION_REJECTED
                 }
             }
 
+            val lastFailure = lastRegistrationFailure ?: HidFailure.REGISTRATION_REJECTED
             _lifecycleState.value = HidLifecycleState.Error(lastFailure)
-            lastRegistrationFailure = lastFailure
             _serviceState.value = BluetoothState.ReadyDisconnected
             _statusMessage.value = if (lastFailure == HidFailure.REGISTRATION_TIMEOUT) {
                 "HID registration callback timed out; support is inconclusive. Try toggling Bluetooth."
