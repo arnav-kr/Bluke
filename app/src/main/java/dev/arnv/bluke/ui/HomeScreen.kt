@@ -877,76 +877,13 @@ fun HomeScreen(
                         .background(MaterialTheme.colorScheme.background)
                 ) {
                     if (btState is BluetoothState.BluetoothOff || btState is BluetoothState.Unsupported || btState is BluetoothState.ProfileNotSupported) {
-                        Column(
-                            modifier = Modifier.fillMaxSize().padding(32.dp),
-                            verticalArrangement = Arrangement.Center,
-                            horizontalAlignment = Alignment.CenterHorizontally
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.BluetoothDisabled,
-                                contentDescription = null,
-                                modifier = Modifier.size(80.dp),
-                                tint = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                            Spacer(Modifier.height(24.dp))
-                            Text(
-                                text = when (btState) {
-                                    is BluetoothState.Unsupported -> "Bluetooth Not Supported"
-                                    is BluetoothState.ProfileNotSupported -> "HID Profile Not Supported"
-                                    else -> "Bluetooth is Off"
-                                },
-                                style = MaterialTheme.typography.headlineSmall,
-                                fontWeight = FontWeight.Bold,
-                                color = MaterialTheme.colorScheme.onSurface,
-                                textAlign = androidx.compose.ui.text.style.TextAlign.Center
-                            )
-                            Spacer(Modifier.height(12.dp))
-                            if (btState is BluetoothState.ProfileNotSupported) {
-                                Text(
-                                    text = "Your device's Bluetooth firmware does not support HID Device mode, which Bluke requires to act as a keyboard, mouse, or gamepad.",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
-                                )
-                                Spacer(Modifier.height(8.dp))
-                                Text(
-                                    text = "This is a manufacturer limitation and cannot be fixed by the app.",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.error,
-                                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
-                                )
-                            } else {
-                                Text(
-                                    text = when (btState) {
-                                        is BluetoothState.Unsupported -> "This device does not have Bluetooth hardware."
-                                        else -> "Please enable Bluetooth to connect devices."
-                                    },
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
-                                )
-                            }
-                            Spacer(Modifier.height(32.dp))
-                            if (btState is BluetoothState.BluetoothOff) {
-                                Button(
-                                    onClick = {
-                                        val enableBtIntent = Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE)
-                                        btLauncher.launch(enableBtIntent)
-                                    },
-                                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
-                                ) {
-                                    Text("Turn On Bluetooth")
-                                }
-                            } else if (btState is BluetoothState.ProfileNotSupported) {
-                                OutlinedButton(
-                                    onClick = { btManager.checkBluetoothCapabilities() }
-                                ) {
-                                    Icon(Icons.Default.Refresh, contentDescription = null, modifier = Modifier.size(18.dp))
-                                    Spacer(Modifier.width(8.dp))
-                                    Text("Retry")
-                                }
-                            }
-                        }
+                        ProfileNotSupportedScreen(
+                            bluetoothState = btState,
+                            onEnableBluetooth = {
+                                btLauncher.launch(Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE))
+                            },
+                            onRetry = btManager::checkBluetoothCapabilities
+                        )
                     } else {
                         var isPairedExpanded by rememberSaveable { mutableStateOf(true) }
                         var isDiscoveredExpanded by rememberSaveable { mutableStateOf(true) }
@@ -961,337 +898,34 @@ fun HomeScreen(
                         ) {
                             // Unified Top Scan & Status Card
                             item {
-                                Card(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    shape = RoundedCornerShape(24.dp),
-                                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f))
-                                ) {
-                                    Column(
-                                        modifier = Modifier
-                                            .fillMaxWidth()
-                                            .padding(16.dp)
-                                    ) {
-                                        Row(
-                                            modifier = Modifier.fillMaxWidth(),
-                                            verticalAlignment = Alignment.CenterVertically,
-                                            horizontalArrangement = Arrangement.SpaceBetween
-                                        ) {
-                                            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
-                                                Box(
-                                                    modifier = Modifier
-                                                        .size(48.dp)
-                                                        .clip(CircleShape)
-                                                        .background(MaterialTheme.colorScheme.surface),
-                                                    contentAlignment = Alignment.Center
-                                                ) {
-                                                    Icon(
-                                                        imageVector = Icons.Default.Bluetooth,
-                                                        contentDescription = "Bluetooth",
-                                                        tint = MaterialTheme.colorScheme.onSurfaceVariant
-                                                    )
-                                                }
-                                                Spacer(modifier = Modifier.width(16.dp))
-                                                Column(modifier = Modifier.weight(1f)) {
-                                                    Text(
-                                                        text = if (isScanning) "Scanning..." else "Ready to Scan",
-                                                        style = MaterialTheme.typography.titleMedium,
-                                                        fontWeight = FontWeight.Bold,
-                                                        color = MaterialTheme.colorScheme.onSurface
-                                                    )
-                                                    Text(
-                                                        text = "Scan nearby devices",
-                                                        style = MaterialTheme.typography.bodySmall,
-                                                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                                                    )
-                                                }
-                                            }
-                                        }
-                                        Spacer(modifier = Modifier.height(16.dp))
-                                        
-                                        // Row for Pill status + Pill scan button
-                                        Row(
-                                            modifier = Modifier.fillMaxWidth(),
-                                            horizontalArrangement = Arrangement.SpaceBetween,
-                                            verticalAlignment = Alignment.CenterVertically
-                                        ) {
-                                            Card(
-                                                shape = RoundedCornerShape(12.dp),
-                                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.5f))
-                                            ) {
-                                                Row(modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                                                    val statusColor = if (btState is BluetoothState.Connected) Color(0xFF4CAF50) else MaterialTheme.colorScheme.primary
-                                                    Box(modifier = Modifier.size(8.dp).clip(CircleShape).background(statusColor))
-                                                    Spacer(modifier = Modifier.width(8.dp))
-                                                    Text(
-                                                        text = when (btState) {
-                                                            is BluetoothState.Connected -> "Connected"
-                                                            is BluetoothState.PairingMode -> "Ready"
-                                                            is BluetoothState.PermissionRequired -> "Permission Denied"
-                                                            else -> "Offline"
-                                                        },
-                                                        style = MaterialTheme.typography.labelMedium,
-                                                        fontWeight = FontWeight.Bold,
-                                                        color = MaterialTheme.colorScheme.onSurface
-                                                    )
-                                                }
-                                            }
-                                            
-                                            Button(
-                                                onClick = {
-                                                    if (isScanning) {
-                                                        btManager.stopScanning()
-                                                    } else {
-                                                        btManager.startScanning()
-                                                    }
-                                                },
-                                                shape = RoundedCornerShape(20.dp),
-                                                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
-                                                colors = ButtonDefaults.buttonColors(
-                                                    containerColor = if (isScanning) MaterialTheme.colorScheme.errorContainer else MaterialTheme.colorScheme.primaryContainer,
-                                                    contentColor = if (isScanning) MaterialTheme.colorScheme.onErrorContainer else MaterialTheme.colorScheme.onPrimaryContainer
-                                                )
-                                            ) {
-                                                Icon(
-                                                    imageVector = if (isScanning) Icons.Default.Close else Icons.Default.PlayArrow,
-                                                    contentDescription = if (isScanning) "Stop" else "Scan",
-                                                    modifier = Modifier.size(16.dp)
-                                                )
-                                                Spacer(modifier = Modifier.width(6.dp))
-                                                Text(
-                                                    text = if (isScanning) "Stop" else "Scan", 
-                                                    fontWeight = FontWeight.Bold,
-                                                    style = MaterialTheme.typography.labelLarge
-                                                )
-                                            }
-                                        }
-                                        
-                                        if (btState is BluetoothState.ReadyDisconnected || btMessage.lowercase().contains("failed") || btMessage.lowercase().contains("error")) {
-                                            Spacer(modifier = Modifier.height(12.dp))
-                                            Button(
-                                                onClick = { btManager.restartHidService() },
-                                                modifier = Modifier.fillMaxWidth(),
-                                                shape = CircleShape,
-                                                colors = ButtonDefaults.buttonColors(
-                                                    containerColor = MaterialTheme.colorScheme.errorContainer,
-                                                    contentColor = MaterialTheme.colorScheme.onErrorContainer
-                                                ),
-                                                contentPadding = PaddingValues(vertical = 12.dp, horizontal = 20.dp)
-                                            ) {
-                                                Icon(
-                                                    imageVector = Icons.Default.Refresh,
-                                                    contentDescription = "Restart HID",
-                                                    modifier = Modifier.size(18.dp)
-                                                )
-                                                Spacer(modifier = Modifier.width(8.dp))
-                                                Text("Restart HID Service", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelLarge)
-                                            }
-                                        }
-                                    }
-                                }
+                                StatusHeaderCard(
+                                    bluetoothState = btState,
+                                    statusMessage = btMessage,
+                                    isScanning = isScanning,
+                                    onToggleScan = {
+                                        if (isScanning) btManager.stopScanning() else btManager.startScanning()
+                                    },
+                                    onRestartHid = btManager::restartHidService
+                                )
                             }
 
-                            // Connected Device Card (Top Priority)
-                            val currentlyConnectedState = connectedDeviceState
-                            if (currentlyConnectedState != null) {
-                                item {
-                                    Column(modifier = Modifier.fillMaxWidth()) {
-                                        Text(
-                                            text = "ACTIVE CONNECTION",
-                                            style = MaterialTheme.typography.bodyMedium,
-                                            fontWeight = FontWeight.Bold,
-                                            color = MaterialTheme.colorScheme.primary,
-                                            modifier = Modifier.padding(start = 12.dp, bottom = 8.dp)
-                                        )
-                                        val deviceMessage = if ((currentlyConnectedState.name != null && btMessage.contains(currentlyConnectedState.name)) || btState is BluetoothState.Connected) btMessage else null
-                                        DeviceRow(
-                                            name = currentlyConnectedState.name ?: "Unknown Host",
-                                            address = currentlyConnectedState.address,
-                                            showAddress = showMacAddress,
-                                            isConnected = true,
-                                            bondState = currentlyConnectedState.bondState,
-                                            statusText = deviceMessage,
-                                            shape = RoundedCornerShape(28.dp),
-                                            device = currentlyConnectedState,
-                                            onActionClick = { btManager.disconnectDevice() }
-                                        )
-                                    }
-                                }
-                            } else {
-                                // If not connected, check if there's an ongoing pairing/connection attempt and show it first
-                                val activeDeviceAttempt = bondedDevices.firstOrNull { 
-                                    (it.name != null && btMessage.contains(it.name)) || btMessage.contains(it.address) 
-                                }
-                                if (activeDeviceAttempt != null && btMessage.isNotEmpty() && btMessage != "Disconnected") {
-                                      item {
-                                          Column(modifier = Modifier.fillMaxWidth()) {
-                                              Text(
-                                                  text = "ACTIVE CONNECTION",
-                                                  style = MaterialTheme.typography.bodyMedium,
-                                                  fontWeight = FontWeight.Bold,
-                                                  color = MaterialTheme.colorScheme.primary,
-                                                  modifier = Modifier.padding(start = 12.dp, bottom = 8.dp)
-                                              )
-                                              DeviceRow(
-                                                  name = activeDeviceAttempt.name ?: "Unknown Host",
-                                                  address = activeDeviceAttempt.address,
-                                                  showAddress = showMacAddress,
-                                                  isConnected = false,
-                                                  bondState = activeDeviceAttempt.bondState,
-                                                  statusText = btMessage,
-                                                  shape = RoundedCornerShape(28.dp),
-                                                  device = activeDeviceAttempt,
-                                                  onActionClick = { btManager.connectDevice(activeDeviceAttempt) }
-                                              )
-                                          }
-                                      }
-                                }
-                            }
-
-                            // Paired Devices
-                            val activeDeviceMac = if (currentlyConnectedState != null) currentlyConnectedState.address else bondedDevices.firstOrNull { btMessage.contains(it.name ?: "------") }?.address
-                            val idleBonded = bondedDevices.filter { device -> device.address != activeDeviceMac && (!hideUnknownDevices || !device.name.isNullOrBlank()) && (!hideUnsupportedDevices || classifyDevice(device.name, device).isSupported) }
-
-                            if (idleBonded.isNotEmpty()) {
-                                item {
-                                    Column(modifier = Modifier.fillMaxWidth()) {
-                                        Row(
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .clickable { isPairedExpanded = !isPairedExpanded }
-                                                .padding(start = 12.dp, end = 12.dp, bottom = 8.dp, top = 8.dp),
-                                            horizontalArrangement = Arrangement.SpaceBetween,
-                                            verticalAlignment = Alignment.CenterVertically
-                                        ) {
-                                            Text(
-                                                text = "PAIRED DEVICES",
-                                                style = MaterialTheme.typography.bodyMedium,
-                                                fontWeight = FontWeight.Bold,
-                                                color = MaterialTheme.colorScheme.primary
-                                            )
-                                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                                Text(
-                                                    text = "${idleBonded.size} devices",
-                                                    style = MaterialTheme.typography.labelSmall,
-                                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                                )
-                                                Icon(
-                                                    imageVector = if (isPairedExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
-                                                    contentDescription = "Expand",
-                                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                                    modifier = Modifier.padding(start=4.dp).size(18.dp)
-                                                )
-                                            }
-                                        }
-
-                                        if (isPairedExpanded) {
-                                            Column(verticalArrangement = Arrangement.spacedBy(2.dp), modifier = Modifier.fillMaxWidth()) {
-                                                idleBonded.forEachIndexed { index, device ->
-                                                    val deviceMsg = if ((device.name != null && btMessage.contains(device.name)) || btMessage.contains(device.address)) btMessage else null
-                                                    val topRadius = if (index == 0) 28.dp else 4.dp
-                                                    val bottomRadius = if (index == idleBonded.size - 1) 28.dp else 4.dp
-                                                    DeviceRow(
-                                                        name = device.name ?: "Unknown Host",
-                                                        address = device.address,
-                                                        showAddress = showMacAddress,
-                                                        isConnected = false,
-                                                        bondState = device.bondState,
-                                                        statusText = deviceMsg,
-                                                        shape = RoundedCornerShape(
-                                                            topStart = topRadius,
-                                                            topEnd = topRadius,
-                                                            bottomStart = bottomRadius,
-                                                            bottomEnd = bottomRadius
-                                                        ),
-                                                        device = device,
-                                                        onActionClick = { btManager.connectDevice(device) }
-                                                    )
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            } else if (bondedDevices.isEmpty()) {
-                                item {
-                                    Column(modifier = Modifier.fillMaxWidth()) {
-                                        Text(
-                                            text = "PAIRED DEVICES",
-                                            style = MaterialTheme.typography.bodyMedium,
-                                            fontWeight = FontWeight.Bold,
-                                            color = MaterialTheme.colorScheme.primary,
-                                            modifier = Modifier.padding(start = 12.dp, bottom = 8.dp)
-                                        )
-                                        Text(
-                                            text = "No paired devices yet.",
-                                            style = MaterialTheme.typography.bodyMedium,
-                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                            modifier = Modifier.padding(start = 12.dp, top = 4.dp)
-                                        )
-                                    }
-                                }
-                            }
-
-                            // Discovered devices (Collapsible)
-                            val nonBondedDevices = scannedDevices.filter { device -> device.bondState != BluetoothDevice.BOND_BONDED && device.address != activeDeviceMac && (!hideUnknownDevices || !device.name.isNullOrBlank()) && (!hideUnsupportedDevices || classifyDevice(device.name, device).isSupported) }
-                            if (nonBondedDevices.isNotEmpty() || isScanning) {
-                                item {
-                                    Column(modifier = Modifier.fillMaxWidth()) {
-                                        Row(
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .clickable { isDiscoveredExpanded = !isDiscoveredExpanded }
-                                                .padding(start = 12.dp, end = 12.dp, bottom = 8.dp, top = 8.dp),
-                                            horizontalArrangement = Arrangement.SpaceBetween,
-                                            verticalAlignment = Alignment.CenterVertically
-                                        ) {
-                                            Text(
-                                                text = "DISCOVERED DEVICES",
-                                                style = MaterialTheme.typography.bodyMedium,
-                                                fontWeight = FontWeight.Bold,
-                                                color = MaterialTheme.colorScheme.primary
-                                            )
-                                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                                Text(
-                                                    text = "${nonBondedDevices.size} found",
-                                                    style = MaterialTheme.typography.labelSmall,
-                                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                                )
-                                                Icon(
-                                                    imageVector = if (isDiscoveredExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
-                                                    contentDescription = "Expand",
-                                                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                                                    modifier = Modifier.padding(start=4.dp).size(18.dp)
-                                                )
-                                            }
-                                        }
-
-                                        if (isDiscoveredExpanded) {
-                                            Column(verticalArrangement = Arrangement.spacedBy(2.dp), modifier = Modifier.fillMaxWidth()) {
-                                                nonBondedDevices.forEachIndexed { index, device ->
-                                                    val deviceMsg = if ((device.name != null && btMessage.contains(device.name)) || btMessage.contains(device.address)) btMessage else null
-                                                    val topRadius = if (index == 0) 28.dp else 4.dp
-                                                    val bottomRadius = if (index == nonBondedDevices.size - 1) 28.dp else 4.dp
-                                                    DeviceRow(
-                                                        name = device.name ?: "Unnamed Device",
-                                                        address = device.address,
-                                                        showAddress = showMacAddress,
-                                                        isConnected = false,
-                                                        bondState = device.bondState,
-                                                        statusText = deviceMsg,
-                                                        shape = RoundedCornerShape(
-                                                            topStart = topRadius,
-                                                            topEnd = topRadius,
-                                                            bottomStart = bottomRadius,
-                                                            bottomEnd = bottomRadius
-                                                        ),
-                                                        device = device,
-                                                        onActionClick = { btManager.connectDevice(device) }
-                                                    )
-                                                }
-                                            }
-                                        }
-                                    }
-                                }
-                            }
+                            DeviceListSection(
+                                bluetoothState = btState,
+                                statusMessage = btMessage,
+                                connectedDevice = connectedDeviceState,
+                                bondedDevices = bondedDevices,
+                                scannedDevices = scannedDevices,
+                                isScanning = isScanning,
+                                showMacAddress = showMacAddress,
+                                hideUnknownDevices = hideUnknownDevices,
+                                hideUnsupportedDevices = hideUnsupportedDevices,
+                                isPairedExpanded = isPairedExpanded,
+                                isDiscoveredExpanded = isDiscoveredExpanded,
+                                onPairedExpandedChange = { isPairedExpanded = it },
+                                onDiscoveredExpandedChange = { isDiscoveredExpanded = it },
+                                onConnect = btManager::connectDevice,
+                                onDisconnect = btManager::disconnectDevice
+                            )
                         }
                     }
 
@@ -1390,4 +1024,3 @@ fun HomeScreen(
 }
 
 }
-
