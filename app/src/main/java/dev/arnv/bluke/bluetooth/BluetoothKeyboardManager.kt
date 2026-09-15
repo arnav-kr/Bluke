@@ -321,15 +321,26 @@ class BluetoothKeyboardManager(private val context: Context) {
         0x85.toByte(), 0x03.toByte(),         //   REPORT_ID (3)
         0x05.toByte(), 0x09.toByte(),         //   USAGE_PAGE (Button)
         0x19.toByte(), 0x01.toByte(),         //     USAGE_MINIMUM (Button 1)
-        0x29.toByte(), 0x12.toByte(),         //     USAGE_MAXIMUM (Button 18)
+        0x29.toByte(), 0x10.toByte(),         //     USAGE_MAXIMUM (Button 16)
         0x15.toByte(), 0x00.toByte(),         //     LOGICAL_MINIMUM (0)
         0x25.toByte(), 0x01.toByte(),         //     LOGICAL_MAXIMUM (1)
         0x75.toByte(), 0x01.toByte(),         //     REPORT_SIZE (1)
-        0x95.toByte(), 0x12.toByte(),         //     REPORT_COUNT (18)
-        0x81.toByte(), 0x02.toByte(),         //     INPUT (Data,Var,Abs) - 18 Buttons
-        0x75.toByte(), 0x01.toByte(),         //     REPORT_SIZE (1)
-        0x95.toByte(), 0x06.toByte(),         //     REPORT_COUNT (6)
-        0x81.toByte(), 0x03.toByte(),         //     INPUT (Cnst,Var,Abs) - padding to 3 bytes
+        0x95.toByte(), 0x10.toByte(),         //     REPORT_COUNT (16)
+        0x81.toByte(), 0x02.toByte(),         //     INPUT (Data,Var,Abs) - 16 Buttons
+        0x05.toByte(), 0x01.toByte(),         //     USAGE_PAGE (Generic Desktop)
+        0x09.toByte(), 0x39.toByte(),         //     USAGE (Hat Switch)
+        0x15.toByte(), 0x00.toByte(),         //     LOGICAL_MINIMUM (0)
+        0x25.toByte(), 0x07.toByte(),         //     LOGICAL_MAXIMUM (7)
+        0x35.toByte(), 0x00.toByte(),         //     PHYSICAL_MINIMUM (0)
+        0x46.toByte(), 0x3b.toByte(), 0x01.toByte(), // PHYSICAL_MAXIMUM (315)
+        0x65.toByte(), 0x14.toByte(),         //     UNIT (English Rotation, degrees)
+        0x75.toByte(), 0x04.toByte(),         //     REPORT_SIZE (4)
+        0x95.toByte(), 0x01.toByte(),         //     REPORT_COUNT (1)
+        0x81.toByte(), 0x42.toByte(),         //     INPUT (Data,Var,Abs,Null)
+        0x65.toByte(), 0x00.toByte(),         //     UNIT (None)
+        0x75.toByte(), 0x04.toByte(),         //     REPORT_SIZE (4)
+        0x95.toByte(), 0x01.toByte(),         //     REPORT_COUNT (1)
+        0x81.toByte(), 0x03.toByte(),         //     INPUT (Cnst,Var,Abs) - byte padding
         0x05.toByte(), 0x01.toByte(),         //     USAGE_PAGE (Generic Desktop)
         0x09.toByte(), 0x30.toByte(),         //     USAGE (X) - Left Stick X
         0x09.toByte(), 0x31.toByte(),         //     USAGE (Y) - Left Stick Y
@@ -1092,6 +1103,7 @@ class BluetoothKeyboardManager(private val context: Context) {
     @SuppressLint("MissingPermission")
     fun sendGamepadReport(
         buttonMask: Int,
+        dpadMask: Int,
         leftXFloat: Float,
         leftYFloat: Float,
         rightXFloat: Float,
@@ -1099,27 +1111,14 @@ class BluetoothKeyboardManager(private val context: Context) {
     ) {
         val dev = _connectedDevice.value
         if (dev != null) {
-            val report = ByteArray(11)
-            report[0] = (buttonMask and 0xFF).toByte()
-            report[1] = ((buttonMask shr 8) and 0xFF).toByte()
-            report[2] = ((buttonMask shr 16) and 0xFF).toByte()
-
-            // Convert normalized -1.0f..1.0f to 16-bit unsigned 0..65535 (32768 center)
-            val lx = ((leftXFloat.coerceIn(-1f, 1f) + 1f) * 32767.5f).toInt().coerceIn(0, 65535)
-            val ly = ((leftYFloat.coerceIn(-1f, 1f) + 1f) * 32767.5f).toInt().coerceIn(0, 65535)
-            val rx = ((rightXFloat.coerceIn(-1f, 1f) + 1f) * 32767.5f).toInt().coerceIn(0, 65535)
-            val ry = ((rightYFloat.coerceIn(-1f, 1f) + 1f) * 32767.5f).toInt().coerceIn(0, 65535)
-
-            // Little-endian 16-bit packing
-            report[3] = (lx and 0xFF).toByte()
-            report[4] = ((lx shr 8) and 0xFF).toByte()
-            report[5] = (ly and 0xFF).toByte()
-            report[6] = ((ly shr 8) and 0xFF).toByte()
-            report[7] = (rx and 0xFF).toByte()
-            report[8] = ((rx shr 8) and 0xFF).toByte()
-            report[9] = (ry and 0xFF).toByte()
-            report[10] = ((ry shr 8) and 0xFF).toByte()
-
+            val report = buildGamepadReport(
+                buttonMask,
+                dpadMask,
+                leftXFloat,
+                leftYFloat,
+                rightXFloat,
+                rightYFloat,
+            )
             submitReport(dev, 3, report) // Gamepad report ID is 3
         }
     }

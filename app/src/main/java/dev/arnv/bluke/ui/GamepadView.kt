@@ -48,7 +48,6 @@ import dev.arnv.bluke.data.LayoutRepository
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-import kotlin.math.abs
 import kotlin.math.roundToInt
 import kotlin.math.sqrt
 import kotlin.time.Duration.Companion.milliseconds
@@ -75,7 +74,7 @@ private data class ConsoleConfig(
     val selectButton: ButtonDef,
     val startButton: ButtonDef,
     val guideButton: ButtonDef,
-    val shareButton: ButtonDef = ButtonDef("SHARE", 17),
+    val shareButton: ButtonDef = ButtonDef("SHARE", 13),
     val leftStickAboveDpad: Boolean = true,
     val hasTouchpad: Boolean = false,
     val touchpadMappingId: Int = -1
@@ -97,8 +96,8 @@ private val CONSOLES = listOf(
         rightTrigger = ButtonDef("RT", 7),
         selectButton = ButtonDef("VIEW", 8),
         startButton = ButtonDef("MENU", 9),
-        guideButton = ButtonDef("XBOX", 16, Color(0xFF2E7D32)),
-        shareButton = ButtonDef("SHARE", 17),
+        guideButton = ButtonDef("XBOX", 12, Color(0xFF2E7D32)),
+        shareButton = ButtonDef("SHARE", 13),
         leftStickAboveDpad = true
     ),
     ConsoleConfig(
@@ -114,11 +113,11 @@ private val CONSOLES = listOf(
         rightTrigger = ButtonDef("R2", 7),
         selectButton = ButtonDef("CREATE", 8),
         startButton = ButtonDef("OPTIONS", 9),
-        guideButton = ButtonDef("PS", 16, Color(0xFF1565C0)),
-        shareButton = ButtonDef("SHARE", 17),
+        guideButton = ButtonDef("PS", 12, Color(0xFF1565C0)),
+        shareButton = ButtonDef("SHARE", 13),
         leftStickAboveDpad = false,
         hasTouchpad = true,
-        touchpadMappingId = 18
+        touchpadMappingId = 14
     )
 )
 
@@ -395,6 +394,7 @@ fun GamepadView(
     val deviceName = connectedDevNow?.name ?: "No Host"
 
     var buttonMask by remember { mutableIntStateOf(0) }
+    var dpadMask by remember { mutableIntStateOf(0) }
     var isGamepadDirty by remember { mutableStateOf(false) }
     
     var leftStickX by remember { mutableFloatStateOf(0f) }
@@ -406,6 +406,7 @@ fun GamepadView(
         if (force) {
             btManager.sendGamepadReport(
                 buttonMask,
+                dpadMask,
                 leftStickX,
                 leftStickY,
                 rightStickX,
@@ -423,6 +424,7 @@ fun GamepadView(
             if (isGamepadDirty) {
                 btManager.sendGamepadReport(
                     buttonMask,
+                    dpadMask,
                     leftStickX,
                     leftStickY,
                     rightStickX,
@@ -430,6 +432,14 @@ fun GamepadView(
                 )
                 isGamepadDirty = false
             }
+        }
+    }
+
+    DisposableEffect(btManager) {
+        onDispose {
+            // Do not leave the host with a sampled stick/button state after this UI and its
+            // 8 ms ticker are disposed. Release reports are safety-critical and bypass sampling.
+            btManager.sendGamepadReport(0, 0, 0f, 0f, 0f, 0f)
         }
     }
 
@@ -659,8 +669,7 @@ fun GamepadView(
                             GamepadDpad(
                                 isXboxStyle = true,
                                 onDpadChange = { mask ->
-                                    val cleared = buttonMask and (0xF shl 12).inv()
-                                    buttonMask = cleared or (mask shl 12)
+                                    dpadMask = mask
                                     transmitGamepadState(true)
                                     if (mask != 0) triggerVibration(15)
                                 }
@@ -859,8 +868,7 @@ fun GamepadView(
                             GamepadDpad(
                                 isXboxStyle = false,
                                 onDpadChange = { mask ->
-                                    val cleared = buttonMask and (0xF shl 12).inv()
-                                    buttonMask = cleared or (mask shl 12)
+                                    dpadMask = mask
                                     transmitGamepadState(true)
                                     if (mask != 0) triggerVibration(15)
                                 }
@@ -2394,20 +2402,31 @@ private fun GamepadDpad(
             .pointerInput(Unit) {
                 awaitEachGesture {
                     val down = awaitFirstDown(requireUnconsumed = false)
-                    var currentBit = determineDpadBit(down.position.x, down.position.y, size.width.toFloat())
+                    val targetPointerId = down.id
+                    var currentBit = determineDpadBit(
+                        down.position.x,
+                        down.position.y,
+                        size.width.toFloat(),
+                        size.height.toFloat(),
+                    )
                     activeDirection = currentBit
                     onDpadChange(currentBit)
 
                     while (true) {
                         val event = awaitPointerEvent()
-                        val change = event.changes.firstOrNull() ?: break
+                        val change = event.changes.firstOrNull { it.id == targetPointerId } ?: break
                         if (!change.pressed) {
                             activeDirection = 0
                             onDpadChange(0)
                             break
                         }
                         change.consume()
-                        val newBit = determineDpadBit(change.position.x, change.position.y, size.width.toFloat())
+                        val newBit = determineDpadBit(
+                            change.position.x,
+                            change.position.y,
+                            size.width.toFloat(),
+                            size.height.toFloat(),
+                        )
                         if (newBit != currentBit) {
                             currentBit = newBit
                             activeDirection = currentBit
@@ -2655,32 +2674,6 @@ private fun GamepadDpad(
             }
         }
     }
-}
-
-private fun determineDpadBit(x: Float, y: Float, totalSize: Float): Int {
-    val center = totalSize / 2f
-    val dx = x - center
-    val dy = y - center
-    val distance = sqrt(dx * dx + dy * dy)
-    if (distance < totalSize * 0.08f) return 0
-
-    var mask = 0
-    // Threshold distance for diagonal combined directions
-    val sectorThreshold = distance * 0.38f
-
-    if (dy < -sectorThreshold) mask = mask or 1 // UP
-    if (dy > sectorThreshold) mask = mask or 2  // DOWN
-    if (dx < -sectorThreshold) mask = mask or 4 // LEFT
-    if (dx > sectorThreshold) mask = mask or 8  // RIGHT
-
-    if (mask == 0) {
-        mask = if (abs(dx) > abs(dy)) {
-            if (dx > 0) 8 else 4
-        } else {
-            if (dy > 0) 2 else 1
-        }
-    }
-    return mask
 }
 
 @Composable
