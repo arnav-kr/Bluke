@@ -6,19 +6,18 @@ Working branch: `refactor`
 
 ## 1. Executive summary
 
-- **P0 — HID lifecycle is not modeled as a state machine.** Registration, proxy binding, and connection are coordinated by booleans, fixed delays, and a single pending-device slot.
-- **P0 — A connect can proceed after registration wait times out.** The return from `withTimeoutOrNull(3000)` is ignored, so `hid.connect()` runs while registration is still false.
-- **P0 — dead-process SDP recovery is timing-based.** Current code unregisters, waits 300 ms, then retries registration three times at fixed 400 ms intervals; callback completion is not the retry gate.
-- **P1 — hidden Bluetooth APIs are unreliable.** A2DP/HFP `disconnect(BluetoothDevice)` is invoked reflectively, while `setBluetoothClass(Int)` does not match the platform method signature and is effectively a no-op.
-- **P1 — lifecycle cleanup is incomplete.** The HID proxy and receivers are closed on a finishing `MainActivity`, but coroutine/executor threads remain alive; `cleanup()` does not close the proxy.
-- **P1 — gamepad cadence differs from the intended 125 Hz.** The immediate gate is 8 ms but the dirty-state ticker is 10 ms, and forced button reports bypass the gate.
-- **P1 — gamepad layout gestures write SharedPreferences on every movement/scale event** and state changes recompose a very large composable tree.
-- **P1 — UI state is composable-local.** There are no ViewModels; `HomeScreen` owns persisted settings, transient UI state, lifecycle effects, and Bluetooth presentation logic.
-- **P2 — dependency alignment is mixed.** Material3 `1.4.0-alpha04` overrides the BOM and selects Compose runtime `1.8.0-alpha06` while most Compose artifacts resolve to `1.7.8`.
-- **P2 — lint found nine unused resources and four icon packaging/density findings.** These were documented, not removed, because dynamic/OEM/resource validation is still needed.
-- Baseline: `assembleDebug` passed; lint reported 2 errors and 42 warnings; 3 local tests passed and zero exercise Bluetooth/HID.
-- After low-risk changes: `assembleDebug` and `lintDebug` pass; lint reports 0 errors and 40 warnings.
-- No SDK, AGP, Kotlin, Compose BOM, signing, Fastlane, or F-Droid changes were made; no dependency was added.
+- **P0 fixed, device validation required — HID coordination:** explicit lifecycle states, single-flight binding/registration mutexes, callback-gated registration, bounded exponential backoff with jitter, and latest-request-wins connection collection are implemented.
+- **P0 fixed — timeout safety:** `hid.connect()` is no longer called after a failed registration wait; an 8-second missing callback is `Inconclusive`, not `ProfileNotSupported`.
+- **P1 fixed — process ownership:** `BlukeApplication` owns the manager for the application lifetime; teardown now closes the HID proxy/receivers and cancels executors/coroutines.
+- **P1 mitigated — hidden APIs:** the invalid `setBluetoothClass(Int)` reflection was removed. A2DP/HFP reflection remains only behind an opt-in Linux workaround that defaults off.
+- **P1 fixed — gamepad cadence:** analog state is sampled by an 8 ms (125 Hz) ticker; button/D-pad edges deliberately bypass the sampler.
+- **P1 fixed — layout persistence:** gesture changes are staged in memory and committed at gesture end through a single Preferences DataStore repository with one-time migration.
+- **P1 partially fixed — UI state:** Bluetooth, discovery, connection, lifecycle, and lock state are hoisted into immutable `HomeUiState` and a lifecycle-aware `HomeViewModel`; editor/transient presentation state remains local.
+- **P2 open — Compose alignment:** Material3 `1.4.0-alpha04` still lifts runtime to `1.8.0-alpha06`; removing the override fails compilation because `ThemeConfig.kt` uses Expressive-only APIs. A BOM/toolchain upgrade was prohibited in this pass.
+- **P2 fixed — resources:** unused resources and three malformed high-density WebPs were removed; adaptive icon background is explicitly `nodpi`.
+- Baseline: `assembleDebug` passed; lint reported 2 errors and 42 warnings; 3 tests passed and zero exercised Bluetooth/HID.
+- Final: `assembleDebug`, `lintDebug`, `lintRelease`, and 6 unit tests pass. Debug lint reports 0 errors/21 warnings; release lint reports 0 errors/20 warnings.
+- No SDK, AGP, Kotlin, Compose BOM, signing, Fastlane, or F-Droid version/config changes were made. DataStore `1.2.1` is the only new dependency.
 
 ## 2. Repository reconnaissance
 
@@ -45,6 +44,7 @@ app/src/main/
 │   └── turquoise/{press,release}/*.mp3
 ├── java/dev/arnv/bluke/
 │   ├── AboutActivity.kt
+│   ├── BlukeApplication.kt
 │   ├── BehaviorActivity.kt
 │   ├── DarkThemeActivity.kt
 │   ├── DeveloperLogsActivity.kt
@@ -56,12 +56,15 @@ app/src/main/
 │   ├── OnboardingActivity.kt
 │   ├── SettingsActivity.kt
 │   ├── bluetooth/BluetoothKeyboardManager.kt
+│   ├── bluetooth/HidLifecycle.kt
+│   ├── data/LayoutRepository.kt
 │   ├── sound/KeyboardSoundSynthesizer.kt
 │   ├── utils/DeveloperLogManager.kt
 │   └── ui/
 │       ├── DeviceRow.kt
 │       ├── GamepadView.kt
 │       ├── HomeScreen.kt
+│       ├── HomeViewModel.kt
 │       ├── KeyboardLayouts.kt
 │       ├── KeyboardView.kt
 │       ├── KeyCap.kt
@@ -84,7 +87,7 @@ gradle/libs.versions.toml
 app/build.gradle.kts
 ```
 
-The refactor adds `DeviceListSection.kt`, `StatusHeaderCard.kt`, `ProfileNotSupportedScreen.kt`, `values-v31/themes.xml`, and `values-night-v31/themes.xml`.
+The refactor adds `BlukeApplication.kt`, `HidLifecycle.kt`, `LayoutRepository.kt`, `HomeViewModel.kt`, `DeviceListSection.kt`, `StatusHeaderCard.kt`, `ProfileNotSupportedScreen.kt`, `values-v31/themes.xml`, and `values-night-v31/themes.xml`.
 
 ### 2.2 Kotlin inventory at `main` HEAD
 
@@ -119,6 +122,8 @@ The refactor adds `DeviceListSection.kt`, `StatusHeaderCard.kt`, `ProfileNotSupp
 
 After extraction, `HomeScreen.kt` is 1,026 lines; the new files are `DeviceListSection.kt` (204), `StatusHeaderCard.kt` (144), and `ProfileNotSupportedScreen.kt` (99). `HomeScreen.kt` remains critical and needs state-hoisting work.
 
+Post-refactor inventory additions/changed counts: `BlukeApplication.kt` 24 (process owner), `bluetooth/HidLifecycle.kt` 87 (state/retry/capability models), `data/LayoutRepository.kt` 65 (DataStore persistence/migration), `ui/HomeViewModel.kt` 102 (immutable Bluetooth UI state), `MainActivity.kt` 80, `BehaviorActivity.kt` 1,039, `BluetoothKeyboardManager.kt` 1,210, `GamepadView.kt` 2,800, and `HomeScreen.kt` 1,029. The original `main` inventory above remains the audit baseline.
+
 ### 2.3 Build configuration
 
 | Setting | Observed value |
@@ -137,7 +142,7 @@ After extraction, `HomeScreen.kt` is 1,026 lines; the new files are `DeviceListS
 | Build cache | `org.gradle.caching=true`; dependency/test output showed `FROM-CACHE`. |
 | Configuration cache | `org.gradle.configuration-cache=true`; dry-run succeeded and later builds reused the cache. |
 
-No version was changed during this audit.
+No existing toolchain/library version was changed during this audit; stable DataStore `1.2.1` was added for layout persistence.
 
 ### 2.4 Manifest audit
 
@@ -158,28 +163,41 @@ There are no `<uses-feature>` declarations. There are no services, foreground-se
 
 ```mermaid
 flowchart TD
-    MA[MainActivity] -->|owns static process instance| BKM[BluetoothKeyboardManager]
+    APP[BlukeApplication] -->|process-lifetime owner| BKM[BluetoothKeyboardManager]
+    MA[MainActivity] --> APP
     MA --> HS[HomeScreen]
+    HS --> HVM[HomeViewModel]
+    HVM -->|combined immutable HomeUiState| HS
+    HVM -->|collect manager StateFlows| BKM
     HS --> KB[KeyboardView]
     HS --> TP[TouchpadView]
     HS --> GP[GamepadView]
+    GP --> LR[LayoutRepository / Preferences DataStore]
     HS --> DLS[DeviceListSection]
     HS --> SHC[StatusHeaderCard]
     HS --> PNS[ProfileNotSupportedScreen]
-    HS -->|collect StateFlow| BKM
 
     BKM --> CAP[permission / adapter checks]
-    CAP --> GPP[getProfileProxy HID_DEVICE]
-    GPP --> PSC[ServiceListener.onServiceConnected]
-    PSC --> UA[unregisterApp + 300 ms]
-    UA --> RA[registerApp: max 3, fixed 400 ms]
+    CAP --> GPP[single-flight binding Mutex]
+    GPP --> GPC[getProfileProxy HID_DEVICE]
+    GPC --> PSC[ServiceListener.onServiceConnected]
+    PSC --> RM[single-flight registration Mutex]
+    RM --> UA[stale unregisterApp + 300 ms settle]
+    UA --> BCR[BluetoothCapabilityRepository cold Flow]
+    BCR --> RA[registerApp + 8 s callback window]
+    RA -->|failure| BO[exponential backoff + jitter; max 3]
+    BO --> RA
     RA --> ASC[Callback.onAppStatusChanged]
-    ASC --> CON[connectDevice / hid.connect]
+    ASC --> REG[Registered]
+    REQ[MutableStateFlow latest ConnectRequest] -->|collectLatest| REG
+    REG --> CON[hid.connect]
     CON --> CSC[Callback.onConnectionStateChanged]
     CSC --> CR[connected StateFlows]
+    CSC -->|optional preference| AUDIO[A2DP/HFP reflection workaround]
     KB --> SR[sendKey]
     TP --> MR[sendMouseReport]
-    GP --> GR[sendGamepadReport]
+    GP --> TICK[8 ms analog sampler + edge reports]
+    TICK --> GR[sendGamepadReport]
     SR --> Q[single-thread reportExecutor]
     MR --> Q
     GR --> Q
@@ -190,8 +208,8 @@ Compose/state graph:
 
 ```text
 MainActivity
-└── HomeScreen (no ViewModel)
-    ├── Bluetooth StateFlows collected directly
+└── HomeScreen
+    ├── HomeViewModel -> HomeUiState (lifecycle-aware collection)
     ├── remember/rememberSaveable UI and preference mirrors
     ├── lifecycle observer reloads SharedPreferences
     ├── config mode
@@ -201,18 +219,21 @@ MainActivity
     └── active mode
         ├── KeyboardView -> KeyCap
         ├── TouchpadView
-        └── GamepadView (also owns editor/report state)
+        └── GamepadView
+            ├── 8 ms latest analog state sampler
+            └── LayoutRepository -> Preferences DataStore
 
 SettingsActivity -> separate Activity screens (Behavior, LookAndFeel, DarkTheme,
 About, Help, Licenses, DeveloperOptions, DeveloperLogs); persistence is SharedPreferences.
 ```
 
-There are no ViewModel subclasses or `viewModel()` call sites. State lives in `BluetoothKeyboardManager` `MutableStateFlow`s, composable `remember`/`rememberSaveable` state, and multiple SharedPreferences files.
+Bluetooth/presentation state now crosses one `HomeViewModel` boundary. Transient mode/editor state still lives in composable `remember`/`rememberSaveable`; general settings remain in SharedPreferences, while gamepad geometry is migrated to DataStore.
 
 ### Threading inventory
 
 - Compose event handlers, `LaunchedEffect`, and `DisposableEffect` run on the main dispatcher unless their context is changed; no explicit `Dispatchers.Main` call exists.
-- `BluetoothKeyboardManager.managerScope = CoroutineScope(Dispatchers.IO + Job())` runs capability binding, registration, connect/disconnect waits, retries, and audio-profile sweeps. It is unscoped to Android lifecycle; `close()` does not cancel it.
+- `BluetoothKeyboardManager.managerScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)` runs capability binding, registration, connect/disconnect waits, retries, and opt-in audio-profile sweeps. `BlukeApplication` owns it for the process lifetime; `close()` cancels the job and both executors.
+- `HomeViewModel.viewModelScope` collects/composes manager flows; `collectAsStateWithLifecycle` presents `HomeUiState` only while the screen lifecycle is active.
 - `DeveloperLogManager.scope = CoroutineScope(Dispatchers.IO)` is unscoped, has no retained `Job`, and is never cancelled.
 - `reportExecutor` is a single foreground-priority thread. Every `sendReport()` call is submitted to it; no HID report is sent directly on the main thread.
 - `executor` is a single background-priority scheduled executor used for HID callbacks and connection timeout tasks.
@@ -429,6 +450,8 @@ JUnit XML records 3 tests, 0 failures, 0 errors, 0 skipped. No coverage plugin/r
 
 ## 5. Targeted issue audit
 
+The “Current implementation” and “Concrete defect” columns below describe the audited `main` revision `ec01041`; they preserve the evidence that motivated the work. The final implementation/status is recorded in Sections 1, 6, and 7.1.
+
 ### 5.1 Bluetooth lifecycle and state
 
 | Area | Current implementation | Concrete defect | Proposed design | Files touched | Risk |
@@ -492,42 +515,81 @@ No `CoroutineCreationDuringComposition`, `ProduceStateDoesNotAssignValue`, `Unre
 
 ## 6. Independently shippable refactor sequence
 
-1. Land the API-qualified splash resources/unreachable guard cleanup (done; build and lint verified).
-2. Land the pure Home visual-section extraction (done; build verified).
-3. Add pure unit-tested models: lifecycle state enum, retry/backoff calculator, capability result, connect request policy.
-4. Introduce `BluetoothCapabilityRepository` without changing UI; run old and new capability observation behind tests/logging.
-5. Replace boolean lifecycle with callback-driven reducer and generation IDs; add fake-proxy tests for stale/missing callbacks.
-6. Add single-flight binding mutex and an explicit pending-connect channel; only drain after Registered.
-7. Consolidate idempotent teardown and executor ownership; add Activity/process lifecycle tests.
-8. Isolate or remove hidden audio/Class-of-Device reflection after physical-device validation.
-9. Introduce `HomeUiState`/ViewModel and lifecycle-aware collection, preserving extracted component APIs.
-10. Add an 8 ms gamepad state sampler with fake clock/transport tests, then isolate layout/draw state.
-11. Migrate layout preferences to DataStore with one-time SharedPreferences migration and gesture-end batching.
-12. Realign Compose/Material3 and remove unused direct plugins/dependencies in a separate dependency-only change.
-13. Re-export launcher resources and remove unused resources after screenshot/install verification across densities/API 28/31/36.
+1. API-qualified splash resources/unreachable guard cleanup — complete.
+2. Pure Home visual-section extraction — complete.
+3. Process-scoped Bluetooth owner and complete teardown — complete.
+4. Lifecycle/capability models, callback-gated retry policy, single-flight binding, and latest-wins connect collection — complete; physical OEM validation remains.
+5. Invalid Class-of-Device reflection removal and opt-in audio workaround — complete; Linux validation remains.
+6. Immutable Bluetooth `HomeUiState` plus lifecycle-aware `HomeViewModel` — complete; remaining presentation/editor state can be hoisted later.
+7. 8 ms analog sampler with edge reports — complete; transport cadence needs hardware capture validation.
+8. DataStore layout repository, one-time migration, and gesture-end transaction — complete.
+9. Unused build declarations and resources — complete.
+10. Compose BOM/Material3 alignment — blocked by Expressive API source use and the no-version-bump constraint; migrate theme shapes or upgrade the complete Compose set in a dedicated change.
+11. Add fake Bluetooth facade tests and run the OEM/API device matrix before release.
 
 ## 7. Changes intentionally not made
 
-- No lifecycle state machine, retries, timeout, connect queue, capability repository, DataStore, or report scheduler change: all alter runtime behavior and require OEM/device tests.
 - No descriptor byte or SDP semantic changes: explicitly deferred to the descriptor-focused follow-up.
-- No audio-profile or Class-of-Device reflection change: removal changes observed routing/identity behavior; correction would require inaccessible privileged APIs.
+- No public-API replacement exists for third-party A2DP/HFP disconnect. The surviving reflection is disabled by default and isolated behind the optional setting.
 - No receiver flag change: `RECEIVER_EXPORTED` may be needed for Bluetooth broadcasts sent by a privileged system package.
-- No executor shutdown added: safe ownership must be decided together with the process-static manager; a partial shutdown could break Activity recreation.
-- No unused resources/icons deleted: dynamic resource access was not proven absent on packaged/device runs, and launcher WebP findings need re-export validation.
-- No `UseKtx` cleanup: low value relative to diff noise and no correctness effect.
-- No dependency/plugin/SDK version change and no new dependency.
+- No complete `HomeScreen`/`GamepadView` rewrite: remaining state extraction is higher risk and should follow UI/device tests.
+- No AGP, Kotlin, Compose BOM, SDK, target, or signing change. The only added coordinate is stable `androidx.datastore:datastore-preferences:1.2.1`.
+- No adaptive-icon qualifier suppression: moving `<adaptive-icon>` from `mipmap-anydpi-v26` made AAPT fail to resolve both manifest icons, so the one `ObsoleteSdkInt` warning is retained.
 - No lint baseline or blanket suppression; lint reporting was already enabled sufficiently for HTML/XML/text.
 - No changes under `fastlane/`, F-Droid metadata, signing config, or license terms.
 
+### 7.1 Post-refactor tooling evidence (2026-09-16)
+
+`./gradlew lintDebug testDebugUnitTest --warning-mode all --stacktrace`:
+
+```text
+> Task :app:testDebugUnitTest
+> Task :app:lintReportDebug
+Wrote HTML report to file:///C:/Users/DELL/Documents/Bluke/app/build/reports/lint-results-debug.html
+> Task :app:lintDebug
+BUILD SUCCESSFUL in 2m 20s
+39 actionable tasks: 14 executed, 25 up-to-date
+Configuration cache entry reused.
+```
+
+Test XML totals: 6 tests, 0 skipped, 0 failures, 0 errors. `HidLifecycleTest` adds three tests for exponential backoff, rejected registration, and treating an 8-second callback timeout as inconclusive. Bluetooth framework callback/transport coverage is still zero because it requires a facade or instrumented hardware tests.
+
+`./gradlew lintRelease --warning-mode all --stacktrace`:
+
+```text
+> Task :app:lintReportRelease
+Wrote HTML report to file:///C:/Users/DELL/Documents/Bluke/app/build/reports/lint-results-release.html
+> Task :app:lintRelease
+BUILD SUCCESSFUL in 3m 19s
+16 actionable tasks: 5 executed, 11 up-to-date
+Configuration cache entry reused.
+```
+
+Final XML issue counts:
+
+| Variant | Errors | Warnings | Remaining IDs |
+|---|---:|---:|---|
+| debug | 0 | 21 | `GradleDependency` 10, `NewerVersionAvailable` 8, `AndroidGradlePluginVersion` 1, `OldTargetApi` 1, `ObsoleteSdkInt` 1 |
+| release | 0 | 20 | version/SDK availability and adaptive-icon qualifier findings only |
+
+Resource cleanup reduced debug lint from 39 to 26 warnings; KTX preference edits reduced it to 21. The failed adaptive-icon experiment produced this real AAPT output before being reverted:
+
+```text
+Execution failed for task ':app:processDebugResources'.
+Android resource linking failed
+AndroidManifest.xml: AAPT: error: resource mipmap/ic_launcher not found.
+AndroidManifest.xml: AAPT: error: resource mipmap/ic_launcher_round not found.
+BUILD FAILED in 1m 20s
+```
+
+The final release dependency graph succeeds and confirms DataStore `1.2.1`. It also confirms the unresolved Compose skew: Material3 `1.4.0-alpha04` overrides BOM `1.3.1` and selects runtime/runtime-saveable `1.8.0-alpha06` while most UI artifacts remain `1.7.8`. Removing the override was tested and failed on `ExperimentalMaterial3ExpressiveApi`, `MaterialShapes`, and `toShape` references in `ThemeConfig.kt`; it was restored instead of violating the version constraint.
+
+Research used current official primary sources: [Android Compose BOM guidance](https://developer.android.com/develop/ui/compose/bom) (individual Compose versions should be omitted when using a BOM), [Compose phase guidance](https://developer.android.com/develop/ui/compose/performance/bestpractices) (lambda modifiers defer frequently changing reads), [DataStore guidance](https://developer.android.com/topic/libraries/architecture/datastore) (one instance per file, repository/data-layer ownership), [DataStore release notes](https://developer.android.com/jetpack/androidx/releases/datastore) (stable `1.2.1` on 2026-09-09), [`BluetoothHidDevice` callback documentation](https://developer.android.com/reference/android/bluetooth/BluetoothHidDevice.Callback), and Kotlin [`StateFlow`](https://kotlinlang.org/api/kotlinx.coroutines/kotlinx-coroutines-core/kotlinx.coroutines.flow/-state-flow/) / [`conflate`](https://kotlinlang.org/api/kotlinx.coroutines/kotlinx-coroutines-core/kotlinx.coroutines.flow/conflate.html) documentation.
+
 ## 8. Open questions for the maintainer
 
-1. Which physical devices/Android versions reproduce the retained SDP record, and can you provide callback/logcat timelines for successful and failed launches?
-2. When multiple connect requests arrive before registration, should Bluke preserve FIFO order or intentionally keep only the latest request?
-3. Is 8 seconds an empirically chosen registration timeout, and should a late success after timeout recover automatically?
-4. Is forced A2DP/HFP disconnection a required product behavior, or can it become opt-in guidance because third-party public APIs cannot guarantee it?
-5. Was local Class-of-Device spoofing ever observed to succeed? The current `Int` reflection signature does not match AOSP.
-6. Should the Bluetooth manager survive configuration changes only, or the whole process/application lifetime? This determines executor and proxy ownership.
-7. Are any resources resolved dynamically by string name, especially `skin_0`, `ic_dpad`, or the legacy colors?
-8. Which gamepad events must bypass the 125 Hz sampler (button edges, neutral reset, disconnect), and what ordering guarantee do hosts require?
-9. Is there an existing device farm or manual matrix for API 28, 31, 33, 35, and OEM Bluetooth stacks?
-10. May a follow-up add DataStore and detekt as justified dependencies/plugins, each in isolated commits?
+1. Should a registration callback that arrives after all three 8-second attempt windows automatically re-drain the retained latest connection request, or wait for an explicit retry?
+2. Can the optional “Prevent Host Audio Routing” setting be validated against the Linux host that originally captured audio, including reconnect and Bluetooth-toggle cases?
+3. Which physical devices/API levels can cover the release matrix (especially API 28/31/36 and Motorola/Tecno/LG firmware), and can future failures include callback/logcat timelines?
+4. For the next dependency-only change, should `ThemeConfig.kt` move off Expressive shapes to the pinned stable BOM, or should the whole Compose BOM be upgraded together after screenshot testing?
+5. Should neutral/reset reports also bypass the 8 ms sampler explicitly, beyond the implemented button and D-pad edges?
