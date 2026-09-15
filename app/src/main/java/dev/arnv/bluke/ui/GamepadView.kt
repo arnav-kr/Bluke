@@ -45,6 +45,7 @@ import androidx.core.content.edit
 import dev.arnv.bluke.R
 import dev.arnv.bluke.bluetooth.BluetoothKeyboardManager
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlin.math.abs
 import kotlin.math.roundToInt
@@ -78,6 +79,8 @@ private data class ConsoleConfig(
     val hasTouchpad: Boolean = false,
     val touchpadMappingId: Int = -1
 )
+
+private const val GAMEPAD_REPORT_INTERVAL_MILLIS = 8L
 
 private val CONSOLES = listOf(
     ConsoleConfig(
@@ -340,7 +343,6 @@ fun GamepadView(
     val deviceName = connectedDevNow?.name ?: "No Host"
 
     var buttonMask by remember { mutableIntStateOf(0) }
-    var lastGamepadReportTime by remember { mutableLongStateOf(0L) }
     var isGamepadDirty by remember { mutableStateOf(false) }
     
     var leftStickX by remember { mutableFloatStateOf(0f) }
@@ -349,8 +351,7 @@ fun GamepadView(
     var rightStickY by remember { mutableFloatStateOf(0f) }
 
     val transmitGamepadState = { force: Boolean ->
-        val now = System.currentTimeMillis()
-        if (force || now - lastGamepadReportTime >= 8L) {
+        if (force) {
             btManager.sendGamepadReport(
                 buttonMask,
                 leftStickX,
@@ -358,16 +359,15 @@ fun GamepadView(
                 rightStickX,
                 rightStickY
             )
-            lastGamepadReportTime = now
             isGamepadDirty = false
         } else {
             isGamepadDirty = true
         }
     }
 
-    LaunchedEffect(Unit) {
-        while (true) {
-            delay(10L.milliseconds)
+    LaunchedEffect(btManager) {
+        while (isActive) {
+            delay(GAMEPAD_REPORT_INTERVAL_MILLIS.milliseconds)
             if (isGamepadDirty) {
                 btManager.sendGamepadReport(
                     buttonMask,
@@ -376,7 +376,6 @@ fun GamepadView(
                     rightStickX,
                     rightStickY
                 )
-                lastGamepadReportTime = System.currentTimeMillis()
                 isGamepadDirty = false
             }
         }
