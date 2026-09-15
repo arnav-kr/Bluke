@@ -44,6 +44,7 @@ import androidx.compose.ui.unit.sp
 import androidx.core.content.edit
 import dev.arnv.bluke.R
 import dev.arnv.bluke.bluetooth.BluetoothKeyboardManager
+import dev.arnv.bluke.data.LayoutRepository
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -135,6 +136,8 @@ fun GamepadView(
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    val layoutRepository = remember(context) { LayoutRepository(context) }
+    val pendingLayoutValues = remember { mutableMapOf<String, Float>() }
 
     var selectedIndex by rememberSaveable { mutableIntStateOf(0) }
     val config = CONSOLES[selectedIndex]
@@ -154,7 +157,13 @@ fun GamepadView(
     }
 
     val saveLayoutPref = { key: String, value: Float ->
-        sharedPrefs.edit { putFloat(key, value) }
+        pendingLayoutValues[key] = value
+    }
+    val commitLayoutPrefs = {
+        val values = pendingLayoutValues.toMap()
+        pendingLayoutValues.clear()
+        scope.launch { layoutRepository.save(values) }
+        Unit
     }
 
     // Positions & Scales loaded dynamically per console layout (Xbox Series / PlayStation 5)
@@ -205,6 +214,47 @@ fun GamepadView(
     var startOffsetX by remember(config.id) { mutableFloatStateOf(sharedPrefs.getFloat("${config.id}_start_x", 0f)) }
     var startOffsetY by remember(config.id) { mutableFloatStateOf(sharedPrefs.getFloat("${config.id}_start_y", 0f)) }
     var startScale by remember(config.id) { mutableFloatStateOf(sharedPrefs.getFloat("${config.id}_start_scale", 1f)) }
+
+    LaunchedEffect(config.id, layoutRepository) {
+        val values = layoutRepository.load(config.id)
+        fun stored(suffix: String, current: Float) = values["${config.id}_$suffix"] ?: current
+        dpadOffsetX = stored("dpad_x", dpadOffsetX)
+        dpadOffsetY = stored("dpad_y", dpadOffsetY)
+        dpadScale = stored("dpad_scale", dpadScale)
+        leftStickOffsetX = stored("left_stick_x", leftStickOffsetX)
+        leftStickOffsetY = stored("left_stick_y", leftStickOffsetY)
+        leftStickScale = stored("left_stick_scale", leftStickScale)
+        rightStickOffsetX = stored("right_stick_x", rightStickOffsetX)
+        rightStickOffsetY = stored("right_stick_y", rightStickOffsetY)
+        rightStickScale = stored("right_stick_scale", rightStickScale)
+        faceButtonsOffsetX = stored("face_buttons_x", faceButtonsOffsetX)
+        faceButtonsOffsetY = stored("face_buttons_y", faceButtonsOffsetY)
+        faceButtonsScale = stored("face_buttons_scale", faceButtonsScale)
+        leftTriggerOffsetX = stored("left_trigger_x", leftTriggerOffsetX)
+        leftTriggerOffsetY = stored("left_trigger_y", leftTriggerOffsetY)
+        leftTriggerScale = stored("left_trigger_scale", leftTriggerScale)
+        leftBumperOffsetX = stored("left_bumper_x", leftBumperOffsetX)
+        leftBumperOffsetY = stored("left_bumper_y", leftBumperOffsetY)
+        leftBumperScale = stored("left_bumper_scale", leftBumperScale)
+        rightTriggerOffsetX = stored("right_trigger_x", rightTriggerOffsetX)
+        rightTriggerOffsetY = stored("right_trigger_y", rightTriggerOffsetY)
+        rightTriggerScale = stored("right_trigger_scale", rightTriggerScale)
+        rightBumperOffsetX = stored("right_bumper_x", rightBumperOffsetX)
+        rightBumperOffsetY = stored("right_bumper_y", rightBumperOffsetY)
+        rightBumperScale = stored("right_bumper_scale", rightBumperScale)
+        guideOffsetX = stored("guide_x", guideOffsetX)
+        guideOffsetY = stored("guide_y", guideOffsetY)
+        guideScale = stored("guide_scale", guideScale)
+        selectOffsetX = stored("select_x", selectOffsetX)
+        selectOffsetY = stored("select_y", selectOffsetY)
+        selectScale = stored("select_scale", selectScale)
+        shareOffsetX = stored("share_x", shareOffsetX)
+        shareOffsetY = stored("share_y", shareOffsetY)
+        shareScale = stored("share_scale", shareScale)
+        startOffsetX = stored("start_x", startOffsetX)
+        startOffsetY = stored("start_y", startOffsetY)
+        startScale = stored("start_scale", startScale)
+    }
 
     val isModified = remember(
         config.id,
@@ -334,6 +384,8 @@ fun GamepadView(
             remove("${config.id}_start_y")
             remove("${config.id}_start_scale")
         }
+        pendingLayoutValues.clear()
+        scope.launch { layoutRepository.clear(config.id) }
             
         triggerVibration(50)
     }
@@ -582,7 +634,8 @@ fun GamepadView(
                             offsetY = leftStickOffsetY,
                             scale = leftStickScale,
                             onOffsetChange = { x, y -> leftStickOffsetX = x; leftStickOffsetY = y; saveLayoutPref("${config.id}_left_stick_x", x); saveLayoutPref("${config.id}_left_stick_y", y) },
-                            onScaleChange = { s -> leftStickScale = s; saveLayoutPref("${config.id}_left_stick_scale", s) }
+                            onScaleChange = { s -> leftStickScale = s; saveLayoutPref("${config.id}_left_stick_scale", s) },
+                            onTransformEnd = commitLayoutPrefs
                         ) {
                             GamepadAnalogStick(
                                 label = "L",
@@ -600,7 +653,8 @@ fun GamepadView(
                             offsetY = dpadOffsetY,
                             scale = dpadScale,
                             onOffsetChange = { x, y -> dpadOffsetX = x; dpadOffsetY = y; saveLayoutPref("${config.id}_dpad_x", x); saveLayoutPref("${config.id}_dpad_y", y) },
-                            onScaleChange = { s -> dpadScale = s; saveLayoutPref("${config.id}_dpad_scale", s) }
+                            onScaleChange = { s -> dpadScale = s; saveLayoutPref("${config.id}_dpad_scale", s) },
+                            onTransformEnd = commitLayoutPrefs
                         ) {
                             GamepadDpad(
                                 isXboxStyle = true,
@@ -634,7 +688,8 @@ fun GamepadView(
                                     offsetY = leftTriggerOffsetY,
                                     scale = leftTriggerScale,
                                     onOffsetChange = { x, y -> leftTriggerOffsetX = x; leftTriggerOffsetY = y; saveLayoutPref("${config.id}_left_trigger_x", x); saveLayoutPref("${config.id}_left_trigger_y", y) },
-                                    onScaleChange = { s -> leftTriggerScale = s; saveLayoutPref("${config.id}_left_trigger_scale", s) }
+                                    onScaleChange = { s -> leftTriggerScale = s; saveLayoutPref("${config.id}_left_trigger_scale", s) },
+                                    onTransformEnd = commitLayoutPrefs
                                 ) {
                                     GamepadTriggerButton(config.leftTrigger, true, pressButton, releaseButton)
                                 }
@@ -645,7 +700,8 @@ fun GamepadView(
                                     offsetY = leftBumperOffsetY,
                                     scale = leftBumperScale,
                                     onOffsetChange = { x, y -> leftBumperOffsetX = x; leftBumperOffsetY = y; saveLayoutPref("${config.id}_left_bumper_x", x); saveLayoutPref("${config.id}_left_bumper_y", y) },
-                                    onScaleChange = { s -> leftBumperScale = s; saveLayoutPref("${config.id}_left_bumper_scale", s) }
+                                    onScaleChange = { s -> leftBumperScale = s; saveLayoutPref("${config.id}_left_bumper_scale", s) },
+                                    onTransformEnd = commitLayoutPrefs
                                 ) {
                                     GamepadBumperButton(config.leftBumper, true, pressButton, releaseButton)
                                 }
@@ -658,7 +714,8 @@ fun GamepadView(
                                     offsetY = rightTriggerOffsetY,
                                     scale = rightTriggerScale,
                                     onOffsetChange = { x, y -> rightTriggerOffsetX = x; rightTriggerOffsetY = y; saveLayoutPref("${config.id}_right_trigger_x", x); saveLayoutPref("${config.id}_right_trigger_y", y) },
-                                    onScaleChange = { s -> rightTriggerScale = s; saveLayoutPref("${config.id}_right_trigger_scale", s) }
+                                    onScaleChange = { s -> rightTriggerScale = s; saveLayoutPref("${config.id}_right_trigger_scale", s) },
+                                    onTransformEnd = commitLayoutPrefs
                                 ) {
                                     GamepadTriggerButton(config.rightTrigger, false, pressButton, releaseButton)
                                 }
@@ -669,7 +726,8 @@ fun GamepadView(
                                     offsetY = rightBumperOffsetY,
                                     scale = rightBumperScale,
                                     onOffsetChange = { x, y -> rightBumperOffsetX = x; rightBumperOffsetY = y; saveLayoutPref("${config.id}_right_bumper_x", x); saveLayoutPref("${config.id}_right_bumper_y", y) },
-                                    onScaleChange = { s -> rightBumperScale = s; saveLayoutPref("${config.id}_right_bumper_scale", s) }
+                                    onScaleChange = { s -> rightBumperScale = s; saveLayoutPref("${config.id}_right_bumper_scale", s) },
+                                    onTransformEnd = commitLayoutPrefs
                                 ) {
                                     GamepadBumperButton(config.rightBumper, false, pressButton, releaseButton)
                                 }
@@ -685,7 +743,8 @@ fun GamepadView(
                             offsetY = guideOffsetY,
                             scale = guideScale,
                             onOffsetChange = { x, y -> guideOffsetX = x; guideOffsetY = y; saveLayoutPref("${config.id}_guide_x", x); saveLayoutPref("${config.id}_guide_y", y) },
-                            onScaleChange = { s -> guideScale = s; saveLayoutPref("${config.id}_guide_scale", s) }
+                            onScaleChange = { s -> guideScale = s; saveLayoutPref("${config.id}_guide_scale", s) },
+                            onTransformEnd = commitLayoutPrefs
                         ) {
                             XboxLogoGuideButton(config.guideButton, pressButton, releaseButton)
                         }
@@ -704,7 +763,8 @@ fun GamepadView(
                                 offsetY = selectOffsetY,
                                 scale = selectScale,
                                 onOffsetChange = { x, y -> selectOffsetX = x; selectOffsetY = y; saveLayoutPref("${config.id}_select_x", x); saveLayoutPref("${config.id}_select_y", y) },
-                                onScaleChange = { s -> selectScale = s; saveLayoutPref("${config.id}_select_scale", s) }
+                                onScaleChange = { s -> selectScale = s; saveLayoutPref("${config.id}_select_scale", s) },
+                                onTransformEnd = commitLayoutPrefs
                             ) {
                                 GamepadCenterButton(config.selectButton, pressButton, releaseButton)
                             }
@@ -714,7 +774,8 @@ fun GamepadView(
                                 offsetY = shareOffsetY,
                                 scale = shareScale,
                                 onOffsetChange = { x, y -> shareOffsetX = x; shareOffsetY = y; saveLayoutPref("${config.id}_share_x", x); saveLayoutPref("${config.id}_share_y", y) },
-                                onScaleChange = { s -> shareScale = s; saveLayoutPref("${config.id}_share_scale", s) }
+                                onScaleChange = { s -> shareScale = s; saveLayoutPref("${config.id}_share_scale", s) },
+                                onTransformEnd = commitLayoutPrefs
                             ) {
                                 GamepadCenterButton(config.shareButton, pressButton, releaseButton)
                             }
@@ -724,7 +785,8 @@ fun GamepadView(
                                 offsetY = startOffsetY,
                                 scale = startScale,
                                 onOffsetChange = { x, y -> startOffsetX = x; startOffsetY = y; saveLayoutPref("${config.id}_start_x", x); saveLayoutPref("${config.id}_start_y", y) },
-                                onScaleChange = { s -> startScale = s; saveLayoutPref("${config.id}_start_scale", s) }
+                                onScaleChange = { s -> startScale = s; saveLayoutPref("${config.id}_start_scale", s) },
+                                onTransformEnd = commitLayoutPrefs
                             ) {
                                 GamepadCenterButton(config.startButton, pressButton, releaseButton)
                             }
@@ -745,7 +807,8 @@ fun GamepadView(
                             offsetY = faceButtonsOffsetY,
                             scale = faceButtonsScale,
                             onOffsetChange = { x, y -> faceButtonsOffsetX = x; faceButtonsOffsetY = y; saveLayoutPref("${config.id}_face_buttons_x", x); saveLayoutPref("${config.id}_face_buttons_y", y) },
-                            onScaleChange = { s -> faceButtonsScale = s; saveLayoutPref("${config.id}_face_buttons_scale", s) }
+                            onScaleChange = { s -> faceButtonsScale = s; saveLayoutPref("${config.id}_face_buttons_scale", s) },
+                            onTransformEnd = commitLayoutPrefs
                         ) {
                             FaceButtonsDiamond(
                                 config = config,
@@ -761,7 +824,8 @@ fun GamepadView(
                             offsetY = rightStickOffsetY,
                             scale = rightStickScale,
                             onOffsetChange = { x, y -> rightStickOffsetX = x; rightStickOffsetY = y; saveLayoutPref("${config.id}_right_stick_x", x); saveLayoutPref("${config.id}_right_stick_y", y) },
-                            onScaleChange = { s -> rightStickScale = s; saveLayoutPref("${config.id}_right_stick_scale", s) }
+                            onScaleChange = { s -> rightStickScale = s; saveLayoutPref("${config.id}_right_stick_scale", s) },
+                            onTransformEnd = commitLayoutPrefs
                         ) {
                             GamepadAnalogStick(
                                 label = "R",
@@ -789,7 +853,8 @@ fun GamepadView(
                             offsetY = dpadOffsetY,
                             scale = dpadScale,
                             onOffsetChange = { x, y -> dpadOffsetX = x; dpadOffsetY = y; saveLayoutPref("${config.id}_dpad_x", x); saveLayoutPref("${config.id}_dpad_y", y) },
-                            onScaleChange = { s -> dpadScale = s; saveLayoutPref("${config.id}_dpad_scale", s) }
+                            onScaleChange = { s -> dpadScale = s; saveLayoutPref("${config.id}_dpad_scale", s) },
+                            onTransformEnd = commitLayoutPrefs
                         ) {
                             GamepadDpad(
                                 isXboxStyle = false,
@@ -808,7 +873,8 @@ fun GamepadView(
                             offsetY = leftStickOffsetY,
                             scale = leftStickScale,
                             onOffsetChange = { x, y -> leftStickOffsetX = x; leftStickOffsetY = y; saveLayoutPref("${config.id}_left_stick_x", x); saveLayoutPref("${config.id}_left_stick_y", y) },
-                            onScaleChange = { s -> leftStickScale = s; saveLayoutPref("${config.id}_left_stick_scale", s) }
+                            onScaleChange = { s -> leftStickScale = s; saveLayoutPref("${config.id}_left_stick_scale", s) },
+                            onTransformEnd = commitLayoutPrefs
                         ) {
                             GamepadAnalogStick(
                                 label = "L",
@@ -841,7 +907,8 @@ fun GamepadView(
                                     offsetY = leftTriggerOffsetY,
                                     scale = leftTriggerScale,
                                     onOffsetChange = { x, y -> leftTriggerOffsetX = x; leftTriggerOffsetY = y; saveLayoutPref("${config.id}_left_trigger_x", x); saveLayoutPref("${config.id}_left_trigger_y", y) },
-                                    onScaleChange = { s -> leftTriggerScale = s; saveLayoutPref("${config.id}_left_trigger_scale", s) }
+                                    onScaleChange = { s -> leftTriggerScale = s; saveLayoutPref("${config.id}_left_trigger_scale", s) },
+                                    onTransformEnd = commitLayoutPrefs
                                 ) {
                                     GamepadTriggerButton(config.leftTrigger, true, pressButton, releaseButton)
                                 }
@@ -852,7 +919,8 @@ fun GamepadView(
                                     offsetY = leftBumperOffsetY,
                                     scale = leftBumperScale,
                                     onOffsetChange = { x, y -> leftBumperOffsetX = x; leftBumperOffsetY = y; saveLayoutPref("${config.id}_left_bumper_x", x); saveLayoutPref("${config.id}_left_bumper_y", y) },
-                                    onScaleChange = { s -> leftBumperScale = s; saveLayoutPref("${config.id}_left_bumper_scale", s) }
+                                    onScaleChange = { s -> leftBumperScale = s; saveLayoutPref("${config.id}_left_bumper_scale", s) },
+                                    onTransformEnd = commitLayoutPrefs
                                 ) {
                                     GamepadBumperButton(config.leftBumper, true, pressButton, releaseButton)
                                 }
@@ -865,7 +933,8 @@ fun GamepadView(
                                     offsetY = rightTriggerOffsetY,
                                     scale = rightTriggerScale,
                                     onOffsetChange = { x, y -> rightTriggerOffsetX = x; rightTriggerOffsetY = y; saveLayoutPref("${config.id}_right_trigger_x", x); saveLayoutPref("${config.id}_right_trigger_y", y) },
-                                    onScaleChange = { s -> rightTriggerScale = s; saveLayoutPref("${config.id}_right_trigger_scale", s) }
+                                    onScaleChange = { s -> rightTriggerScale = s; saveLayoutPref("${config.id}_right_trigger_scale", s) },
+                                    onTransformEnd = commitLayoutPrefs
                                 ) {
                                     GamepadTriggerButton(config.rightTrigger, false, pressButton, releaseButton)
                                 }
@@ -876,7 +945,8 @@ fun GamepadView(
                                     offsetY = rightBumperOffsetY,
                                     scale = rightBumperScale,
                                     onOffsetChange = { x, y -> rightBumperOffsetX = x; rightBumperOffsetY = y; saveLayoutPref("${config.id}_right_bumper_x", x); saveLayoutPref("${config.id}_right_bumper_y", y) },
-                                    onScaleChange = { s -> rightBumperScale = s; saveLayoutPref("${config.id}_right_bumper_scale", s) }
+                                    onScaleChange = { s -> rightBumperScale = s; saveLayoutPref("${config.id}_right_bumper_scale", s) },
+                                    onTransformEnd = commitLayoutPrefs
                                 ) {
                                     GamepadBumperButton(config.rightBumper, false, pressButton, releaseButton)
                                 }
@@ -892,7 +962,8 @@ fun GamepadView(
                             offsetY = guideOffsetY,
                             scale = guideScale,
                             onOffsetChange = { x, y -> guideOffsetX = x; guideOffsetY = y; saveLayoutPref("${config.id}_guide_x", x); saveLayoutPref("${config.id}_guide_y", y) },
-                            onScaleChange = { s -> guideScale = s; saveLayoutPref("${config.id}_guide_scale", s) }
+                            onScaleChange = { s -> guideScale = s; saveLayoutPref("${config.id}_guide_scale", s) },
+                            onTransformEnd = commitLayoutPrefs
                         ) {
                             PlayStationLogoButton(config.guideButton, pressButton, releaseButton)
                         }
@@ -911,7 +982,8 @@ fun GamepadView(
                                 offsetY = selectOffsetY,
                                 scale = selectScale,
                                 onOffsetChange = { x, y -> selectOffsetX = x; selectOffsetY = y; saveLayoutPref("${config.id}_select_x", x); saveLayoutPref("${config.id}_select_y", y) },
-                                onScaleChange = { s -> selectScale = s; saveLayoutPref("${config.id}_select_scale", s) }
+                                onScaleChange = { s -> selectScale = s; saveLayoutPref("${config.id}_select_scale", s) },
+                                onTransformEnd = commitLayoutPrefs
                             ) {
                                 GamepadCenterButton(config.selectButton, pressButton, releaseButton)
                             }
@@ -921,7 +993,8 @@ fun GamepadView(
                                 offsetY = shareOffsetY,
                                 scale = shareScale,
                                 onOffsetChange = { x, y -> shareOffsetX = x; shareOffsetY = y; saveLayoutPref("${config.id}_share_x", x); saveLayoutPref("${config.id}_share_y", y) },
-                                onScaleChange = { s -> shareScale = s; saveLayoutPref("${config.id}_share_scale", s) }
+                                onScaleChange = { s -> shareScale = s; saveLayoutPref("${config.id}_share_scale", s) },
+                                onTransformEnd = commitLayoutPrefs
                             ) {
                                 GamepadCenterButton(config.shareButton, pressButton, releaseButton)
                             }
@@ -931,7 +1004,8 @@ fun GamepadView(
                                 offsetY = startOffsetY,
                                 scale = startScale,
                                 onOffsetChange = { x, y -> startOffsetX = x; startOffsetY = y; saveLayoutPref("${config.id}_start_x", x); saveLayoutPref("${config.id}_start_y", y) },
-                                onScaleChange = { s -> startScale = s; saveLayoutPref("${config.id}_start_scale", s) }
+                                onScaleChange = { s -> startScale = s; saveLayoutPref("${config.id}_start_scale", s) },
+                                onTransformEnd = commitLayoutPrefs
                             ) {
                                 GamepadCenterButton(config.startButton, pressButton, releaseButton)
                             }
@@ -952,7 +1026,8 @@ fun GamepadView(
                             offsetY = faceButtonsOffsetY,
                             scale = faceButtonsScale,
                             onOffsetChange = { x, y -> faceButtonsOffsetX = x; faceButtonsOffsetY = y; saveLayoutPref("${config.id}_face_buttons_x", x); saveLayoutPref("${config.id}_face_buttons_y", y) },
-                            onScaleChange = { s -> faceButtonsScale = s; saveLayoutPref("${config.id}_face_buttons_scale", s) }
+                            onScaleChange = { s -> faceButtonsScale = s; saveLayoutPref("${config.id}_face_buttons_scale", s) },
+                            onTransformEnd = commitLayoutPrefs
                         ) {
                             FaceButtonsDiamond(
                                 config = config,
@@ -968,7 +1043,8 @@ fun GamepadView(
                             offsetY = rightStickOffsetY,
                             scale = rightStickScale,
                             onOffsetChange = { x, y -> rightStickOffsetX = x; rightStickOffsetY = y; saveLayoutPref("${config.id}_right_stick_x", x); saveLayoutPref("${config.id}_right_stick_y", y) },
-                            onScaleChange = { s -> rightStickScale = s; saveLayoutPref("${config.id}_right_stick_scale", s) }
+                            onScaleChange = { s -> rightStickScale = s; saveLayoutPref("${config.id}_right_stick_scale", s) },
+                            onTransformEnd = commitLayoutPrefs
                         ) {
                             GamepadAnalogStick(
                                 label = "R",
@@ -2615,6 +2691,7 @@ private fun EditableComponentWrapper(
     scale: Float,
     onOffsetChange: (Float, Float) -> Unit,
     onScaleChange: (Float) -> Unit,
+    onTransformEnd: () -> Unit,
     content: @Composable () -> Unit
 ) {
     val density = LocalDensity.current.density
@@ -2624,6 +2701,7 @@ private fun EditableComponentWrapper(
     val currentScale by rememberUpdatedState(scale)
     val currentOnOffsetChange by rememberUpdatedState(onOffsetChange)
     val currentOnScaleChange by rememberUpdatedState(onScaleChange)
+    val currentOnTransformEnd by rememberUpdatedState(onTransformEnd)
     
     var layoutTopInWindowPx by remember { mutableFloatStateOf(0f) }
     
@@ -2636,15 +2714,15 @@ private fun EditableComponentWrapper(
                 val layoutTopInWindow = layoutTopInWindowPx / density
                 val constrainedOffsetY = if (layoutTopInWindow > 0) {
                     val minY = 38f + 4f - layoutTopInWindow
-                    offsetY.coerceAtLeast(minY)
+                    currentOffsetY.coerceAtLeast(minY)
                 } else {
-                    offsetY
+                    currentOffsetY
                 }
-                IntOffset((offsetX * density).roundToInt(), (constrainedOffsetY * density).roundToInt())
+                IntOffset((currentOffsetX * density).roundToInt(), (constrainedOffsetY * density).roundToInt())
             }
             .graphicsLayer {
-                scaleX = scale
-                scaleY = scale
+                scaleX = currentScale
+                scaleY = currentScale
             },
         contentAlignment = Alignment.Center
     ) {
@@ -2665,8 +2743,14 @@ private fun EditableComponentWrapper(
                         shape = RoundedCornerShape(8.dp)
                     )
                     .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.08f), shape = RoundedCornerShape(8.dp))
-                    .pointerInput(Unit) {
-                        detectTransformGestures { _, pan, zoom, _ ->
+                    .pointerInput(isEditMode) {
+                        awaitEachGesture {
+                            awaitFirstDown(requireUnconsumed = false)
+                            var event: PointerEvent
+                            do {
+                                event = awaitPointerEvent()
+                                val pan = event.calculatePan()
+                                val zoom = event.calculateZoom()
                             // 1. Update scale via pinch zoom
                             val newScale = (currentScale * zoom).coerceIn(0.6f, 1.8f)
                             currentOnScaleChange(newScale)
@@ -2676,6 +2760,9 @@ private fun EditableComponentWrapper(
                             val newX = currentOffsetX + (pan.x * currentScale) / density
                             val newY = (currentOffsetY + (pan.y * currentScale) / density).coerceAtLeast(minY)
                             currentOnOffsetChange(newX, newY)
+                                event.changes.forEach { it.consume() }
+                            } while (event.changes.any { it.pressed })
+                            currentOnTransformEnd()
                         }
                     }
             )
@@ -2689,11 +2776,15 @@ private fun EditableComponentWrapper(
                     .clip(CircleShape)
                     .background(MaterialTheme.colorScheme.primary)
                     .pointerInput(Unit) {
-                        detectDragGestures { change, dragAmount ->
-                            change.consume()
-                            val deltaScale = (dragAmount.x + dragAmount.y) / 150f
-                            currentOnScaleChange((currentScale + deltaScale).coerceIn(0.6f, 1.8f))
-                        }
+                        detectDragGestures(
+                            onDragEnd = currentOnTransformEnd,
+                            onDragCancel = currentOnTransformEnd,
+                            onDrag = { change, dragAmount ->
+                                change.consume()
+                                val deltaScale = (dragAmount.x + dragAmount.y) / 150f
+                                currentOnScaleChange((currentScale + deltaScale).coerceIn(0.6f, 1.8f))
+                            },
+                        )
                     },
                 contentAlignment = Alignment.Center
             ) {
