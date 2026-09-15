@@ -7,16 +7,16 @@ Working branch: `refactor`
 ## 1. Executive summary
 
 - **P0 fixed, device validation required — HID coordination:** explicit lifecycle states, single-flight binding/registration mutexes, callback-gated registration, bounded exponential backoff with jitter, and latest-request-wins connection collection are implemented.
-- **P0 fixed — timeout safety:** `hid.connect()` is no longer called after a failed registration wait; an 8-second missing callback is `Inconclusive`, not `ProfileNotSupported`.
+- **P0 fixed — timeout safety:** `hid.connect()` is no longer called after a failed registration wait; an 8-second missing callback is `Inconclusive`, not `ProfileNotSupported`. After the three-attempt ceiling, the retained latest request now waits for a late callback without issuing an unbounded fourth registration command.
 - **P1 fixed — process ownership:** `BlukeApplication` owns the manager for the application lifetime; teardown now closes the HID proxy/receivers and cancels executors/coroutines.
 - **P1 mitigated — hidden APIs:** the invalid `setBluetoothClass(Int)` reflection was removed. A2DP/HFP reflection remains only behind an opt-in Linux workaround that defaults off.
-- **P1 fixed — gamepad cadence:** analog state is sampled by an 8 ms (125 Hz) ticker; button/D-pad edges deliberately bypass the sampler.
+- **P1 fixed — gamepad transport:** analog state is sampled by an 8 ms (125 Hz) ticker; button, D-pad, and final neutral/release edges bypass the sampler. The D-pad is now a HID Hat Switch instead of colliding button bits (Bluke issue #16).
 - **P1 fixed — layout persistence:** gesture changes are staged in memory and committed at gesture end through a single Preferences DataStore repository with one-time migration.
-- **P1 partially fixed — UI state:** Bluetooth, discovery, connection, lifecycle, and lock state are hoisted into immutable `HomeUiState` and a lifecycle-aware `HomeViewModel`; editor/transient presentation state remains local.
+- **P1 partially fixed — UI state/performance:** Bluetooth, discovery, connection, lifecycle, and lock state are hoisted into immutable `HomeUiState`; rapidly changing gamepad button reads are isolated to child restart scopes and long-lived pointer handlers observe current callbacks. Editor/transient presentation state remains local.
 - **P2 open — Compose alignment:** Material3 `1.4.0-alpha04` still lifts runtime to `1.8.0-alpha06`; removing the override fails compilation because `ThemeConfig.kt` uses Expressive-only APIs. A BOM/toolchain upgrade was prohibited in this pass.
 - **P2 fixed — resources:** unused resources and three malformed high-density WebPs were removed; adaptive icon background is explicitly `nodpi`.
 - Baseline: `assembleDebug` passed; lint reported 2 errors and 42 warnings; 3 tests passed and zero exercised Bluetooth/HID.
-- Final: `assembleDebug`, `lintDebug`, `lintRelease`, and 6 unit tests pass. Debug lint reports 0 errors/21 warnings; release lint reports 0 errors/20 warnings.
+- Final: `assembleDebug`, `lintDebug`, `lintRelease`, and 13 unit tests pass. Debug lint reports 0 errors/21 warnings; release lint reports 0 errors/20 warnings.
 - No SDK, AGP, Kotlin, Compose BOM, signing, Fastlane, or F-Droid version/config changes were made. DataStore `1.2.1` is the only new dependency.
 
 ## 2. Repository reconnaissance
@@ -56,12 +56,14 @@ app/src/main/
 │   ├── OnboardingActivity.kt
 │   ├── SettingsActivity.kt
 │   ├── bluetooth/BluetoothKeyboardManager.kt
+│   ├── bluetooth/GamepadReport.kt
 │   ├── bluetooth/HidLifecycle.kt
 │   ├── data/LayoutRepository.kt
 │   ├── sound/KeyboardSoundSynthesizer.kt
 │   ├── utils/DeveloperLogManager.kt
 │   └── ui/
 │       ├── DeviceRow.kt
+│       ├── GamepadInput.kt
 │       ├── GamepadView.kt
 │       ├── HomeScreen.kt
 │       ├── HomeViewModel.kt
@@ -87,7 +89,7 @@ gradle/libs.versions.toml
 app/build.gradle.kts
 ```
 
-The refactor adds `BlukeApplication.kt`, `HidLifecycle.kt`, `LayoutRepository.kt`, `HomeViewModel.kt`, `DeviceListSection.kt`, `StatusHeaderCard.kt`, `ProfileNotSupportedScreen.kt`, `values-v31/themes.xml`, and `values-night-v31/themes.xml`.
+The refactor adds `BlukeApplication.kt`, `HidLifecycle.kt`, `GamepadReport.kt`, `GamepadInput.kt`, `LayoutRepository.kt`, `HomeViewModel.kt`, `DeviceListSection.kt`, `StatusHeaderCard.kt`, `ProfileNotSupportedScreen.kt`, `values-v31/themes.xml`, and `values-night-v31/themes.xml`.
 
 ### 2.2 Kotlin inventory at `main` HEAD
 
@@ -122,7 +124,7 @@ The refactor adds `BlukeApplication.kt`, `HidLifecycle.kt`, `LayoutRepository.kt
 
 After extraction, `HomeScreen.kt` is 1,026 lines; the new files are `DeviceListSection.kt` (204), `StatusHeaderCard.kt` (144), and `ProfileNotSupportedScreen.kt` (99). `HomeScreen.kt` remains critical and needs state-hoisting work.
 
-Post-refactor inventory additions/changed counts: `BlukeApplication.kt` 24 (process owner), `bluetooth/HidLifecycle.kt` 87 (state/retry/capability models), `data/LayoutRepository.kt` 65 (DataStore persistence/migration), `ui/HomeViewModel.kt` 102 (immutable Bluetooth UI state), `MainActivity.kt` 80, `BehaviorActivity.kt` 1,039, `BluetoothKeyboardManager.kt` 1,210, `GamepadView.kt` 2,800, and `HomeScreen.kt` 1,029. The original `main` inventory above remains the audit baseline.
+Post-refactor inventory additions/changed counts: `BlukeApplication.kt` 24 (process owner), `bluetooth/HidLifecycle.kt` 87 (state/retry/capability models), `bluetooth/GamepadReport.kt` 39 (pure HID gamepad packing), `ui/GamepadInput.kt` 39 (pure D-pad geometry), `data/LayoutRepository.kt` 65 (DataStore persistence/migration), `ui/HomeViewModel.kt` 102 (immutable Bluetooth UI state), `MainActivity.kt` 80, `BehaviorActivity.kt` 1,039, `BluetoothKeyboardManager.kt` 1,225, `GamepadView.kt` 2,799, and `HomeScreen.kt` 1,031. The original `main` inventory above remains the audit baseline.
 
 ### 2.3 Build configuration
 
@@ -479,7 +481,7 @@ ASSUMPTION: Exact hidden-API flags can differ on OEM Android 16 images; this aud
 - The single-thread executor preserves enqueue order and does not intentionally drop reports. It is unbounded, so bursts can accumulate stale motion reports and increase latency. Exceptions drop only the failed report. Connection callback events use a separate `MutableSharedFlow` with `DROP_OLDEST`, but that is not the HID payload queue.
 - No framework report is sent on the main thread. Payload construction and gamepad state mutation occur on the Compose/main thread, followed by executor submission.
 - Gamepad immediate motion reports are gated by `>= 8L`, but dirty state is flushed every `10L.milliseconds`; forced press/release reports bypass the gate. A refactor should sample latest state on a strict 8 ms ticker, send transition edges without reordering, and make backpressure semantics explicit.
-- Descriptor semantics were not changed.
+- At audited `main`, descriptor semantics had not been changed. The authorized second pass corrects report ID 3 to 16 buttons + a four-bit Hat Switch + four bits padding + four 16-bit axes, retaining the 11-byte report size. This requires removing the cached pairing and pairing again on both ends.
 
 ### 5.3 Compose UI and performance
 
@@ -498,18 +500,18 @@ Effect/key audit:
 | `DeveloperOptionsActivity.kt:48` | `LaunchedEffect(catClicked)` | Stable scalar key. |
 | `DeveloperLogsActivity.kt:62` | `LaunchedEffect(filteredLogs.size)` | Stable key, but same-size content replacement will not trigger scroll. |
 | `OnboardingActivity.kt:138,148` | Two `LaunchedEffect(pagerState.currentPage)` | Stable key; duplicated effects should be combined to avoid ordering ambiguity. |
-| `HomeScreen.kt:147` | `LaunchedEffect(Unit)` | One-shot is intentional; it captures `sharedPrefs`, which is remembered without a `context` key. |
+| `HomeScreen.kt` update check | `LaunchedEffect(sharedPrefs)` | One-shot per preferences instance; the captured dependency is now explicit. |
 | `HomeScreen.kt:207` | connection/LED/mode tuple | Primitive/string keys are stable and complete for the body. |
 | `HomeScreen.kt:218` | `LaunchedEffect(btState)` | Sealed state values are stable enough; connected data class changes on name. |
 | `HomeScreen.kt:227` | `LaunchedEffect(btMessage)` | Stable string key; repeated identical errors do not toast again. |
 | `HomeScreen.kt:240` | `LaunchedEffect(isKeyboardActive)` | Stable Boolean key; context/window is captured but not keyed. |
-| `GamepadView.kt:368` | `LaunchedEffect(Unit)` | Long-lived ticker captures `btManager`; use `rememberUpdatedState` if manager/callback can change. Ticker is 10 ms, not 8 ms. |
+| `GamepadView.kt` report ticker | `LaunchedEffect(btManager)` | Manager is keyed and cadence is now 8 ms. Snapshot state is read only by the coroutine, not during root composition. |
 | `SettingsActivity.kt:36` | `DisposableEffect(lifecycleOwner)` | Stable lifecycle key; unregisters observer symmetrically. |
-| `HomeScreen.kt:89` | `DisposableEffect(lifecycleOwner)` | Stable lifecycle key; unregisters observer symmetrically. |
+| `HomeScreen.kt` lifecycle observer | `DisposableEffect(lifecycleOwner, sharedPrefs, soundSynth)` | All captured service-like dependencies are keyed; observer unregisters symmetrically. |
 | `Theme.kt:89` | `DisposableEffect(context)` | Context is the correct key for registered/theme-side cleanup. |
-| `GamepadView.kt:997, 1434, 2079, 2319, 2669, 2692` | `pointerInput(Unit)` | Several gesture blocks capture callbacks/state under a constant key. Analog/editor paths use `rememberUpdatedState`; button/D-pad paths should do the same or key the callbacks. |
-| `HomeScreen.kt:68` | `remember { context.getSharedPreferences(...) }` | Missing `context` key; use `remember(context)`. |
-| `GamepadView.kt:141` | `remember { ...sharedPrefs... }` | Missing `sharedPrefs` key; normally stable today but brittle for previews/tests. |
+| `GamepadView.kt` button/D-pad handlers | `pointerInput(Unit)` + `rememberUpdatedState` | Long-lived gesture coroutines retain stable state holders and invoke current callbacks; D-pad also filters its initiating pointer ID. |
+| `HomeScreen.kt` preferences | `remember(context)` | Context dependency is explicit. |
+| `GamepadView.kt` vibration preference | `remember(sharedPrefs)` | Preferences dependency is explicit for previews/tests. |
 
 No `CoroutineCreationDuringComposition`, `ProduceStateDoesNotAssignValue`, `UnrememberedMutableState`, `FrequentlyChangedStateReadInComposition`, or `AutoboxingStateCreation` finding was emitted by executed lint.
 
@@ -524,15 +526,18 @@ No `CoroutineCreationDuringComposition`, `ProduceStateDoesNotAssignValue`, `Unre
 7. 8 ms analog sampler with edge reports — complete; transport cadence needs hardware capture validation.
 8. DataStore layout repository, one-time migration, and gesture-end transaction — complete.
 9. Unused build declarations and resources — complete.
-10. Compose BOM/Material3 alignment — blocked by Expressive API source use and the no-version-bump constraint; migrate theme shapes or upgrade the complete Compose set in a dedicated change.
-11. Add fake Bluetooth facade tests and run the OEM/API device matrix before release.
+10. Late registration callback recovery — complete; retained latest request resumes on callback without another registration command.
+11. D-pad Hat Switch, gesture pointer ownership, neutral teardown report, and pure packing/geometry tests — complete; physical host validation remains.
+12. Narrow gamepad recomposition scopes and repair effect/callback keys — complete; production-source lint remains clean.
+13. Compose BOM/Material3 alignment — intentionally unchanged at the maintainer's request.
+14. Add a framework Bluetooth facade and run the OEM/API device matrix before release.
 
 ## 7. Changes intentionally not made
 
-- No descriptor byte or SDP semantic changes: explicitly deferred to the descriptor-focused follow-up.
+- No keyboard or mouse descriptor semantic changes. The gamepad-only correction was accepted in the second pass because issue #16 documents a host-visible defect and the new packet stays 11 bytes.
 - No public-API replacement exists for third-party A2DP/HFP disconnect. The surviving reflection is disabled by default and isolated behind the optional setting.
 - No receiver flag change: `RECEIVER_EXPORTED` may be needed for Bluetooth broadcasts sent by a privileged system package.
-- No complete `HomeScreen`/`GamepadView` rewrite: remaining state extraction is higher risk and should follow UI/device tests.
+- No wholesale `HomeScreen`/`GamepadView` rewrite: narrow, measurable restart-scope changes landed first; moving ~2,800 lines mechanically before device validation would make regressions harder to bisect.
 - No AGP, Kotlin, Compose BOM, SDK, target, or signing change. The only added coordinate is stable `androidx.datastore:datastore-preferences:1.2.1`.
 - No adaptive-icon qualifier suppression: moving `<adaptive-icon>` from `mipmap-anydpi-v26` made AAPT fail to resolve both manifest icons, so the one `ObsoleteSdkInt` warning is retained.
 - No lint baseline or blanket suppression; lint reporting was already enabled sufficiently for HTML/XML/text.
@@ -586,10 +591,76 @@ The final release dependency graph succeeds and confirms DataStore `1.2.1`. It a
 
 Research used current official primary sources: [Android Compose BOM guidance](https://developer.android.com/develop/ui/compose/bom) (individual Compose versions should be omitted when using a BOM), [Compose phase guidance](https://developer.android.com/develop/ui/compose/performance/bestpractices) (lambda modifiers defer frequently changing reads), [DataStore guidance](https://developer.android.com/topic/libraries/architecture/datastore) (one instance per file, repository/data-layer ownership), [DataStore release notes](https://developer.android.com/jetpack/androidx/releases/datastore) (stable `1.2.1` on 2026-09-09), [`BluetoothHidDevice` callback documentation](https://developer.android.com/reference/android/bluetooth/BluetoothHidDevice.Callback), and Kotlin [`StateFlow`](https://kotlinlang.org/api/kotlinx.coroutines/kotlinx-coroutines-core/kotlinx.coroutines.flow/-state-flow/) / [`conflate`](https://kotlinlang.org/api/kotlinx.coroutines/kotlinx-coroutines-core/kotlinx.coroutines.flow/conflate.html) documentation.
 
+### 7.2 Maintainer decisions and second-pass resolutions (2026-09-16)
+
+| Decision/finding | Resolution | Benefits | Cost/risk |
+|---|---|---|---|
+| Latest connection selection wins. | The existing conflated `StateFlow` + `collectLatest` design remains. After the bounded three registration attempts time out, `connectWhenReady` suspends on `appRegistrationState.first { it }`; a later callback resumes that request, while a newer selection cancels it. | No unbounded `registerApp()` loop; late Motorola/Tecno/LG-style callbacks are useful; deterministic latest-wins cancellation. | A firmware that never calls back retains one suspended coroutine until a newer request, Bluetooth teardown, or process teardown cancels it. |
+| The 8-second callback timeout is a weak field baseline. | It remains a named constant and produces `Inconclusive`, never “unsupported.” Three attempts remain the hard command ceiling. | Honest capability semantics and bounded active retries. | Worst-case UI wait before passive late-callback mode is approximately 24 seconds plus backoff/cleanup. |
+| Audio prevention is optional. | Hidden A2DP/HFP `disconnect(BluetoothDevice)` reflection remains default-off. Public proxy acquisition/closure is retained. | Preserves the only available best-effort workaround for issue #7 without affecting default behavior. | Android exposes no public third-party disconnect call; OEM hidden-API policy may block it. It cannot be called “fixed” until tested on the affected Linux route. |
+| Compose dependency set stays as-is. | No Compose BOM, Material3, Kotlin, AGP, SDK, or target change. | Avoids combining lifecycle/input fixes with an alpha/stable alignment migration. | Known Material3/runtime skew remains and should be handled separately only when the maintainer chooses. |
+| Neutral/reset gamepad reports. | Buttons/D-pad already bypass sampling; disposal now sends an immediate all-released, centered-stick, neutral-hat report before the 8 ms ticker is cancelled. | Prevents stuck buttons/axes when switching modes or leaving the screen. | One extra 11-byte report on Gamepad disposal. |
+| Bluke issue #16. | D-pad moved from button bits 12–15 to Generic Desktop Hat Switch usage `0x39`; guide/share/touchpad use freed button bits 12–14; the gesture tracks its initiating pointer; geometry uses an absolute arm-width threshold. | Standard host mapping on Linux/Windows/SDL, no dropped Right direction, correct multi-touch ownership. | Descriptor cache makes re-pairing mandatory; hardware validation is still required on each host family. |
+
+The gamepad decision is backed by the project's [issue #16](https://github.com/arnav-kr/Bluke/issues/16), the USB-IF [HID Usage Tables](https://www.usb.org/hid) (Hat Switch is Generic Desktop usage `0x39`), and the [Linux gamepad specification](https://www.kernel.org/doc/html/latest/input/gamepad.html). Compose changes follow the current Android guidance to defer state reads and use lambda modifiers; no new Compose dependency was introduced.
+
+Second-pass verification:
+
+```text
+> .\gradlew.bat :app:testDebugUnitTest :app:assembleDebug --no-daemon --warning-mode all
+> Task :app:assembleDebug
+> Task :app:testDebugUnitTest
+BUILD SUCCESSFUL in 2m 35s
+47 actionable tasks: 11 executed, 36 up-to-date
+Configuration cache entry reused.
+```
+
+JUnit XML totals after the gamepad tests: **13 tests, 0 failures, 0 errors, 0 skipped**. `GamepadReportTest` verifies all Hat Switch values, the neutral report, axis packing, and the unchanged 11-byte packet size. `GamepadInputTest` sweeps the visible cardinal arms, corners, center deadzone, non-square bounds, and reachable masks.
+
+Production-source lint after the Compose pass:
+
+```text
+> .\gradlew.bat :app:lintDebug -x :app:lintAnalyzeDebugUnitTest --no-daemon --no-parallel
+> Task :app:lintReportDebug
+Wrote HTML report to file:///C:/Users/DELL/Documents/Bluke/app/build/reports/lint-results-debug.html
+> Task :app:lintDebug
+BUILD SUCCESSFUL in 38s
+28 actionable tasks: 2 executed, 2 from cache, 24 up-to-date
+```
+
+The exclusion is not a source suppression. Two full reruns failed only because another Java process held AGP's generated unit-test lint cache JAR:
+
+```text
+Execution failed for task ':app:lintAnalyzeDebugUnitTest'.
+java.nio.file.FileSystemException: ...RuntimeIssueRegistry-81d6cad1ff46c20f..jar:
+The process cannot access the file because it is being used by another process
+```
+
+The production analyzer and report completed with the same 21 version/SDK warnings and no Gamepad/Home/Compose correctness issue. Unit tests and `assembleDebug` completed separately in 58 seconds. No source or dependency change was made to work around the environmental file lock.
+
+### 7.3 Physical validation matrix
+
+No Android device or AVD was available locally. Real output was:
+
+```text
+List of devices attached
+```
+
+Therefore the audio-routing workaround, real SDP registration timing, HID host parsing, and OEM behavior are **not locally verified**. Use the debug APK from `app/build/outputs/apk/debug/app-debug.apk`, and remove the old pairing on both phone and host before every descriptor test.
+
+| Target | Required checks | Evidence to capture |
+|---|---|---|
+| API 28 | Fresh pair, connect, keyboard/mouse/gamepad, mode exit while holding a control, reconnect after force-stop. | Bluke developer log + host input events. |
+| API 31 | Deny/grant Nearby Devices, scan/connect, Bluetooth toggle, reconnect. | Permission UI result and callback timeline. |
+| API 36 | Same matrix plus background/foreground and repeated process recreation. | Callback times from `registerApp()` through `onAppStatusChanged` and connection state. |
+| Motorola/Tecno/LG | Repeat fresh pair, force-stop/relaunch, and Bluetooth toggle at least three times. LG V50 is specifically represented by issues #11 and #21. | Device model/build fingerprint, Android version, complete developer log; note any callback later than 8/16/24 seconds. |
+| Linux host | With `Prevent Host Audio Routing` off, record whether PipeWire/WirePlumber routes phone audio to the PC. Repeat with it on across reconnect and Bluetooth toggle. | `wpctl status`/desktop route before and after, Android log lines for all A2DP/HFP sweeps. |
+| Linux/Windows gamepad | Re-pair, then press every D-pad direction/diagonal and guide/share/touchpad; leave Gamepad while holding each class of control. | Linux `evtest` should show `ABS_HAT0X/Y`; Windows Game Controllers/SDL should show a POV hat; all controls must return neutral. |
+
 ## 8. Open questions for the maintainer
 
-1. Should a registration callback that arrives after all three 8-second attempt windows automatically re-drain the retained latest connection request, or wait for an explicit retry?
-2. Can the optional “Prevent Host Audio Routing” setting be validated against the Linux host that originally captured audio, including reconnect and Bluetooth-toggle cases?
-3. Which physical devices/API levels can cover the release matrix (especially API 28/31/36 and Motorola/Tecno/LG firmware), and can future failures include callback/logcat timelines?
-4. For the next dependency-only change, should `ThemeConfig.kt` move off Expressive shapes to the pinned stable BOM, or should the whole Compose BOM be upgraded together after screenshot testing?
-5. Should neutral/reset reports also bypass the 8 ms sampler explicitly, beyond the implemented button and D-pad edges?
+1. On which API 28, 31, and 36 devices did the physical matrix pass or fail, and can the resulting developer logs/build fingerprints be attached?
+2. Does `Prevent Host Audio Routing` keep audio on the phone across initial connect, reconnect, and a Bluetooth off/on cycle on the affected Linux host?
+3. Do any Motorola, Tecno, or LG runs deliver `onAppStatusChanged(true)` after the active retry ceiling; if so, what is the measured callback delay?
+4. After re-pairing, do Linux `evtest` and Windows/SDL both expose the D-pad as a hat and receive the final neutral report on mode exit?
+5. After device validation, should the next refactor mechanically split `GamepadView.kt`, `TouchpadView.kt`, and `BehaviorActivity.kt`, or keep that separate from this compatibility branch?
