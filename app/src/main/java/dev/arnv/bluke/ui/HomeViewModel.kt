@@ -75,7 +75,18 @@ class HomeViewModel(manager: BluetoothKeyboardManager) : ViewModel() {
     }.stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(stopTimeoutMillis = 5_000),
-        initialValue = HomeUiState(),
+        initialValue = HomeUiState(
+            bluetoothState = manager.serviceState.value,
+            statusMessage = manager.statusMessage.value,
+            bondedDevices = manager.bondedDevices.value,
+            scannedDevices = manager.scannedDevices.value,
+            isScanning = manager.isScanning.value,
+            connectedDevice = manager.connectedDevice.value,
+            capsLock = manager.capsLockState.value,
+            numLock = manager.numLockState.value,
+            scrollLock = manager.scrollLockState.value,
+            hidLifecycleState = manager.lifecycleState.value,
+        ),
     )
 
     companion object {
