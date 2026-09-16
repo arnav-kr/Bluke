@@ -11,6 +11,8 @@ Working branch: `refactor`
 - **P1 fixed — process ownership:** `BlukeApplication` owns the manager for the application lifetime; teardown now closes the HID proxy/receivers and cancels executors/coroutines.
 - **P1 mitigated — hidden APIs:** the invalid `setBluetoothClass(Int)` reflection was removed. A2DP/HFP reflection remains only behind an opt-in Linux workaround that defaults off.
 - **P1 fixed — gamepad transport:** analog state is sampled by an 8 ms (125 Hz) ticker; button, D-pad, and final neutral/release edges bypass the sampler. The D-pad is now a HID Hat Switch instead of colliding button bits (Bluke issue #16).
+- **P1 fixed — misleading restart action:** normal startup, registration, pairing, and pairing refusal no longer expose `Restart HID Service`; the action is restricted to exhausted proxy-binding or app-registration failures.
+- **P1 mitigated — cached gamepad descriptor:** existing installations now receive a descriptor-revision prompt explaining that both sides must forget and re-pair; fresh installs record the current revision during onboarding.
 - **P1 fixed — layout persistence:** gesture changes are staged in memory and committed at gesture end through a single Preferences DataStore repository with one-time migration.
 - **P1 partially fixed — UI state/performance:** Bluetooth, discovery, connection, lifecycle, and lock state are hoisted into immutable `HomeUiState`; rapidly changing gamepad button reads are isolated to child restart scopes and long-lived pointer handlers observe current callbacks. Editor/transient presentation state remains local.
 - **P2 open — Compose alignment:** Material3 `1.4.0-alpha04` still lifts runtime to `1.8.0-alpha06`; removing the override fails compilation because `ThemeConfig.kt` uses Expressive-only APIs. A BOM/toolchain upgrade was prohibited in this pass.
@@ -705,6 +707,39 @@ Therefore the audio-routing workaround, real SDP registration timing, HID host p
 | Motorola/Tecno/LG | Repeat fresh pair, force-stop/relaunch, and Bluetooth toggle at least three times. LG V50 is specifically represented by issues #11 and #21. | Device model/build fingerprint, Android version, complete developer log; note any callback later than 8/16/24 seconds. |
 | Linux host | With `Prevent Host Audio Routing` off, record whether PipeWire/WirePlumber routes phone audio to the PC. Repeat with it on across reconnect and Bluetooth toggle. | `wpctl status`/desktop route before and after, Android log lines for all A2DP/HFP sweeps. |
 | Linux/Windows gamepad | Re-pair, then press every D-pad direction/diagonal and guide/share/touchpad; leave Gamepad while holding each class of control. | Linux `evtest` should show `ABS_HAT0X/Y`; Windows Game Controllers/SDL should show a POV hat; all controls must return neutral. |
+
+### 7.4 Reported UI/gamepad regression follow-up (2026-09-16)
+
+The transient restart action had two deterministic UI causes:
+
+1. `StatusHeaderCard` treated every `BluetoothState.ReadyDisconnected` value as a service failure even though that value is also the initial state and is explicitly published while the HID proxy binds.
+2. The same condition searched presentation text for `failed` or `error`. A normal rejected pairing publishes `Pairing with '<host>' refused or failed.`, so the unrelated HID restart action appeared.
+
+The card now consumes `HidLifecycleState` and offers restart only for exhausted binding/registration failures (`BINDING_REJECTED`, `BINDING_TIMEOUT`, `REGISTRATION_REJECTED`, or `REGISTRATION_TIMEOUT`). It stays hidden for `Idle`, active binding/registration, registered, connecting, connected, and `CONNECTION_REJECTED`. `StatusHeaderPolicyTest` covers every state/failure branch.
+
+The current gamepad packet and descriptor are internally consistent: report ID 3 is still 11 bytes; bytes 0–1 are 16 buttons, the low nibble of byte 2 is the Hat Switch, and bytes 3–10 are the four 16-bit axes. The reported combination—D-pad absent while center buttons appear in former D-pad positions—is the expected signature of a host parsing new reports with Bluke's cached pre-refactor 18-button descriptor. The project's [issue #16](https://github.com/arnav-kr/Bluke/issues/16) independently records that reinstalling alone did not refresh the descriptor and that removing the pairing on both sides fixed the same class of failure. The [Linux gamepad specification](https://docs.kernel.org/input/gamepad.html) also requires a D-pad to arrive as `BTN_DPAD_*` or `ABS_HAT0X/Y`, rather than relying on generic button positions.
+
+**ASSUMPTION:** The reporting host still has the old pairing/descriptor; no host `evtest`, SDL, Windows Game Controllers, or Bluetooth cache capture was supplied in this follow-up. This is a high-confidence diagnosis from the exact old/new bit layouts, but it remains to be confirmed by a fresh two-sided pairing.
+
+To prevent silent recurrence on same-`versionCode` test builds, the app now stores a HID descriptor revision. Existing installations missing the current revision receive a one-time, persistent re-pair explanation; new installs record the current revision after onboarding. Acknowledging the prompt records the revision. `HidDescriptorRevisionTest` verifies that old existing installs prompt while fresh/current installs do not.
+
+Executed verification:
+
+```text
+> .\gradlew.bat :app:testDebugUnitTest --tests dev.arnv.bluke.ui.StatusHeaderPolicyTest :app:assembleDebug --warning-mode all --stacktrace
+> Task :app:assembleDebug
+> Task :app:testDebugUnitTest
+BUILD SUCCESSFUL in 2m 10s
+47 actionable tasks: 8 executed, 39 up-to-date
+
+> .\gradlew.bat :app:testDebugUnitTest --tests dev.arnv.bluke.bluetooth.HidDescriptorRevisionTest --tests dev.arnv.bluke.bluetooth.GamepadReportTest --tests dev.arnv.bluke.ui.GamepadInputTest :app:assembleDebug --warning-mode all --stacktrace
+> Task :app:assembleDebug
+> Task :app:testDebugUnitTest
+BUILD SUCCESSFUL in 1m 40s
+47 actionable tasks: 10 executed, 37 up-to-date
+```
+
+Required physical confirmation: forget the host in Android, remove Bluke on the host, pair again, then verify all eight D-pad directions and the menu/share/guide buttons. On Linux, capture `evtest`; the D-pad must be `ABS_HAT0X/Y` and center buttons must not produce hat events.
 
 ## 8. Open questions for the maintainer
 
