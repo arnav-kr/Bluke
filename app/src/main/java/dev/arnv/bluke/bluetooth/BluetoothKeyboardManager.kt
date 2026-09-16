@@ -370,6 +370,36 @@ class BluetoothKeyboardManager(private val context: Context) {
     }
 
     private val sharedPrefs = context.getSharedPreferences("bluetooth_keyboard_prefs", Context.MODE_PRIVATE)
+    private val appPreferences = context.getSharedPreferences("app_prefs", Context.MODE_PRIVATE)
+    @Volatile
+    private var gamepadDpadOutputMode = GamepadDpadOutputMode.fromPreference(
+        appPreferences.getString(GAMEPAD_DPAD_MODE_PREFERENCE, null),
+    )
+    private val behaviorPreferenceListener =
+        android.content.SharedPreferences.OnSharedPreferenceChangeListener { preferences, key ->
+            if (key == GAMEPAD_DPAD_MODE_PREFERENCE) {
+                val newMode = GamepadDpadOutputMode.fromPreference(
+                    preferences.getString(GAMEPAD_DPAD_MODE_PREFERENCE, null),
+                )
+                if (newMode != gamepadDpadOutputMode) {
+                    _connectedDevice.value?.let { device ->
+                        submitReport(
+                            device,
+                            3,
+                            buildGamepadReport(0, 0, 0f, 0f, 0f, 0f, gamepadDpadOutputMode),
+                        )
+                    }
+                    gamepadDpadOutputMode = newMode
+                    _connectedDevice.value?.let { device ->
+                        submitReport(
+                            device,
+                            3,
+                            buildGamepadReport(0, 0, 0f, 0f, 0f, 0f, newMode),
+                        )
+                    }
+                }
+            }
+        }
 
     private var lastConnectedDeviceAddress: String?
         get() = sharedPrefs.getString("last_connected_device_address", null)
@@ -396,6 +426,7 @@ class BluetoothKeyboardManager(private val context: Context) {
 
     init {
         try {
+            appPreferences.registerOnSharedPreferenceChangeListener(behaviorPreferenceListener)
             checkBluetoothCapabilities()
             registerBondReceiver()
         } catch (e: Throwable) {
@@ -1110,6 +1141,7 @@ class BluetoothKeyboardManager(private val context: Context) {
                 leftYFloat,
                 rightXFloat,
                 rightYFloat,
+                gamepadDpadOutputMode,
             )
             submitReport(dev, 3, report) // Gamepad report ID is 3
         }
@@ -1169,6 +1201,7 @@ class BluetoothKeyboardManager(private val context: Context) {
     @SuppressLint("MissingPermission")
     fun close() {
         resetKeyboardState()
+        appPreferences.unregisterOnSharedPreferenceChangeListener(behaviorPreferenceListener)
         connectionTimeoutFuture?.cancel(false)
         stopScanning()
         if (isReceiverRegistered) {

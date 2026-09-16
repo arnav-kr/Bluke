@@ -43,6 +43,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 
 
 import androidx.core.content.edit
+import dev.arnv.bluke.bluetooth.GAMEPAD_DPAD_MODE_PREFERENCE
+import dev.arnv.bluke.bluetooth.GamepadDpadOutputMode
 
 class BehaviorActivity : ComponentActivity() {
     @OptIn(ExperimentalMaterial3Api::class)
@@ -59,6 +61,13 @@ class BehaviorActivity : ComponentActivity() {
                 var autoConnectEnabled by remember { mutableStateOf(sharedPrefs.getBoolean("auto_connect", true)) }
                 var disconnectAudioProfiles by remember {
                     mutableStateOf(sharedPrefs.getBoolean("disconnect_audio_profiles", false))
+                }
+                var gamepadDpadOutputMode by remember {
+                    mutableStateOf(
+                        GamepadDpadOutputMode.fromPreference(
+                            sharedPrefs.getString(GAMEPAD_DPAD_MODE_PREFERENCE, null)
+                        )
+                    )
                 }
                 var keySensitivity by remember { mutableFloatStateOf(sharedPrefs.getFloat("key_sensitivity", 6f)) }
                 var lockSyncMode by remember { mutableStateOf(sharedPrefs.getString("lock_sync_mode", "host") ?: "host") }
@@ -214,6 +223,45 @@ class BehaviorActivity : ComponentActivity() {
                                     }
                                 )
                             )
+                        )
+
+                        SettingsCardGroup(
+                            title = "Gamepad D-pad Compatibility",
+                            items = GamepadDpadOutputMode.entries.map { mode ->
+                                val isNative = mode == GamepadDpadOutputMode.NATIVE_HAT
+                                SettingsItemData(
+                                    title = if (isNative) "Native Hat / POV" else "Web Compatibility",
+                                    subtitle = if (isNative) {
+                                        "Standard HID Hat for native Windows, Linux, Android, macOS, and TV games"
+                                    } else {
+                                        "Reports Up, Down, Left, and Right as browser buttons 12–15; use when web games ignore the Hat"
+                                    },
+                                    icon = {
+                                        Icon(
+                                            Icons.Default.SportsEsports,
+                                            null,
+                                            tint = MaterialTheme.colorScheme.primary,
+                                        )
+                                    },
+                                    action = {
+                                        RadioButton(
+                                            selected = gamepadDpadOutputMode == mode,
+                                            onClick = {
+                                                gamepadDpadOutputMode = mode
+                                                sharedPrefs.edit {
+                                                    putString(GAMEPAD_DPAD_MODE_PREFERENCE, mode.preferenceValue)
+                                                }
+                                            },
+                                        )
+                                    },
+                                    onClick = {
+                                        gamepadDpadOutputMode = mode
+                                        sharedPrefs.edit {
+                                            putString(GAMEPAD_DPAD_MODE_PREFERENCE, mode.preferenceValue)
+                                        }
+                                    },
+                                )
+                            },
                         )
                         
                         // Quick Cycle Configurations

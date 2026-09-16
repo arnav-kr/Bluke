@@ -50,6 +50,64 @@ class GamepadReportTest {
     }
 
     @Test
+    fun webCompatibility_reportsCardinalDpadAsButtonsAndNeutralHat() {
+        val report = buildGamepadReport(
+            buttonMask = 1 shl GAMEPAD_GUIDE_BUTTON_INDEX,
+            dpadMask = 0x01,
+            leftX = 0f,
+            leftY = 0f,
+            rightX = 0f,
+            rightY = 0f,
+            dpadOutputMode = GamepadDpadOutputMode.WEB_BUTTONS,
+        )
+
+        assertEquals(0x10, report[1].toInt() and 0xFF)
+        assertEquals(0x01, report[2].toInt() and 0xFF)
+        assertEquals(GAMEPAD_HAT_NEUTRAL, report[3].toInt() and 0xFF)
+    }
+
+    @Test
+    fun webCompatibility_reportsDiagonalAsTwoButtons() {
+        val report = buildGamepadReport(
+            buttonMask = 0,
+            dpadMask = 0x09,
+            leftX = 0f,
+            leftY = 0f,
+            rightX = 0f,
+            rightY = 0f,
+            dpadOutputMode = GamepadDpadOutputMode.WEB_BUTTONS,
+        )
+
+        assertEquals(0x90, report[1].toInt() and 0xFF)
+        assertEquals(GAMEPAD_HAT_NEUTRAL, report[3].toInt() and 0xFF)
+    }
+
+    @Test
+    fun nativeMode_clearsReservedDpadButtonBits() {
+        val report = buildGamepadReport(
+            buttonMask = 0x0F shl GAMEPAD_DPAD_FIRST_BUTTON_INDEX,
+            dpadMask = 0x02,
+            leftX = 0f,
+            leftY = 0f,
+            rightX = 0f,
+            rightY = 0f,
+        )
+
+        assertEquals(0, report[1].toInt() and 0xF0)
+        assertEquals(4, report[3].toInt() and 0xFF)
+    }
+
+    @Test
+    fun outputModePreference_defaultsToNativeHat() {
+        assertEquals(GamepadDpadOutputMode.NATIVE_HAT, GamepadDpadOutputMode.fromPreference(null))
+        assertEquals(GamepadDpadOutputMode.NATIVE_HAT, GamepadDpadOutputMode.fromPreference("unknown"))
+        assertEquals(
+            GamepadDpadOutputMode.WEB_BUTTONS,
+            GamepadDpadOutputMode.fromPreference(GamepadDpadOutputMode.WEB_BUTTONS.preferenceValue),
+        )
+    }
+
+    @Test
     fun neutralReport_releasesButtonsHatAndCentersAxes() {
         val report = buildGamepadReport(0, 0, 0f, 0f, 0f, 0f)
 

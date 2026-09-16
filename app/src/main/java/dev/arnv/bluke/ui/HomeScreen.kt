@@ -198,7 +198,9 @@ fun HomeScreen(
                     if (descriptorRefreshRequired) {
                         "Bluke's gamepad HID descriptor changed, but Bluetooth hosts cache the old layout. " +
                             "To restore the D-pad and center-button mappings, forget the host on this phone, " +
-                            "remove Bluke on the host, then pair again. Reinstalling the app alone is not enough."
+                            "remove Bluke on the host, then pair again once. Reinstalling the app alone is not enough. " +
+                            "After this refresh, Native Hat and Web Compatibility use the same descriptor, so switching " +
+                            "between them does not require pairing again."
                     } else {
                         "We've added new features and made significant underlying changes to the controller!\n" +
                             "For detailed information, see the changelog."
