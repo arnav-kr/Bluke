@@ -679,7 +679,7 @@ BUILD SUCCESSFUL in 51s
 tests=33 failures=0 errors=0 skipped=0
 ```
 
-The full `lintDebug` retry still fails before analysis completion on the previously documented external lock of AGP's generated `RuntimeIssueRegistry` cache JAR. Production-source lint excluding only that generated unit-test analyzer succeeds:
+An earlier full `lintDebug` retry failed before analysis completion on the previously documented external lock of AGP's generated `RuntimeIssueRegistry` cache JAR. Production-source lint excluding only that generated unit-test analyzer succeeded at that point:
 
 ```text
 > .\gradlew.bat :app:lintDebug -x :app:lintAnalyzeDebugUnitTest --no-daemon --no-parallel --warning-mode all
@@ -688,6 +688,8 @@ The full `lintDebug` retry still fails before analysis completion on the previou
 BUILD SUCCESSFUL in 2m 19s
 28 actionable tasks: 4 executed, 24 up-to-date
 ```
+
+A later full retry, after the external lock was released, succeeded; the lock was environmental rather than a source failure.
 
 #### Physical matrix status
 
@@ -737,7 +739,23 @@ BUILD SUCCESSFUL in 2m 10s
 > Task :app:testDebugUnitTest
 BUILD SUCCESSFUL in 1m 40s
 47 actionable tasks: 10 executed, 37 up-to-date
+
+> .\gradlew.bat :app:testDebugUnitTest --warning-mode all --stacktrace
+> Task :app:testDebugUnitTest
+BUILD SUCCESSFUL in 43s
+30 actionable tasks: 1 executed, 29 up-to-date
+
+JUnit XML: files=12 tests=37 failures=0 errors=0 skipped=0
+
+> .\gradlew.bat :app:lintDebug --warning-mode all --stacktrace
+> Task :app:lintReportDebug
+Wrote HTML report to file:///C:/Users/DELL/Documents/Bluke/app/build/reports/lint-results-debug.html
+> Task :app:lintDebug
+BUILD SUCCESSFUL in 2m 9s
+29 actionable tasks: 8 executed, 21 up-to-date
 ```
+
+The final lint XML contains 0 errors and 21 warnings: `GradleDependency` 10, `NewerVersionAvailable` 8, `AndroidGradlePluginVersion` 1, `ObsoleteSdkInt` 1, and `OldTargetApi` 1. No finding points to `HomeScreen`, `StatusHeaderCard`, `OnboardingActivity`, or the descriptor revision files.
 
 Required physical confirmation: forget the host in Android, remove Bluke on the host, pair again, then verify all eight D-pad directions and the menu/share/guide buttons. On Linux, capture `evtest`; the D-pad must be `ABS_HAT0X/Y` and center buttons must not produce hat events.
 
