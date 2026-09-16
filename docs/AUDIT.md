@@ -11,6 +11,7 @@ Working branch: `refactor`
 - **P1 fixed — process ownership:** `BlukeApplication` owns the manager for the application lifetime; teardown now closes the HID proxy/receivers and cancels executors/coroutines.
 - **P1 mitigated — hidden APIs:** the invalid `setBluetoothClass(Int)` reflection was removed. A2DP/HFP reflection remains only behind an opt-in Linux workaround that defaults off.
 - **P1 fixed — gamepad transport:** analog state is sampled by an 8 ms (125 Hz) ticker; button, D-pad, and final neutral/release edges bypass the sampler. The D-pad is now a HID Hat Switch instead of colliding button bits (Bluke issue #16).
+- **P1 fixed, application retest required — gamepad index collision:** the supplied Bluetooth capture proves the Hat descriptor reached the host and `evtest` proves all D-pad directions arrive. Guide/Share occupied raw button indices 12/13, which position-based consumers label D-pad Up/Down. Indices 12–15 are now reserved and auxiliary buttons moved to 16–18.
 - **P1 fixed — misleading restart action:** normal startup, registration, pairing, and pairing refusal no longer expose `Restart HID Service`; the action is restricted to exhausted proxy-binding or app-registration failures.
 - **P1 mitigated — cached gamepad descriptor:** existing installations now receive a descriptor-revision prompt explaining that both sides must forget and re-pair; fresh installs record the current revision during onboarding.
 - **P1 fixed — layout persistence:** gesture changes are staged in memory and committed at gesture end through a single Preferences DataStore repository with one-time migration.
@@ -18,7 +19,7 @@ Working branch: `refactor`
 - **P2 open — Compose alignment:** Material3 `1.4.0-alpha04` still lifts runtime to `1.8.0-alpha06`; removing the override fails compilation because `ThemeConfig.kt` uses Expressive-only APIs. A BOM/toolchain upgrade was prohibited in this pass.
 - **P2 fixed — resources:** unused resources and three malformed high-density WebPs were removed; adaptive icon background is explicitly `nodpi`.
 - Baseline: `assembleDebug` passed; lint reported 2 errors and 42 warnings; 3 tests passed and zero exercised Bluetooth/HID.
-- Final: `assembleDebug`, production-source `lintDebug`, `lintRelease`, and 33 unit tests pass. The 33 include 18 facade/OEM-behavior contract runs across simulated API 28/31/36. Debug lint reports 0 errors/21 warnings; release lint reports 0 errors/20 warnings.
+- Final: `assembleDebug`, 38 unit tests, and full `lintDebug` pass after the supplied-capture correction. The suite includes 18 facade/OEM-behavior contract runs across simulated API 28/31/36. Debug lint reports 0 errors/21 warnings; the preceding release gate reported 0 errors/20 warnings. The physical Android/OEM matrix remains open because ADB found no attached target.
 - No SDK, AGP, Kotlin, Compose BOM, signing, Fastlane, or F-Droid version/config changes were made. DataStore `1.2.1` is the only new dependency.
 
 ## 2. Repository reconnaissance
@@ -128,7 +129,7 @@ The refactor adds `BlukeApplication.kt`, `HidLifecycle.kt`, `HidRegistrationCoor
 
 After extraction, `HomeScreen.kt` is 1,026 lines; the new files are `DeviceListSection.kt` (204), `StatusHeaderCard.kt` (144), and `ProfileNotSupportedScreen.kt` (99). `HomeScreen.kt` remains critical and needs state-hoisting work.
 
-Post-refactor inventory additions/changed counts: `BlukeApplication.kt` 24 (process owner), `bluetooth/HidLifecycle.kt` 87 (state/retry/capability models), `bluetooth/HidRegistrationCoordinator.kt` 74 (facade-backed registration policy), `bluetooth/LatestRequestProcessor.kt` 26 (conflated cancellation policy), `bluetooth/GamepadReport.kt` 39 (pure HID gamepad packing), `ui/GamepadInput.kt` 39 (pure D-pad geometry), `data/LayoutRepository.kt` 65 (DataStore persistence/migration), `ui/HomeViewModel.kt` 102 (immutable Bluetooth UI state), `MainActivity.kt` 80, `BehaviorActivity.kt` 1,039, `BluetoothKeyboardManager.kt` 1,214, `GamepadView.kt` 2,799, and `HomeScreen.kt` 1,031. The original `main` inventory above remains the audit baseline.
+Post-refactor inventory additions/changed counts: `BlukeApplication.kt` 24 (process owner), `bluetooth/HidLifecycle.kt` 87 (state/retry/capability models), `bluetooth/HidRegistrationCoordinator.kt` 74 (facade-backed registration policy), `bluetooth/LatestRequestProcessor.kt` 26 (conflated cancellation policy), `bluetooth/GamepadReport.kt` 46 (pure HID gamepad packing), `ui/GamepadInput.kt` 39 (pure D-pad geometry), `data/LayoutRepository.kt` 65 (DataStore persistence/migration), `ui/HomeViewModel.kt` 102 (immutable Bluetooth UI state), `MainActivity.kt` 80, `BehaviorActivity.kt` 1,039, `BluetoothKeyboardManager.kt` 1,217, `GamepadView.kt` 2,802, and `HomeScreen.kt` 1,031. The original `main` inventory above remains the audit baseline.
 
 ### 2.3 Build configuration
 
@@ -485,7 +486,7 @@ ASSUMPTION: Exact hidden-API flags can differ on OEM Android 16 images; this aud
 - The single-thread executor preserves enqueue order and does not intentionally drop reports. It is unbounded, so bursts can accumulate stale motion reports and increase latency. Exceptions drop only the failed report. Connection callback events use a separate `MutableSharedFlow` with `DROP_OLDEST`, but that is not the HID payload queue.
 - No framework report is sent on the main thread. Payload construction and gamepad state mutation occur on the Compose/main thread, followed by executor submission.
 - Gamepad immediate motion reports are gated by `>= 8L`, but dirty state is flushed every `10L.milliseconds`; forced press/release reports bypass the gate. A refactor should sample latest state on a strict 8 ms ticker, send transition edges without reordering, and make backpressure semantics explicit.
-- At audited `main`, descriptor semantics had not been changed. The authorized second pass corrects report ID 3 to 16 buttons + a four-bit Hat Switch + four bits padding + four 16-bit axes, retaining the 11-byte report size. This requires removing the cached pairing and pairing again on both ends.
+- At audited `main`, descriptor semantics had not been changed. The first authorized second pass corrected report ID 3 to 16 buttons + a four-bit Hat Switch + four bits padding + four 16-bit axes (11 bytes). Analysis of the supplied capture then exposed a separate raw-index collision. The final report ID 3 layout is 19 declared buttons + five button-padding bits + a four-bit Hat Switch + four Hat-padding bits + four 16-bit axes (12 bytes). The app only emits indices 0–11 and 16–18; indices 12–15 remain zero. Every descriptor revision requires removing the cached pairing and pairing again on both ends.
 
 ### 5.3 Compose UI and performance
 
@@ -535,10 +536,11 @@ No `CoroutineCreationDuringComposition`, `ProduceStateDoesNotAssignValue`, `Unre
 12. Narrow gamepad recomposition scopes and repair effect/callback keys — complete; production-source lint remains clean.
 13. Compose BOM/Material3 alignment — intentionally unchanged at the maintainer's request.
 14. Extract a framework-neutral Bluetooth registration facade and latest-request processor — complete; deterministic API 28/31/36 simulations pass. Physical OEM/radio validation remains required before release.
+15. Reserve raw gamepad button indices 12–15 and move auxiliary buttons to 16–18 — complete from supplied capture evidence; retest in the originally failing application remains required.
 
 ## 7. Changes intentionally not made
 
-- No keyboard or mouse descriptor semantic changes. The gamepad-only correction was accepted in the second pass because issue #16 documents a host-visible defect and the new packet stays 11 bytes.
+- No keyboard or mouse descriptor semantic changes. The gamepad-only corrections were accepted because issue #16 and the supplied capture document host-visible defects. The final gamepad packet is 12 bytes; the one-byte increase keeps the report byte-aligned and avoids duplicating D-pad state as both buttons and a Hat Switch.
 - No public-API replacement exists for third-party A2DP/HFP disconnect. The surviving reflection is disabled by default and isolated behind the optional setting.
 - No receiver flag change: `RECEIVER_EXPORTED` may be needed for Bluetooth broadcasts sent by a privileged system package.
 - No wholesale `HomeScreen`/`GamepadView` rewrite: narrow, measurable restart-scope changes landed first; moving ~2,800 lines mechanically before device validation would make regressions harder to bisect.
@@ -603,10 +605,10 @@ Research used current official primary sources: [Android Compose BOM guidance](h
 | The 8-second callback timeout is a weak field baseline. | It remains a named constant and produces `Inconclusive`, never “unsupported.” Three attempts remain the hard command ceiling. | Honest capability semantics and bounded active retries. | Worst-case UI wait before passive late-callback mode is approximately 24 seconds plus backoff/cleanup. |
 | Audio prevention is optional. | Hidden A2DP/HFP `disconnect(BluetoothDevice)` reflection remains default-off. Public proxy acquisition/closure is retained. | Preserves the only available best-effort workaround for issue #7 without affecting default behavior. | Android exposes no public third-party disconnect call; OEM hidden-API policy may block it. It cannot be called “fixed” until tested on the affected Linux route. |
 | Compose dependency set stays as-is. | No Compose BOM, Material3, Kotlin, AGP, SDK, or target change. | Avoids combining lifecycle/input fixes with an alpha/stable alignment migration. | Known Material3/runtime skew remains and should be handled separately only when the maintainer chooses. |
-| Neutral/reset gamepad reports. | Buttons/D-pad already bypass sampling; disposal now sends an immediate all-released, centered-stick, neutral-hat report before the 8 ms ticker is cancelled. | Prevents stuck buttons/axes when switching modes or leaving the screen. | One extra 11-byte report on Gamepad disposal. |
-| Bluke issue #16. | D-pad moved from button bits 12–15 to Generic Desktop Hat Switch usage `0x39`; guide/share/touchpad use freed button bits 12–14; the gesture tracks its initiating pointer; geometry uses an absolute arm-width threshold. | Standard host mapping on Linux/Windows/SDL, no dropped Right direction, correct multi-touch ownership. | Descriptor cache makes re-pairing mandatory; hardware validation is still required on each host family. |
+| Neutral/reset gamepad reports. | Buttons/D-pad already bypass sampling; disposal now sends an immediate all-released, centered-stick, neutral-hat report before the 8 ms ticker is cancelled. | Prevents stuck buttons/axes when switching modes or leaving the screen. | One extra 12-byte report on Gamepad disposal. |
+| Bluke issue #16 and supplied host capture. | D-pad remains Generic Desktop Hat Switch usage `0x39`; the gesture tracks its initiating pointer; geometry uses an absolute arm-width threshold. The capture proved that reusing button indices 12–14 for guide/share/touchpad collides with the W3C standard positions 12–15 in position-based consumers, so those four indices are reserved and auxiliary buttons now use 16–18. | No dropped Right direction at HID/evdev; correct multi-touch ownership; Menu/Share can no longer masquerade as standard D-pad Up/Down. | Report ID 3 grows from 11 to 12 bytes and descriptor cache makes re-pairing mandatory. Linux exposes button usages above 16 as `BTN_TRIGGER_HAPPY*`, so application-level semantics still require cross-host validation. |
 
-The gamepad decision is backed by the project's [issue #16](https://github.com/arnav-kr/Bluke/issues/16), the USB-IF [HID Usage Tables](https://www.usb.org/hid) (Hat Switch is Generic Desktop usage `0x39`), and the [Linux gamepad specification](https://www.kernel.org/doc/html/latest/input/gamepad.html). Compose changes follow the current Android guidance to defer state reads and use lambda modifiers; no new Compose dependency was introduced.
+The gamepad decision is backed by the project's [issue #16](https://github.com/arnav-kr/Bluke/issues/16), the USB-IF [HID Usage Tables](https://www.usb.org/hid) (Hat Switch is Generic Desktop usage `0x39`), the [Linux gamepad specification](https://www.kernel.org/doc/html/latest/input/gamepad.html), Linux's current [`hid-input.c`](https://github.com/torvalds/linux/blob/master/drivers/hid/hid-input.c), and the W3C [Standard Gamepad layout](https://www.w3.org/TR/gamepad/#remapping). Compose changes follow the current Android guidance to defer state reads and use lambda modifiers; no new Compose dependency was introduced.
 
 Second-pass verification:
 
@@ -619,7 +621,7 @@ BUILD SUCCESSFUL in 2m 35s
 Configuration cache entry reused.
 ```
 
-JUnit XML totals after the gamepad tests: **13 tests, 0 failures, 0 errors, 0 skipped**. `GamepadReportTest` verifies all Hat Switch values, the neutral report, axis packing, and the unchanged 11-byte packet size. `GamepadInputTest` sweeps the visible cardinal arms, corners, center deadzone, non-square bounds, and reachable masks.
+JUnit XML totals at that checkpoint: **13 tests, 0 failures, 0 errors, 0 skipped**. `GamepadReportTest` verified all Hat Switch values, the neutral report, axis packing, and the then-current 11-byte packet. `GamepadInputTest` swept the visible cardinal arms, corners, center deadzone, non-square bounds, and reachable masks. Section 7.4 records the later capture-driven 12-byte layout and verification.
 
 Production-source lint after the Compose pass:
 
@@ -699,7 +701,7 @@ No Android device or AVD was available locally. Real output was:
 List of devices attached
 ```
 
-Therefore the audio-routing workaround, real SDP registration timing, HID host parsing, and OEM behavior are **not locally verified**. Use the debug APK from `app/build/outputs/apk/debug/app-debug.apk`, and remove the old pairing on both phone and host before every descriptor test.
+Therefore the audio-routing workaround, real SDP registration timing, and OEM behavior are **not locally verified**. The supplied Linux `pcapng`/`evtest` evidence now verifies the revision-2 HID descriptor and report path; Section 7.4 records that result. Use the debug APK from `app/build/outputs/apk/debug/app-debug.apk`, and remove the old pairing on both phone and host before every descriptor test.
 
 | Target | Required checks | Evidence to capture |
 |---|---|---|
@@ -708,7 +710,7 @@ Therefore the audio-routing workaround, real SDP registration timing, HID host p
 | API 36 | Same matrix plus background/foreground and repeated process recreation. | Callback times from `registerApp()` through `onAppStatusChanged` and connection state. |
 | Motorola/Tecno/LG | Repeat fresh pair, force-stop/relaunch, and Bluetooth toggle at least three times. LG V50 is specifically represented by issues #11 and #21. | Device model/build fingerprint, Android version, complete developer log; note any callback later than 8/16/24 seconds. |
 | Linux host | With `Prevent Host Audio Routing` off, record whether PipeWire/WirePlumber routes phone audio to the PC. Repeat with it on across reconnect and Bluetooth toggle. | `wpctl status`/desktop route before and after, Android log lines for all A2DP/HFP sweeps. |
-| Linux/Windows gamepad | Re-pair, then press every D-pad direction/diagonal and guide/share/touchpad; leave Gamepad while holding each class of control. | Linux `evtest` should show `ABS_HAT0X/Y`; Windows Game Controllers/SDL should show a POV hat; all controls must return neutral. |
+| Linux/Windows gamepad | Revision 2 passed the supplied Linux transport capture. Re-pair revision 3, then press every D-pad direction/diagonal and guide/share/touchpad; leave Gamepad while holding each class of control. | Linux `evtest` must retain `ABS_HAT0X/Y`; indices 12–15 must never emit; auxiliary inputs should follow them. Windows Game Controllers/SDL and the originally failing application remain unverified. |
 
 ### 7.4 Reported UI/gamepad regression follow-up (2026-09-16)
 
@@ -719,9 +721,53 @@ The transient restart action had two deterministic UI causes:
 
 The card now consumes `HidLifecycleState` and offers restart only for exhausted binding/registration failures (`BINDING_REJECTED`, `BINDING_TIMEOUT`, `REGISTRATION_REJECTED`, or `REGISTRATION_TIMEOUT`). It stays hidden for `Idle`, active binding/registration, registered, connecting, connected, and `CONNECTION_REJECTED`. `StatusHeaderPolicyTest` covers every state/failure branch.
 
-The current gamepad packet and descriptor are internally consistent: report ID 3 is still 11 bytes; bytes 0–1 are 16 buttons, the low nibble of byte 2 is the Hat Switch, and bytes 3–10 are the four 16-bit axes. The reported combination—D-pad absent while center buttons appear in former D-pad positions—is the expected signature of a host parsing new reports with Bluke's cached pre-refactor 18-button descriptor. The project's [issue #16](https://github.com/arnav-kr/Bluke/issues/16) independently records that reinstalling alone did not refresh the descriptor and that removing the pairing on both sides fixed the same class of failure. The [Linux gamepad specification](https://docs.kernel.org/input/gamepad.html) also requires a D-pad to arrive as `BTN_DPAD_*` or `ABS_HAT0X/Y`, rather than relying on generic button positions.
+#### Supplied `pcapng` and `evtest` analysis
 
-**ASSUMPTION:** The reporting host still has the old pairing/descriptor; no host `evtest`, SDL, Windows Game Controllers, or Bluetooth cache capture was supplied in this follow-up. This is a high-confidence diagnosis from the exact old/new bit layouts, but it remains to be confirmed by a fresh two-sided pairing.
+The new evidence disproves the earlier cached-descriptor diagnosis for this reproduction. The two supplied artifacts were read without modification:
+
+```text
+bluke.pcapng bytes=71584 sha256=633924D75E1DF038E1B882A6316743EFFBDC72CB7E9E71012B502D10E55BF908
+pasted-text.txt bytes=90060 sha256=BADB0E5F8D8362B62D27314834A38C981AFBF75218B833435E11D1834BC68A53
+
+parsedBytes=71584 fileBytes=71584 enhancedPacketBlocks=1133
+gamepadDescriptorOffset=14075
+button16DescriptorOffset=14083
+hatDescriptorOffset=14101
+rawA1Report3PatternCount=596
+```
+
+The descriptor bytes at offset 14,075 contain `05 01 09 05 A1 01 85 03`; offset 14,083 contains the then-current 16-button declaration; offset 14,101 contains `09 39 15 00 25 07`, the Hat Switch declaration. Therefore the host received the post-issue-#16 descriptor. The capture also contains 596 report-ID-3 input frames. This is direct evidence against stale descriptor parsing in this run.
+
+Using the maintainer-supplied physical input order, the first non-neutral frames and Linux events correlate as follows:
+
+| Physical input | Captured 11-byte report prefix | Raw button index | Linux event |
+|---|---:|---:|---|
+| A | `01 00 0F` | 0 | `BTN_SOUTH` |
+| B | `02 00 0F` | 1 | `BTN_EAST` |
+| X | `04 00 0F` | 2 | `BTN_C` |
+| Y | `08 00 0F` | 3 | `BTN_NORTH` |
+| LB | `10 00 0F` | 4 | `BTN_WEST` |
+| LT | `40 00 0F` | 6 | `BTN_TL` |
+| RB | `20 00 0F` | 5 | `BTN_Z` |
+| RT | `80 00 0F` | 7 | `BTN_TR` |
+| L3 | `00 04 0F` | 10 | `BTN_SELECT` |
+| R3 | `00 08 0F` | 11 | `BTN_START` |
+| Back | `00 01 0F` | 8 | `BTN_TL2` |
+| Start | `00 02 0F` | 9 | `BTN_TR2` |
+| Share | `00 20 0F` | 13 | `BTN_THUMBL` |
+| Menu/Guide | `00 10 0F` | 12 | `BTN_MODE` |
+
+All four stick axes also moved in `evtest`: `ABS_X` 157 events (121–65,430), `ABS_Y` 180 (2–63,817), `ABS_Z` 157 (14–65,424), and `ABS_RX` 157 (171–65,441). The capture confirms that usages `0x32`/`0x33` are Z/Rx; the misleading Rx/Ry descriptor comments were corrected without changing those axis bytes.
+
+The D-pad is working through both transport layers. `evtest` records `ABS_HAT0X` values -1/0/+1, `ABS_HAT0Y` values -1/0/+1, and combined X/Y diagonal transitions. The matching capture frames carry Hat values 0–7 and neutral 15. No D-pad press sets a button bit.
+
+The persistent label swap is a second issue: the prior fix reused raw button indices 12 and 13 for Menu/Guide and Share. Those are exactly D-pad Up and D-pad Down in the W3C Standard Gamepad layout. Linux correctly exposes generic HID Button 13 as `BTN_MODE` and Button 14 as `BTN_THUMBL`, but a position-based consumer that assumes the W3C layout labels those raw positions as D-pad directions. This exactly explains “Menu became D-pad Up” and “Share became D-pad Down.”
+
+**ASSUMPTION:** The unnamed application that displayed the swap is consuming an unmapped/raw gamepad and assigning W3C labels by array position. Its own input trace was not supplied. The byte-for-byte position match makes this the leading diagnosis, but its `Gamepad.mapping`/SDL mapping status still needs to be captured.
+
+The final correction declares 19 buttons, leaves indices 12–15 unassigned by the app, moves Guide/Share/Touchpad to 16/17/18, pads the button field to 24 bits, and retains the Hat Switch. The report is now 12 bytes: button bytes 0–2, Hat byte 3, and axes bytes 4–11. Descriptor revision 3 forces the existing re-pair prompt. This prevents auxiliary controls from impersonating canonical D-pad positions without emitting duplicate Hat-plus-button D-pad events.
+
+An application that ignores `ABS_HAT0X/Y` on an unknown controller can still present the D-pad as absent even though the kernel receives it. The safe application-side remedy is a device mapping that converts the Hat to buttons 12–15; duplicating D-pad state into generic HID buttons here would make Linux emit unrelated `BTN_MODE`/thumb events. The exact originally failing application must therefore be part of the retest.
 
 To prevent silent recurrence on same-`versionCode` test builds, the app now stores a HID descriptor revision. Existing installations missing the current revision receive a one-time, persistent re-pair explanation; new installs record the current revision after onboarding. Acknowledging the prompt records the revision. `HidDescriptorRevisionTest` verifies that old existing installs prompt while fresh/current installs do not.
 
@@ -757,12 +803,39 @@ BUILD SUCCESSFUL in 2m 9s
 
 The final lint XML contains 0 errors and 21 warnings: `GradleDependency` 10, `NewerVersionAvailable` 8, `AndroidGradlePluginVersion` 1, `ObsoleteSdkInt` 1, and `OldTargetApi` 1. No finding points to `HomeScreen`, `StatusHeaderCard`, `OnboardingActivity`, or the descriptor revision files.
 
-Required physical confirmation: forget the host in Android, remove Bluke on the host, pair again, then verify all eight D-pad directions and the menu/share/guide buttons. On Linux, capture `evtest`; the D-pad must be `ABS_HAT0X/Y` and center buttons must not produce hat events.
+Capture-driven correction gate:
+
+```text
+> .\gradlew.bat :app:testDebugUnitTest :app:assembleDebug --warning-mode all --stacktrace
+> Task :app:assembleDebug UP-TO-DATE
+> Task :app:testDebugUnitTest
+BUILD SUCCESSFUL in 47s
+47 actionable tasks: 1 executed, 46 up-to-date
+
+JUnit XML: files=12 tests=38 failures=0 errors=0 skipped=0
+
+> .\gradlew.bat :app:lintDebug --warning-mode all --stacktrace
+> Task :app:lintReportDebug
+Wrote HTML report to file:///C:/Users/DELL/Documents/Bluke/app/build/reports/lint-results-debug.html
+> Task :app:lintDebug
+BUILD SUCCESSFUL in 2m 53s
+29 actionable tasks: 8 executed, 21 up-to-date
+
+lint-results-debug.xml: issues=21 errors=0 warnings=21
+AndroidGradlePluginVersion=1 GradleDependency=10 NewerVersionAvailable=8 ObsoleteSdkInt=1 OldTargetApi=1
+
+> adb devices -l
+List of devices attached
+```
+
+Required physical confirmation: install this final build, forget the host in Android, remove Bluke on the host, and pair again because report ID 3 changed to 12 bytes. Repeat the supplied input order in both `evtest` and the originally failing application. The D-pad must remain `ABS_HAT0X/Y`; button indices 12–15 must remain inactive; Guide/Share/Touchpad must appear after those reserved positions and must not produce Hat events. The empty ADB list means the API 28/31/36 and Motorola/Tecno/LG physical matrix could not be executed on this workstation.
 
 ## 8. Open questions for the maintainer
 
 1. On which API 28, 31, and 36 devices did the physical matrix pass or fail, and can the resulting developer logs/build fingerprints be attached?
 2. Does `Prevent Host Audio Routing` keep audio on the phone across initial connect, reconnect, and a Bluetooth off/on cycle on the affected Linux host?
 3. Do any Motorola, Tecno, or LG runs deliver `onAppStatusChanged(true)` after the active retry ceiling; if so, what is the measured callback delay?
-4. After re-pairing, do Linux `evtest` and Windows/SDL both expose the D-pad as a hat and receive the final neutral report on mode exit?
-5. After device validation, should the next refactor mechanically split `GamepadView.kt`, `TouchpadView.kt`, and `BehaviorActivity.kt`, or keep that separate from this compatibility branch?
+4. Which application labeled Menu/Guide as D-pad Up and Share as D-pad Down, and did it report `Gamepad.mapping == "standard"`, an empty mapping, or an SDL mapping name?
+5. After re-pairing revision 3, does that application consume `ABS_HAT0X/Y`, keep raw positions 12–15 inactive, and expose Guide/Share after them?
+6. Do Windows Game Controllers/SDL expose the D-pad as a POV Hat and receive the final neutral report on mode exit?
+7. After device validation, should the next refactor mechanically split `GamepadView.kt`, `TouchpadView.kt`, and `BehaviorActivity.kt`, or keep that separate from this compatibility branch?
