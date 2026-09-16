@@ -756,10 +756,14 @@ class BluetoothKeyboardManager(private val context: Context) {
         }
 
         _lifecycleState.value = HidLifecycleState.Error(lastFailure)
-        _serviceState.value = BluetoothState.ReadyDisconnected
+        _serviceState.value = if (lastFailure.indicatesLikelyDeviceIncompatibility()) {
+            BluetoothState.ProfileNotSupported
+        } else {
+            BluetoothState.ReadyDisconnected
+        }
         _statusMessage.value = when (lastFailure) {
             HidFailure.BINDING_TIMEOUT -> "Bluetooth HID service did not respond. Try toggling Bluetooth."
-            else -> "Bluetooth HID service rejected binding. Try toggling Bluetooth."
+            else -> "This device appears incompatible: Android repeatedly rejected the Bluetooth HID Device profile."
         }
         return null
     }
@@ -1022,11 +1026,15 @@ class BluetoothKeyboardManager(private val context: Context) {
 
             val lastFailure = lastRegistrationFailure ?: HidFailure.REGISTRATION_REJECTED
             _lifecycleState.value = HidLifecycleState.Error(lastFailure)
-            _serviceState.value = BluetoothState.ReadyDisconnected
+            _serviceState.value = if (lastFailure.indicatesLikelyDeviceIncompatibility()) {
+                BluetoothState.ProfileNotSupported
+            } else {
+                BluetoothState.ReadyDisconnected
+            }
             _statusMessage.value = if (lastFailure == HidFailure.REGISTRATION_TIMEOUT) {
                 "HID registration callback timed out; support is inconclusive. Try toggling Bluetooth."
             } else {
-                "HID registration was rejected. Try toggling Bluetooth."
+                "This device appears incompatible: Android repeatedly rejected HID Device registration."
             }
             false
         }

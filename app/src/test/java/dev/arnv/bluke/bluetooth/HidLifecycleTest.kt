@@ -10,6 +10,15 @@ import org.junit.Test
 
 class HidLifecycleTest {
     @Test
+    fun onlySynchronousProfileRejectionsIndicateLikelyIncompatibility() {
+        assertEquals(true, HidFailure.BINDING_REJECTED.indicatesLikelyDeviceIncompatibility())
+        assertEquals(true, HidFailure.REGISTRATION_REJECTED.indicatesLikelyDeviceIncompatibility())
+        assertEquals(false, HidFailure.BINDING_TIMEOUT.indicatesLikelyDeviceIncompatibility())
+        assertEquals(false, HidFailure.REGISTRATION_TIMEOUT.indicatesLikelyDeviceIncompatibility())
+        assertEquals(false, HidFailure.CONNECTION_REJECTED.indicatesLikelyDeviceIncompatibility())
+    }
+
+    @Test
     fun retryPolicy_appliesExponentialBackoffAndBoundedJitter() {
         val policy = RetryPolicy(initialDelayMillis = 400, maxDelayMillis = 1_600, jitterRatio = 0.25)
 

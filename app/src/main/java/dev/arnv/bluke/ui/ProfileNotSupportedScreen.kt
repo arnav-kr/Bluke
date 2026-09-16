@@ -46,7 +46,7 @@ internal fun ProfileNotSupportedScreen(
         Text(
             text = when (bluetoothState) {
                 is BluetoothState.Unsupported -> "Bluetooth Not Supported"
-                is BluetoothState.ProfileNotSupported -> "HID Profile Not Supported"
+                is BluetoothState.ProfileNotSupported -> "Device Not Compatible"
                 else -> "Bluetooth is Off"
             },
             style = MaterialTheme.typography.headlineSmall,
@@ -57,14 +57,14 @@ internal fun ProfileNotSupportedScreen(
         Spacer(Modifier.height(12.dp))
         if (bluetoothState is BluetoothState.ProfileNotSupported) {
             Text(
-                text = "Your device's Bluetooth firmware does not support HID Device mode, which Bluke requires to act as a keyboard, mouse, or gamepad.",
+                text = "Bluke could not access the Bluetooth HID Device role after repeated attempts. This device's firmware may omit or disable the role required for keyboard, mouse, and gamepad output.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center
             )
             Spacer(Modifier.height(8.dp))
             Text(
-                text = "This is a manufacturer limitation and cannot be fixed by the app.",
+                text = "Compatibility depends on the exact firmware, not just the phone brand or model. Restart Bluetooth and retry before treating the device as unsupported.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.error,
                 textAlign = TextAlign.Center

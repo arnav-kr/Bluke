@@ -25,6 +25,19 @@ enum class HidFailure {
     CONNECTION_REJECTED,
 }
 
+/**
+ * A synchronous rejection that persists through the bounded retry policy is the best signal
+ * Android exposes for firmware that does not provide a usable HID Device role. Callback timeouts
+ * remain inconclusive because some OEM stacks acknowledge a successful command late or not at all.
+ */
+internal fun HidFailure.indicatesLikelyDeviceIncompatibility(): Boolean = when (this) {
+    HidFailure.BINDING_REJECTED,
+    HidFailure.REGISTRATION_REJECTED -> true
+    HidFailure.BINDING_TIMEOUT,
+    HidFailure.REGISTRATION_TIMEOUT,
+    HidFailure.CONNECTION_REJECTED -> false
+}
+
 data class RetryPolicy(
     val maxAttempts: Int = 3,
     val initialDelayMillis: Long = 300,
