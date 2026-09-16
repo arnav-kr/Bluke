@@ -25,9 +25,10 @@ class GamepadReportTest {
     }
 
     @Test
-    fun report_keepsElevenByteWireSizeAndUsesHatNibble() {
+    fun report_reservesStandardDpadButtonSlotsAndUsesHatNibble() {
         val report = buildGamepadReport(
-            buttonMask = (1 shl 12) or (1 shl 14),
+            buttonMask = (1 shl GAMEPAD_GUIDE_BUTTON_INDEX) or
+                (1 shl GAMEPAD_TOUCHPAD_BUTTON_INDEX),
             dpadMask = 0x08,
             leftX = -1f,
             leftY = 0f,
@@ -35,10 +36,10 @@ class GamepadReportTest {
             rightY = 0f,
         )
 
-        assertEquals(11, report.size)
+        assertEquals(GAMEPAD_REPORT_SIZE_BYTES, report.size)
         assertArrayEquals(
             byteArrayOf(
-                0x00, 0x50, 0x02,
+                0x00, 0x00, 0x05, 0x02,
                 0x00, 0x00,
                 0xFF.toByte(), 0x7F,
                 0xFF.toByte(), 0xFF.toByte(),
@@ -54,7 +55,7 @@ class GamepadReportTest {
 
         assertArrayEquals(
             byteArrayOf(
-                0x00, 0x00, 0x0F,
+                0x00, 0x00, 0x00, 0x0F,
                 0xFF.toByte(), 0x7F,
                 0xFF.toByte(), 0x7F,
                 0xFF.toByte(), 0x7F,
@@ -62,5 +63,14 @@ class GamepadReportTest {
             ),
             report,
         )
+    }
+
+    @Test
+    fun auxiliaryButtonsDoNotOverlapCanonicalDpadIndices() {
+        assertEquals(16, GAMEPAD_GUIDE_BUTTON_INDEX)
+        assertEquals(17, GAMEPAD_SHARE_BUTTON_INDEX)
+        assertEquals(18, GAMEPAD_TOUCHPAD_BUTTON_INDEX)
+        assertEquals(24, GAMEPAD_BUTTON_COUNT + GAMEPAD_BUTTON_PADDING_BITS)
+        assertEquals(12, GAMEPAD_REPORT_SIZE_BYTES)
     }
 }

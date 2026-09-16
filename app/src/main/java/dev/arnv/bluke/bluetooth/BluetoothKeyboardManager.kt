@@ -318,12 +318,15 @@ class BluetoothKeyboardManager(private val context: Context) {
         0x85.toByte(), 0x03.toByte(),         //   REPORT_ID (3)
         0x05.toByte(), 0x09.toByte(),         //   USAGE_PAGE (Button)
         0x19.toByte(), 0x01.toByte(),         //     USAGE_MINIMUM (Button 1)
-        0x29.toByte(), 0x10.toByte(),         //     USAGE_MAXIMUM (Button 16)
+        0x29.toByte(), GAMEPAD_BUTTON_COUNT.toByte(), // USAGE_MAXIMUM (Button 19)
         0x15.toByte(), 0x00.toByte(),         //     LOGICAL_MINIMUM (0)
         0x25.toByte(), 0x01.toByte(),         //     LOGICAL_MAXIMUM (1)
         0x75.toByte(), 0x01.toByte(),         //     REPORT_SIZE (1)
-        0x95.toByte(), 0x10.toByte(),         //     REPORT_COUNT (16)
-        0x81.toByte(), 0x02.toByte(),         //     INPUT (Data,Var,Abs) - 16 Buttons
+        0x95.toByte(), GAMEPAD_BUTTON_COUNT.toByte(), // REPORT_COUNT (19)
+        0x81.toByte(), 0x02.toByte(),         //     INPUT (Data,Var,Abs) - 19 Buttons
+        0x75.toByte(), 0x01.toByte(),         //     REPORT_SIZE (1)
+        0x95.toByte(), GAMEPAD_BUTTON_PADDING_BITS.toByte(), // REPORT_COUNT (5)
+        0x81.toByte(), 0x03.toByte(),         //     INPUT (Cnst,Var,Abs) - button padding
         0x05.toByte(), 0x01.toByte(),         //     USAGE_PAGE (Generic Desktop)
         0x09.toByte(), 0x39.toByte(),         //     USAGE (Hat Switch)
         0x15.toByte(), 0x00.toByte(),         //     LOGICAL_MINIMUM (0)
@@ -341,13 +344,13 @@ class BluetoothKeyboardManager(private val context: Context) {
         0x05.toByte(), 0x01.toByte(),         //     USAGE_PAGE (Generic Desktop)
         0x09.toByte(), 0x30.toByte(),         //     USAGE (X) - Left Stick X
         0x09.toByte(), 0x31.toByte(),         //     USAGE (Y) - Left Stick Y
-        0x09.toByte(), 0x32.toByte(),         //     USAGE (Rx) - Right Stick X
-        0x09.toByte(), 0x33.toByte(),         //     USAGE (Ry) - Right Stick Y
+        0x09.toByte(), 0x32.toByte(),         //     USAGE (Z) - Right Stick X
+        0x09.toByte(), 0x33.toByte(),         //     USAGE (Rx) - Right Stick Y
         0x15.toByte(), 0x00.toByte(),         //     LOGICAL_MINIMUM (0)
         0x27.toByte(), 0xff.toByte(), 0xff.toByte(), 0x00.toByte(), 0x00.toByte(), // LOGICAL_MAXIMUM (65535)
         0x75.toByte(), 0x10.toByte(),         //     REPORT_SIZE (16)
         0x95.toByte(), 0x04.toByte(),         //     REPORT_COUNT (4)
-        0x81.toByte(), 0x02.toByte(),         //     INPUT (Data,Var,Abs) - 4 16-bit Axes (X, Y, Rx, Ry)
+        0x81.toByte(), 0x02.toByte(),         //     INPUT (Data,Var,Abs) - 4 16-bit Axes (X, Y, Z, Rx)
         0xc0.toByte()                         // END_COLLECTION (Application)
     )
 

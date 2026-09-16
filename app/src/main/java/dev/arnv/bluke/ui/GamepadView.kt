@@ -44,6 +44,9 @@ import androidx.compose.ui.unit.sp
 import androidx.core.content.edit
 import dev.arnv.bluke.R
 import dev.arnv.bluke.bluetooth.BluetoothKeyboardManager
+import dev.arnv.bluke.bluetooth.GAMEPAD_GUIDE_BUTTON_INDEX
+import dev.arnv.bluke.bluetooth.GAMEPAD_SHARE_BUTTON_INDEX
+import dev.arnv.bluke.bluetooth.GAMEPAD_TOUCHPAD_BUTTON_INDEX
 import dev.arnv.bluke.data.LayoutRepository
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
@@ -74,7 +77,7 @@ private data class ConsoleConfig(
     val selectButton: ButtonDef,
     val startButton: ButtonDef,
     val guideButton: ButtonDef,
-    val shareButton: ButtonDef = ButtonDef("SHARE", 13),
+    val shareButton: ButtonDef = ButtonDef("SHARE", GAMEPAD_SHARE_BUTTON_INDEX),
     val leftStickAboveDpad: Boolean = true,
     val hasTouchpad: Boolean = false,
     val touchpadMappingId: Int = -1
@@ -96,8 +99,8 @@ private val CONSOLES = listOf(
         rightTrigger = ButtonDef("RT", 7),
         selectButton = ButtonDef("VIEW", 8),
         startButton = ButtonDef("MENU", 9),
-        guideButton = ButtonDef("XBOX", 12, Color(0xFF2E7D32)),
-        shareButton = ButtonDef("SHARE", 13),
+        guideButton = ButtonDef("XBOX", GAMEPAD_GUIDE_BUTTON_INDEX, Color(0xFF2E7D32)),
+        shareButton = ButtonDef("SHARE", GAMEPAD_SHARE_BUTTON_INDEX),
         leftStickAboveDpad = true
     ),
     ConsoleConfig(
@@ -113,11 +116,11 @@ private val CONSOLES = listOf(
         rightTrigger = ButtonDef("R2", 7),
         selectButton = ButtonDef("CREATE", 8),
         startButton = ButtonDef("OPTIONS", 9),
-        guideButton = ButtonDef("PS", 12, Color(0xFF1565C0)),
-        shareButton = ButtonDef("SHARE", 13),
+        guideButton = ButtonDef("PS", GAMEPAD_GUIDE_BUTTON_INDEX, Color(0xFF1565C0)),
+        shareButton = ButtonDef("SHARE", GAMEPAD_SHARE_BUTTON_INDEX),
         leftStickAboveDpad = false,
         hasTouchpad = true,
-        touchpadMappingId = 14
+        touchpadMappingId = GAMEPAD_TOUCHPAD_BUTTON_INDEX
     )
 )
 
