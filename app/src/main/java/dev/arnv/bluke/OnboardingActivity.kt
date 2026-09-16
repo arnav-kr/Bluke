@@ -41,6 +41,8 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.core.content.edit
+import dev.arnv.bluke.bluetooth.CURRENT_HID_DESCRIPTOR_REVISION
+import dev.arnv.bluke.bluetooth.HID_DESCRIPTOR_REVISION_PREFERENCE
 import dev.arnv.bluke.ui.theme.MyApplicationTheme
 import dev.arnv.bluke.ui.theme.getCookieShape
 import kotlinx.coroutines.delay
@@ -68,6 +70,7 @@ class OnboardingActivity : ComponentActivity() {
                             putBoolean("has_seen_onboarding", true)
                             putBoolean("has_seen_help", true)
                             putInt("last_run_version_code", dev.arnv.bluke.BuildConfig.VERSION_CODE)
+                            putInt(HID_DESCRIPTOR_REVISION_PREFERENCE, CURRENT_HID_DESCRIPTOR_REVISION)
                         }
                         startActivity(Intent(this@OnboardingActivity, MainActivity::class.java))
                         finish()

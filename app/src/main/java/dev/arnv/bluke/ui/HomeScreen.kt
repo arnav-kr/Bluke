@@ -50,6 +50,9 @@ import androidx.core.content.edit
 import androidx.core.net.toUri
 import dev.arnv.bluke.bluetooth.BluetoothKeyboardManager
 import dev.arnv.bluke.bluetooth.BluetoothState
+import dev.arnv.bluke.bluetooth.CURRENT_HID_DESCRIPTOR_REVISION
+import dev.arnv.bluke.bluetooth.HID_DESCRIPTOR_REVISION_PREFERENCE
+import dev.arnv.bluke.bluetooth.requiresHidDescriptorRefresh
 import dev.arnv.bluke.sound.KeyboardSoundSynthesizer
 import dev.arnv.bluke.sound.SwitchType
 
@@ -149,15 +152,21 @@ fun HomeScreen(
     val activePressedKeys = remember { mutableStateListOf<Int>() }
 
     var showUpdateDialog by rememberSaveable { mutableStateOf(false) }
+    var descriptorRefreshRequired by rememberSaveable { mutableStateOf(false) }
 
     LaunchedEffect(sharedPrefs) {
         val currentVersionCode = dev.arnv.bluke.BuildConfig.VERSION_CODE
         val savedVersionCode = sharedPrefs.getInt("last_run_version_code", 0)
+        val hasSeenOnboarding = sharedPrefs.getBoolean("has_seen_onboarding", false)
+        descriptorRefreshRequired = requiresHidDescriptorRefresh(
+            savedRevision = sharedPrefs.getInt(HID_DESCRIPTOR_REVISION_PREFERENCE, 1),
+            isExistingInstallation = savedVersionCode > 0 || hasSeenOnboarding,
+        )
         
         // If they have seen onboarding, they are an existing user.
         // If savedVersionCode < currentVersionCode, it's an update.
         if ((savedVersionCode > 0 && savedVersionCode < currentVersionCode) || 
-            (savedVersionCode == 0 && sharedPrefs.getBoolean("has_seen_onboarding", false))) {
+            (savedVersionCode == 0 && hasSeenOnboarding) || descriptorRefreshRequired) {
             showUpdateDialog = true
         }
         
@@ -178,12 +187,34 @@ fun HomeScreen(
                 showUpdateDialog = false
                 sharedPrefs.edit { putBoolean("mock_update_popup", false) }
             },
-            title = { Text("Updated to v$versionName") },
-            text = { Text("We've added new features and made significant underlying changes to the controller!\nFor detailed information, see the changelog.\n\n⚠️ IMPORTANT: Because the Bluetooth profiles have updated, you MUST completely unpair and remove Bluke and re-pair it on the phone and the target device. If you don't do this, the controller may not function properly and you will experience bugs.") },
+            title = {
+                Text(
+                    if (descriptorRefreshRequired) "Bluetooth pairing refresh required"
+                    else "Updated to v$versionName"
+                )
+            },
+            text = {
+                Text(
+                    if (descriptorRefreshRequired) {
+                        "Bluke's gamepad HID descriptor changed, but Bluetooth hosts cache the old layout. " +
+                            "To restore the D-pad and center-button mappings, forget the host on this phone, " +
+                            "remove Bluke on the host, then pair again. Reinstalling the app alone is not enough."
+                    } else {
+                        "We've added new features and made significant underlying changes to the controller!\n" +
+                            "For detailed information, see the changelog."
+                    }
+                )
+            },
             confirmButton = {
                 Button(onClick = { 
                     showUpdateDialog = false 
-                    sharedPrefs.edit { putBoolean("mock_update_popup", false) }
+                    sharedPrefs.edit {
+                        putBoolean("mock_update_popup", false)
+                        if (descriptorRefreshRequired) {
+                            putInt(HID_DESCRIPTOR_REVISION_PREFERENCE, CURRENT_HID_DESCRIPTOR_REVISION)
+                        }
+                    }
+                    descriptorRefreshRequired = false
                 }) {
                     Text("Got it")
                 }
