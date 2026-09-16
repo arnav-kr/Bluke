@@ -34,11 +34,22 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import dev.arnv.bluke.bluetooth.BluetoothState
+import dev.arnv.bluke.bluetooth.HidFailure
+import dev.arnv.bluke.bluetooth.HidLifecycleState
+
+internal fun shouldOfferHidRestart(state: HidLifecycleState): Boolean =
+    state is HidLifecycleState.Error && when (state.failure) {
+        HidFailure.BINDING_REJECTED,
+        HidFailure.BINDING_TIMEOUT,
+        HidFailure.REGISTRATION_REJECTED,
+        HidFailure.REGISTRATION_TIMEOUT -> true
+        HidFailure.CONNECTION_REJECTED -> false
+    }
 
 @Composable
 internal fun StatusHeaderCard(
     bluetoothState: BluetoothState,
-    statusMessage: String,
+    hidLifecycleState: HidLifecycleState,
     isScanning: Boolean,
     onToggleScan: () -> Unit,
     onRestartHid: () -> Unit
@@ -122,7 +133,7 @@ internal fun StatusHeaderCard(
                     Text(if (isScanning) "Stop" else "Scan", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.labelLarge)
                 }
             }
-            if (bluetoothState is BluetoothState.ReadyDisconnected || statusMessage.lowercase().contains("failed") || statusMessage.lowercase().contains("error")) {
+            if (shouldOfferHidRestart(hidLifecycleState)) {
                 Spacer(modifier = Modifier.height(12.dp))
                 Button(
                     onClick = onRestartHid,

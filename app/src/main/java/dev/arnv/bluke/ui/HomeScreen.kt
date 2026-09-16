@@ -905,7 +905,7 @@ fun HomeScreen(
                             item {
                                 StatusHeaderCard(
                                     bluetoothState = btState,
-                                    statusMessage = btMessage,
+                                    hidLifecycleState = homeUiState.hidLifecycleState,
                                     isScanning = isScanning,
                                     onToggleScan = {
                                         if (isScanning) btManager.stopScanning() else btManager.startScanning()
