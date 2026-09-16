@@ -15,6 +15,11 @@ internal enum class GamepadDpadOutputMode(val preferenceValue: String) {
     NATIVE_HAT("native_hat"),
     WEB_BUTTONS("web_buttons");
 
+    fun next(): GamepadDpadOutputMode = when (this) {
+        NATIVE_HAT -> WEB_BUTTONS
+        WEB_BUTTONS -> NATIVE_HAT
+    }
+
     companion object {
         fun fromPreference(value: String?): GamepadDpadOutputMode =
             entries.firstOrNull { it.preferenceValue == value } ?: NATIVE_HAT

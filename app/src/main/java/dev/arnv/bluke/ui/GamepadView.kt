@@ -44,9 +44,11 @@ import androidx.compose.ui.unit.sp
 import androidx.core.content.edit
 import dev.arnv.bluke.R
 import dev.arnv.bluke.bluetooth.BluetoothKeyboardManager
+import dev.arnv.bluke.bluetooth.GAMEPAD_DPAD_MODE_PREFERENCE
 import dev.arnv.bluke.bluetooth.GAMEPAD_GUIDE_BUTTON_INDEX
 import dev.arnv.bluke.bluetooth.GAMEPAD_SHARE_BUTTON_INDEX
 import dev.arnv.bluke.bluetooth.GAMEPAD_TOUCHPAD_BUTTON_INDEX
+import dev.arnv.bluke.bluetooth.GamepadDpadOutputMode
 import dev.arnv.bluke.data.LayoutRepository
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
@@ -148,6 +150,25 @@ fun GamepadView(
 
     var isVibrationEnabled by remember(sharedPrefs) {
         mutableStateOf(sharedPrefs.getBoolean("gamepad_vibration_enabled", true))
+    }
+    var dpadOutputMode by remember(sharedPrefs) {
+        mutableStateOf(
+            GamepadDpadOutputMode.fromPreference(
+                sharedPrefs.getString(GAMEPAD_DPAD_MODE_PREFERENCE, null)
+            )
+        )
+    }
+
+    DisposableEffect(sharedPrefs) {
+        val listener = SharedPreferences.OnSharedPreferenceChangeListener { preferences, key ->
+            if (key == GAMEPAD_DPAD_MODE_PREFERENCE) {
+                dpadOutputMode = GamepadDpadOutputMode.fromPreference(
+                    preferences.getString(GAMEPAD_DPAD_MODE_PREFERENCE, null)
+                )
+            }
+        }
+        sharedPrefs.registerOnSharedPreferenceChangeListener(listener)
+        onDispose { sharedPrefs.unregisterOnSharedPreferenceChangeListener(listener) }
     }
 
     val triggerVibration = { milliseconds: Long ->
@@ -529,6 +550,54 @@ fun GamepadView(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
+                    // D-pad output selector. The descriptor exposes both representations, so
+                    // changing this preference takes effect immediately without re-pairing.
+                    Row(
+                        modifier = Modifier
+                            .height(28.dp)
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(
+                                if (dpadOutputMode == GamepadDpadOutputMode.WEB_BUTTONS) {
+                                    MaterialTheme.colorScheme.primary.copy(alpha = 0.65f)
+                                } else {
+                                    Color.White.copy(alpha = 0.15f)
+                                }
+                            )
+                            .clickable {
+                                val newMode = dpadOutputMode.next()
+                                dpadOutputMode = newMode
+                                sharedPrefs.edit {
+                                    putString(GAMEPAD_DPAD_MODE_PREFERENCE, newMode.preferenceValue)
+                                }
+                                triggerVibration(15)
+                            }
+                            .padding(horizontal = 8.dp)
+                            .testTag("dpad_output_mode_toggle"),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Icon(
+                            imageVector = if (dpadOutputMode == GamepadDpadOutputMode.WEB_BUTTONS) {
+                                Icons.Default.Language
+                            } else {
+                                Icons.Default.Gamepad
+                            },
+                            contentDescription = null,
+                            tint = Color.White,
+                            modifier = Modifier.size(11.dp)
+                        )
+                        Text(
+                            text = if (dpadOutputMode == GamepadDpadOutputMode.WEB_BUTTONS) {
+                                "D-pad: Web"
+                            } else {
+                                "D-pad: Native"
+                            },
+                            color = Color.White,
+                            fontSize = 9.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+
                     // Reset Defaults (only shown when edit mode is active and there are layout changes)
                     if (isEditMode && isModified) {
                         Row(

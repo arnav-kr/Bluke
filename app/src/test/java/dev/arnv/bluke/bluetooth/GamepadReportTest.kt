@@ -108,6 +108,18 @@ class GamepadReportTest {
     }
 
     @Test
+    fun outputModeNext_togglesBetweenNativeAndWeb() {
+        assertEquals(
+            GamepadDpadOutputMode.WEB_BUTTONS,
+            GamepadDpadOutputMode.NATIVE_HAT.next(),
+        )
+        assertEquals(
+            GamepadDpadOutputMode.NATIVE_HAT,
+            GamepadDpadOutputMode.WEB_BUTTONS.next(),
+        )
+    }
+
+    @Test
     fun neutralReport_releasesButtonsHatAndCentersAxes() {
         val report = buildGamepadReport(0, 0, 0f, 0f, 0f, 0f)
 
