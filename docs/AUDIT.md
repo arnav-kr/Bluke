@@ -1007,9 +1007,21 @@ JUnit XML: files=19 tests=66 failures=0 errors=0 skipped=0
 > Task :app:assembleDebug
 BUILD SUCCESSFUL in 11s
 38 actionable tasks: 3 executed, 35 up-to-date
+
+> .\gradlew.bat lintDebug --no-daemon --no-parallel --max-workers=1 --warning-mode all --stacktrace
+> Task :app:lintReportDebug
+Wrote HTML report to file:///C:/Users/DELL/Documents/Bluke/app/build/reports/lint-results-debug.html
+> Task :app:lintDebug
+BUILD SUCCESSFUL in 2m 47s
+29 actionable tasks: 4 executed, 25 up-to-date
+
+lint-results-debug.xml: issues=21 errors=0 warnings=21
+AndroidGradlePluginVersion=1 GradleDependency=10 NewerVersionAvailable=8 ObsoleteSdkInt=1 OldTargetApi=1
 ```
 
 The first sandboxed build attempts failed before compilation because Gradle targeted unwritable `C:\.gradle` / `C:\.android` locations. A later complete-test attempt also deliberately retained its real failure output: pointing Java's `user.home` at the Gradle cache made Robolectric resolve mismatched artifacts (`AndroidVersions.CURRENT` was null and `DisplayMetrics.noncompatWidthPixels` was absent). The final successful run used the repository Gradle/Android caches and the real Windows user home for Robolectric's Maven cache. These were host-path corrections; no Gradle, AGP, Kotlin, Compose, or dependency version changed.
+
+The first final-lint attempt failed before issue evaluation because a second repository-local Gradle daemon held two generated lint-registry JARs: `FileSystemException: ...lint-cache...jar: The process cannot access the file because it is being used by another process`. Stopping both Gradle homes, removing only `app/build/intermediates/lint-cache`, and rerunning no-daemon/single-worker produced the successful result above. No source or dependency change was used to hide the failure.
 
 ## 8. Open questions for the maintainer
 
