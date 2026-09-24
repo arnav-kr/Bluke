@@ -19,12 +19,13 @@ Working branch: `refactor`
 - **P1 mitigated — cached gamepad descriptor:** existing installations now receive a descriptor-revision prompt explaining the one-time requirement to forget and re-pair on both sides; fresh installs record the current revision during onboarding. Once refreshed, switching between Native Hat and Web Compatibility never changes SDP and does not require another pairing.
 - **P1 fixed — layout persistence:** gesture changes are staged in memory and committed at gesture end through a single Preferences DataStore repository with one-time migration.
 - **P1 fixed — keyboard locale architecture/RTL:** physical board style is separated from character output profile; US QWERTY, French AZERTY, German QWERTZ, Dvorak, and Colemak are selectable and emit the displayed ASCII key when the host uses US QWERTY. Physical positions are retained separately for stable rendering. The keyboard surface is explicitly LTR, so Android's developer “Force RTL” option no longer mirrors it.
+- **P1 fixed — manual theme customization:** manual color mode now offers a persistent three-color palette for background, keys/surfaces, and accent/text, with validated `#RRGGBB` entry and an in-dialog preview. Presets and Dynamic Colors remain independently selectable.
 - **P1 fixed, device validation required — custom key sounds:** Mechvibes V2 multi-file and V1 single-audio-sprite ZIP packs can be safely imported. V1 audio is decoded and split once with Android platform codecs, then preloaded into the existing low-latency `SoundPool`; no decoder dependency was added. Failed/stale custom selections now recover to built-in sounds.
 - **P1 partially fixed — UI state/performance:** Bluetooth, discovery, connection, lifecycle, and lock state are hoisted into immutable `HomeUiState`; rapidly changing gamepad button reads are isolated to child restart scopes and long-lived pointer handlers observe current callbacks. Editor/transient presentation state remains local.
 - **P2 open — Compose alignment:** Material3 `1.4.0-alpha04` still lifts runtime to `1.8.0-alpha06`; removing the override fails compilation because `ThemeConfig.kt` uses Expressive-only APIs. A BOM/toolchain upgrade was prohibited in this pass.
 - **P2 fixed — resources:** unused resources and three malformed high-density WebPs were removed; adaptive icon background is explicitly `nodpi`.
 - Baseline: `assembleDebug` passed; lint reported 2 errors and 42 warnings; 3 tests passed and zero exercised Bluetooth/HID.
-- Final: `assembleDebug`, 57 unit tests, and full `lintDebug` pass after the custom-sound/layout follow-up. The suite includes 18 facade/OEM-behavior contract runs across simulated API 28/31/36 plus HID UI policy, sound-pack archive safety/parsing and stale-selection recovery, audio-sprite WAV framing, sound-preference migration, locale output mapping, gamepad input/report, and compatibility-classification coverage. Debug lint reports 0 errors/21 warnings. The physical Android/OEM matrix and platform-codec decode of a real OGG pack remain open because ADB found no attached target.
+- Final: `assembleDebug`, 60 unit tests, and full `lintDebug` pass after the custom-theme follow-up. The suite includes 18 facade/OEM-behavior contract runs across simulated API 28/31/36 plus HID UI policy, sound-pack archive safety/parsing and stale-selection recovery, audio-sprite WAV framing, sound-preference migration, locale output mapping, custom-theme parsing/contrast logic, gamepad input/report, and compatibility-classification coverage. Debug lint reports 0 errors/21 warnings. The physical Android/OEM matrix and platform-codec decode of a real OGG pack remain open because ADB found no attached target.
 - No SDK, AGP, Kotlin, Compose BOM, signing, Fastlane, or F-Droid version/config changes were made. DataStore `1.2.1` is the only new dependency.
 
 ## 2. Repository reconnaissance
@@ -940,6 +941,24 @@ BUILD FAILED in 34s
 The first was corrected by explicitly using the existing user Gradle cache. The second was an intermediate settings-list edit and was corrected before the successful compile/test/lint gates above. One test-source compile failure (`BluetoothState.PairingMode` referenced without its required name) was likewise corrected before the successful 52-test run.
 
 The supplied video could not be decoded in this workstation environment: no local video decoder was available, and the in-app browser correctly blocked local `file://` access. The two supplied screenshots and executable UI branch were sufficient to prove the unsupported-screen layering issue. This limitation is not treated as evidence about device timing or animation behavior.
+
+### 7.6 Manual custom theme follow-up (2026-09-24)
+
+Manual theme selection previously exposed only 20 fixed accent swatches; background and surface roles remained hardcoded. The new Custom colors entry accepts three opaque six-digit RGB values: background, keys/surfaces, and accent/text. Values are validated before saving, previewed together, persisted in `app_prefs`, and observed by `MyApplicationTheme` for immediate recomposition. Choosing a fixed swatch disables Custom mode; enabling Custom also disables wallpaper Dynamic Colors. The saved custom palette remains available when switching away and back.
+
+The requested colors are mapped to Material roles rather than applied ad hoc to individual screens. Background drives `background` and `surface`; keys/surfaces drive container and `surfaceVariant` roles; accent/text drives primary and foreground roles. Button text over the accent uses a luminance-selected black or white foreground. This keeps the feature descriptor-neutral and requires neither re-pairing nor a new dependency. A deliberately low-contrast background/accent combination remains possible because these are user-authored colors; the dialog preview makes that choice visible before application.
+
+New source inventory: `CustomThemeColorDialog.kt` 138 lines (hex editor and palette preview), `ui/theme/CustomThemeColors.kt` 30 lines (preference keys, parser/formatter, contrast helper), and `ui/theme/CustomThemeColorsTest.kt` 28 lines (pure validation tests).
+
+```text
+> .\gradlew testDebugUnitTest assembleDebug lintDebug --no-daemon --no-parallel --warning-mode all --stacktrace
+Wrote HTML report to file:///C:/Users/DELL/Documents/Bluke/app/build/reports/lint-results-debug.html
+BUILD SUCCESSFUL in 5m 54s
+56 actionable tasks: 18 executed, 38 up-to-date
+
+JUnit XML: files=18 tests=60 failures=0 errors=0 skipped=0
+lint-results-debug.xml: issues=21 errors=0 warnings=21
+```
 
 ## 8. Open questions for the maintainer
 
