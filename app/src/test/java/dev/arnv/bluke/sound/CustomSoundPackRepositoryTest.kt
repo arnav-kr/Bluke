@@ -3,6 +3,7 @@ package dev.arnv.bluke.sound
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Assert.fail
 import org.junit.Test
@@ -49,7 +50,7 @@ class CustomSoundPackRepositoryTest {
     }
 
     @Test
-    fun rejectsTraversalAndSpritePacks() {
+    fun rejectsTraversalAndConvertsSpritePacks() {
         try {
             validatedArchivePath("../outside.ogg")
             fail("Traversal path should be rejected")
@@ -58,7 +59,17 @@ class CustomSoundPackRepositoryTest {
         }
 
         val context = ApplicationProvider.getApplicationContext<Context>()
-        val repository = CustomSoundPackRepository(context)
+        val repository = CustomSoundPackRepository(
+            context = context,
+            audioSpriteConverter = AudioSpriteConverter { _, outputDirectory, slices ->
+                outputDirectory.mkdirs()
+                slices.associate { slice ->
+                    val output = outputDirectory.resolve("${slice.key}.wav")
+                    output.writeBytes(byteArrayOf(1, 2, 3))
+                    slice.key to output
+                }
+            },
+        )
         val archive = zip(
             "config.json" to """
                 {
@@ -73,8 +84,10 @@ class CustomSoundPackRepositoryTest {
 
         val result = repository.importZip(ByteArrayInputStream(archive))
 
-        assertTrue(result is SoundPackImportResult.Failure)
-        assertTrue((result as SoundPackImportResult.Failure).message.contains("Audio-sprite"))
+        assertTrue(result is SoundPackImportResult.Success)
+        val pack = (result as SoundPackImportResult.Success).pack
+        assertTrue(pack.defaultPressFiles.isNotEmpty())
+        assertTrue(pack.pressFiles.containsKey(30))
     }
 
     @Test
@@ -83,6 +96,16 @@ class CustomSoundPackRepositoryTest {
         assertEquals(16, mechvibesKeyCodeForHid(0x14))
         assertEquals(57, mechvibesKeyCodeForHid(0x2c))
         assertEquals(57416, mechvibesKeyCodeForHid(0x52))
+    }
+
+    @Test
+    fun staleSelectedPackIsClearedForBuiltInFallback() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val repository = CustomSoundPackRepository(context)
+        repository.select("pack-that-does-not-exist")
+
+        assertNull(repository.selectedPack())
+        assertNull(repository.selectedPackId())
     }
 
     private fun zip(vararg entries: Pair<String, ByteArray>): ByteArray {

@@ -111,7 +111,7 @@ class SoundPacksActivity : ComponentActivity() {
                         verticalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
                         Text(
-                            "Import Mechvibes V2 multi-file ZIP packs. The active pack is preloaded for low-latency playback.",
+                            "Import Mechvibes ZIP packs. Audio-sprite packs are converted once, then the active pack is preloaded for low-latency playback.",
                             style = MaterialTheme.typography.bodyMedium,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )

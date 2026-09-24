@@ -25,7 +25,10 @@ sealed interface SoundPackImportResult {
     data class Failure(val message: String) : SoundPackImportResult
 }
 
-class CustomSoundPackRepository(private val context: Context) {
+internal class CustomSoundPackRepository(
+    private val context: Context,
+    private val audioSpriteConverter: AudioSpriteConverter = AndroidAudioSpriteConverter(),
+) {
     private companion object {
         const val MAX_ARCHIVE_ENTRIES = 512
         const val MAX_UNCOMPRESSED_BYTES = 64L * 1024L * 1024L
@@ -45,7 +48,13 @@ class CustomSoundPackRepository(private val context: Context) {
         }
     }
 
-    fun selectedPack(): CustomSoundPack? = selectedPackId()?.let(::findPack)
+    fun selectedPack(): CustomSoundPack? {
+        val selectedId = selectedPackId() ?: return null
+        return findPack(selectedId) ?: run {
+            select(null)
+            null
+        }
+    }
 
     fun listPacks(): List<CustomSoundPack> = packsDirectory.listFiles()
         .orEmpty()
@@ -70,7 +79,7 @@ class CustomSoundPackRepository(private val context: Context) {
                 ?: return SoundPackImportResult.Failure("The archive does not contain a config.json file.")
                     .also { staging.deleteRecursively() }
             val root = configFile.parentFile ?: staging
-            val parsed = parsePack(root)
+            val parsed = preparePack(root)
             val destination = File(packsDirectory, safePackId(parsed.id))
             if (destination.exists()) destination.deleteRecursively()
             if (!root.renameTo(destination)) {
@@ -87,6 +96,51 @@ class CustomSoundPackRepository(private val context: Context) {
             staging.deleteRecursively()
             SoundPackImportResult.Failure(error.message ?: "Could not import this sound pack.")
         }
+    }
+
+    private fun preparePack(root: File): CustomSoundPack {
+        val configFile = File(root, "config.json")
+        require(configFile.isFile) { "The sound pack config.json must be at the pack root." }
+        val config = JSONObject(configFile.readText())
+        if (config.optString("key_define_type") == "single") {
+            convertAudioSpritePack(root, configFile, config)
+        }
+        return parsePack(root)
+    }
+
+    private fun convertAudioSpritePack(root: File, configFile: File, config: JSONObject) {
+        val sourceFiles = resolveAudioPattern(root, config.optString("sound"))
+        require(sourceFiles.size == 1) { "The audio-sprite pack must reference one playable sound file." }
+        val definitions = config.optJSONObject("defines")
+            ?: error("The audio-sprite pack has no key definitions.")
+        val slices = definitions.keys().asSequence().mapNotNull { key ->
+            val range = definitions.optJSONArray(key) ?: return@mapNotNull null
+            if (range.length() < 2) return@mapNotNull null
+            AudioSpriteSlice(
+                key = key,
+                startMillis = range.optLong(0, -1),
+                durationMillis = range.optLong(1, -1),
+            )
+        }.toList()
+        require(slices.isNotEmpty()) { "The audio-sprite pack has no valid key ranges." }
+
+        val generatedDirectory = File(root, ".bluke-samples")
+        val converted = audioSpriteConverter.convert(sourceFiles.single(), generatedDirectory, slices)
+        require(converted.isNotEmpty()) { "No audio-sprite samples could be converted." }
+        val convertedDefinitions = JSONObject()
+        converted.forEach { (key, file) ->
+            convertedDefinitions.put(key, file.relativeTo(root).invariantSeparatorsPath)
+        }
+        val defaultFile = converted["30"] ?: converted.values.first()
+        if (!File(root, "config.original.json").exists()) {
+            File(root, "config.original.json").writeText(config.toString(2))
+        }
+        config.put("key_define_type", "multi")
+        config.put("sound", defaultFile.relativeTo(root).invariantSeparatorsPath)
+        config.put("soundup", "")
+        config.put("defines", convertedDefinitions)
+        config.put("version", 2)
+        configFile.writeText(config.toString(2))
     }
 
     private fun extractZip(input: InputStream, destination: File) {
@@ -132,7 +186,7 @@ class CustomSoundPackRepository(private val context: Context) {
         val type = config.optString("key_define_type")
         if (type == "single") {
             throw UnsupportedSoundPackException(
-                "Audio-sprite Mechvibes packs are not supported yet. Convert the pack to V2 multi-file format."
+                "This audio-sprite pack has not been converted for low-latency playback."
             )
         }
         require(type == "multi") { "Only Mechvibes V2 multi-file packs are supported." }
