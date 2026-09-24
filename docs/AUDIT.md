@@ -18,13 +18,13 @@ Working branch: `refactor`
 - **P1 fixed — misleading restart action:** normal startup, registration, pairing, and pairing refusal no longer expose `Restart HID Service`; the action is restricted to exhausted proxy-binding or app-registration failures.
 - **P1 mitigated — cached gamepad descriptor:** existing installations now receive a descriptor-revision prompt explaining the one-time requirement to forget and re-pair on both sides; fresh installs record the current revision during onboarding. Once refreshed, switching between Native Hat and Web Compatibility never changes SDP and does not require another pairing.
 - **P1 fixed — layout persistence:** gesture changes are staged in memory and committed at gesture end through a single Preferences DataStore repository with one-time migration.
-- **P1 fixed — keyboard locale architecture/RTL:** physical board style is separated from character legend profile; US QWERTY, French AZERTY, German QWERTZ, Dvorak, and Colemak are selectable while HID usages remain physical. The keyboard surface is explicitly LTR, so Android's developer “Force RTL” option no longer mirrors it.
-- **P1 added with bounded scope — custom key sounds:** Mechvibes V2 multi-file ZIP packs can be safely imported and preloaded into the existing low-latency `SoundPool`. Audio-sprite packs are explicitly rejected pending an offline converter; no decoder dependency was added.
+- **P1 fixed — keyboard locale architecture/RTL:** physical board style is separated from character output profile; US QWERTY, French AZERTY, German QWERTZ, Dvorak, and Colemak are selectable and emit the displayed ASCII key when the host uses US QWERTY. Physical positions are retained separately for stable rendering. The keyboard surface is explicitly LTR, so Android's developer “Force RTL” option no longer mirrors it.
+- **P1 fixed, device validation required — custom key sounds:** Mechvibes V2 multi-file and V1 single-audio-sprite ZIP packs can be safely imported. V1 audio is decoded and split once with Android platform codecs, then preloaded into the existing low-latency `SoundPool`; no decoder dependency was added. Failed/stale custom selections now recover to built-in sounds.
 - **P1 partially fixed — UI state/performance:** Bluetooth, discovery, connection, lifecycle, and lock state are hoisted into immutable `HomeUiState`; rapidly changing gamepad button reads are isolated to child restart scopes and long-lived pointer handlers observe current callbacks. Editor/transient presentation state remains local.
 - **P2 open — Compose alignment:** Material3 `1.4.0-alpha04` still lifts runtime to `1.8.0-alpha06`; removing the override fails compilation because `ThemeConfig.kt` uses Expressive-only APIs. A BOM/toolchain upgrade was prohibited in this pass.
 - **P2 fixed — resources:** unused resources and three malformed high-density WebPs were removed; adaptive icon background is explicitly `nodpi`.
 - Baseline: `assembleDebug` passed; lint reported 2 errors and 42 warnings; 3 tests passed and zero exercised Bluetooth/HID.
-- Final: `assembleDebug`, 52 unit tests, and full `lintDebug` pass after the custom-sound/layout follow-up. The suite includes 18 facade/OEM-behavior contract runs across simulated API 28/31/36 plus HID UI policy, sound-pack archive safety/parsing, locale legend mapping, gamepad input/report, and compatibility-classification coverage. Debug lint reports 0 errors/21 warnings. The physical Android/OEM matrix remains open because ADB found no attached target.
+- Final: `assembleDebug`, 57 unit tests, and full `lintDebug` pass after the custom-sound/layout follow-up. The suite includes 18 facade/OEM-behavior contract runs across simulated API 28/31/36 plus HID UI policy, sound-pack archive safety/parsing and stale-selection recovery, audio-sprite WAV framing, sound-preference migration, locale output mapping, gamepad input/report, and compatibility-classification coverage. Debug lint reports 0 errors/21 warnings. The physical Android/OEM matrix and platform-codec decode of a real OGG pack remain open because ADB found no attached target.
 - No SDK, AGP, Kotlin, Compose BOM, signing, Fastlane, or F-Droid version/config changes were made. DataStore `1.2.1` is the only new dependency.
 
 ## 2. Repository reconnaissance
@@ -136,7 +136,7 @@ The refactor adds `BlukeApplication.kt`, `HidLifecycle.kt`, `HidRegistrationCoor
 
 After extraction, `HomeScreen.kt` is 1,026 lines; the new files are `DeviceListSection.kt` (204), `StatusHeaderCard.kt` (144), and `ProfileNotSupportedScreen.kt` (99). `HomeScreen.kt` remains critical and needs state-hoisting work.
 
-Post-refactor inventory additions/changed counts: `BlukeApplication.kt` 24 (process owner), `bluetooth/HidLifecycle.kt` 87 (state/retry/capability models), `bluetooth/HidRegistrationCoordinator.kt` 74 (facade-backed registration policy), `bluetooth/LatestRequestProcessor.kt` 26 (conflated cancellation policy), `bluetooth/GamepadReport.kt` 71 (pure HID gamepad packing and D-pad output policy), `ui/GamepadInput.kt` 39 (pure D-pad geometry), `data/LayoutRepository.kt` 65 (DataStore persistence/migration), `ui/HomeViewModel.kt` 102 (immutable Bluetooth UI state), `MainActivity.kt` 80, `BehaviorActivity.kt` 1,087, `BluetoothKeyboardManager.kt` 1,250, `GamepadView.kt` 2,802, and `HomeScreen.kt` 1,033. The original `main` inventory above remains the audit baseline.
+Post-refactor inventory additions/changed counts: `BlukeApplication.kt` 24 (process owner), `bluetooth/HidLifecycle.kt` 87 (state/retry/capability models), `bluetooth/HidRegistrationCoordinator.kt` 74 (facade-backed registration policy), `bluetooth/LatestRequestProcessor.kt` 26 (conflated cancellation policy), `bluetooth/GamepadReport.kt` 71 (pure HID gamepad packing and D-pad output policy), `ui/GamepadInput.kt` 39 (pure D-pad geometry), `data/LayoutRepository.kt` 65 (DataStore persistence/migration), `ui/HomeViewModel.kt` 102 (immutable Bluetooth UI state), `sound/AudioSpriteConverter.kt` 215 (platform-codec sprite decode and WAV slicing), `sound/SoundPreferences.kt` 27 (sound-setting migration), `sound/CustomSoundPackRepository.kt` 320 (safe pack import/selection), `sound/KeyboardSoundSynthesizer.kt` 661 (preloaded audio-bank lifecycle/playback; **refactor candidate**), `ui/KeyboardCharacterLayouts.kt` 115 (logical output profiles), `ui/KeyboardLayouts.kt` 654 (keyboard geometry/key models; **refactor candidate**), `MainActivity.kt` 85, `BehaviorActivity.kt` 1,136 (**critical**), `BluetoothKeyboardManager.kt` 1,250 (**critical**), `GamepadView.kt` 2,802 (**critical**), and `HomeScreen.kt` 1,033 (**critical**). Test additions: `sound/AudioSpriteConverterTest.kt` 32 and `sound/SoundPreferencesTest.kt` 54. The original `main` inventory above remains the audit baseline.
 
 ### 2.3 Build configuration
 
@@ -876,9 +876,9 @@ The reported visual contradiction was deterministic in `HomeScreen`: `ProfileNot
 
 #### Keyboard layout architecture and RTL
 
-The old `KeyboardLayoutType` mixes physical geometry and colorway names such as Olivia, Dracula, and HHKB. It is retained for compatibility, while `KeyboardCharacterLayout` now independently models the host typing layout with stable preference values. Character profiles transform legends *after* parsing the KLE geometry, so each key retains its original USB HID usage. This is required because the host OS—not the HID peripheral—maps physical usages to characters. For example, French AZERTY displays `A` at the physical Q position but continues transmitting usage `KEY_Q`; a host configured for French produces `A`.
+The old `KeyboardLayoutType` mixes physical geometry and colorway names such as Olivia, Dracula, and HHKB. It is retained for compatibility, while `KeyboardCharacterLayout` now independently models a character-output profile with stable preference values. The first implementation changed only legends and retained the original USB HID usage; that made the displayed French `A` at physical Q transmit `KEY_Q`, exactly matching the reported failure on a US-QWERTY host. The corrected model retains `physicalKeyCode` for identity/rendering and separately changes `keyCode` to the displayed ASCII usage. Therefore physical Q in the French profile now emits `KEY_A` without requiring a host-layout change.
 
-The first registry contains US QWERTY, French AZERTY, German QWERTZ, Dvorak, and Colemak. This is an extensible baseline, not a claim to cover every international keyboard. “All international layouts” is not a finite interoperable set: regional variants differ in dead keys, AltGr layers, ISO/JIS geometry, and input-method behavior. The current on-screen boards are ANSI-derived and do not contain the ISO extra key. The next safe expansion should add a geometry capability model (`ANSI`, `ISO`, `JIS`) and profile layers instead of hardcoding more labels into KLE strings. Unicode LDML similarly separates physical key maps, modifier maps, and output transforms: [Unicode LDML Keyboard Layouts](https://www.unicode.org/reports/tr35/tr35-keyboards.html).
+The first registry contains US QWERTY, French AZERTY, German QWERTZ, Dvorak, and Colemak. This is an extensible ASCII baseline, not a claim to cover every international keyboard. The French profile intentionally omits accented/dead-key and AltGr legends that cannot truthfully be emitted as one unmodified HID usage to a US-QWERTY host. Regional variants differ in dead keys, modifier layers, ISO/JIS geometry, and input-method behavior; the current on-screen boards are ANSI-derived and do not contain the ISO extra key. The next safe expansion should add a geometry capability model (`ANSI`, `ISO`, `JIS`) and explicit modifier/output transforms instead of hardcoding more labels into KLE strings. Unicode LDML similarly separates physical key maps, modifier maps, and output transforms: [Unicode LDML Keyboard Layouts](https://www.unicode.org/reports/tr35/tr35-keyboards.html).
 
 `KeyboardView` now provides `LayoutDirection.Ltr` at its root. App chrome can still localize and follow RTL normally, but developer-forced RTL can no longer mirror physical key coordinates or touch hitboxes.
 
@@ -886,17 +886,21 @@ The first registry contains US QWERTY, French AZERTY, German QWERTZ, Dvorak, and
 
 Upstream source and format documentation were inspected rather than inferred. Mechvibes V2 supports `key_define_type: "multi"` with a default `sound`, optional/default `soundup`, numeric standard key-code overrides, `-up` release definitions, and filename ranges such as `GENERIC_R{0-4}.mp3`. It unloads the previous pack and preloads only the selected pack. Sources: [Mechvibes config versions](https://github.com/hainguyents13/mechvibes/wiki/Config-Versions), [Mechvibes sound packs](https://github.com/hainguyents13/mechvibes/wiki/Soundpacks), [MechvibesDX V2 format](https://github.com/hainguyents13/mechvibes-dx/blob/main/docs/soundpack-config-v2.md), and [MechvibesDX architecture](https://github.com/hainguyents13/mechvibes-dx/blob/main/docs/system-architecture.md).
 
-Bluke now follows that lifecycle using its existing low-latency `SoundPool`: import through Android's document picker, validate/extract in app-private storage, unload the previous bank, deduplicate audio files, preload the selected bank on one loader executor, and play by an explicit USB-HID-to-Mechvibes-standard-keycode map. ZIP import rejects absolute/traversal paths, limits entries to 512, individual files to 16 MiB, and total expanded data to 64 MiB. Selection is persistent and switching back to a built-in profile unloads the custom bank. No storage permission and no new third-party dependency are required.
+Bluke now follows that lifecycle using its existing low-latency `SoundPool`: import through Android's document picker, validate/extract in app-private storage, unload the previous bank, deduplicate audio files, wait for decoder completion, atomically publish only successfully decoded samples, and play by an explicit USB-HID-to-Mechvibes-standard-keycode map. ZIP import rejects absolute/traversal paths, limits entries to 512, individual files to 16 MiB, and total expanded data to 64 MiB. Selection is persistent and switching back to a built-in profile unloads the custom bank. A missing pack or a pack with no decodable key-down sample clears the stale selection and rebuilds the built-in bank instead of leaving the keyboard silent. No storage permission and no new third-party dependency are required.
 
-Mechvibes `single` packs are audio sprites: each key definition is a start/duration range in one file. Android `SoundPool` cannot seek and play arbitrary sprite slices. Playing the entire file or adding a general-purpose FFmpeg decoder would violate the low-latency/low-risk goal. These packs therefore return a clear “convert to V2 multi-file” error. A future offline importer may decode and split sprites once, then use the same `SoundPool` bank.
+The public [Mechvibes sound-pack catalogue](https://mechvibes.com/sound-packs/) was checked directly after the field report. Its “CherryMX Black - ABS keycaps” download is a V1 pack containing only `config.json` plus `sound.ogg`; `key_define_type` is `single`, and numeric definitions are `[startMillis, durationMillis]` pairs. The inspected ZIP SHA-256 was `91108F918684DDEF0F22C06E1B621B76813F91193FB1069749F8AFCEB0414CC4`. This is the concrete reason the V2-only importer rejected a normal pack from the linked site.
+
+V1 import now decodes the sprite once with `MediaExtractor`/`MediaCodec`, accepts PCM16 or PCM-float decoder output, bounds decoded data to 64 MiB, slices each unique range into an app-private PCM16 WAV, preserves the upstream config as `config.original.json`, and rewrites only the private installed copy into the existing multi-file model. Runtime key presses still use preloaded `SoundPool` samples; decoding never occurs in the touch path. Pure tests verify conversion wiring and RIFF/WAV sizes and payload. **Device validation still required:** the actual OGG hardware/software codec path cannot run in the host JVM test environment and must be exercised on Android before release.
+
+The “clear app data restores sound” observation implicates persisted state and/or the old asynchronous bank publication, but clearing erased the state needed to distinguish them. A one-time preference schema now canonicalizes the old `sound_toggle` and current `key_sound_enabled` values while preserving an intentional mute. Bank maps are built off-thread and published atomically instead of being mutated concurrently with main-thread playback. This is an update migration: existing users retain their explicit setting, stale pack references recover automatically, and a fresh install still defaults to sound on.
 
 | Decision | Benefit | Cost / follow-up |
 |---|---|---|
-| Keep physical HID usages stable and transform legends only. | Correct host-side layout semantics; no descriptor or pairing migration. | Host input source must match the selected Bluke legend profile. |
+| Separate physical position from emitted HID usage. | The selected profile emits its displayed ASCII key on a US-QWERTY host without changing the HID descriptor or pairing. | Full accented/dead-key/AltGr behavior needs explicit modifier/output sequences later. |
 | Add five character profiles over existing ANSI boards. | Covers the requested major arrangements with a testable registry. | ISO/JIS and full dead-key/AltGr layers remain future work. |
 | Force only the keyboard surface LTR. | Fixes forced-RTL geometry without breaking localized app chrome. | Must be visually checked on an RTL-language device. |
-| Support V2 multi-file packs with platform APIs. | Low latency, no dependency/version change, bounded archive attack surface. | Audio-sprite packs need prior conversion. |
-| Keep one active preloaded bank. | Bounded memory and matches upstream Mechvibes lifecycle. | A newly selected pack may be silent for its brief asynchronous preload window. |
+| Convert V1 sprites once with Android platform codecs; retain V2 direct import. | Supports packs from the public catalogue with no FFmpeg/dependency addition and keeps runtime playback low-latency. | Real OGG decoding varies by device and needs Android acceptance testing. |
+| Keep one active, atomically published preloaded bank. | Bounded memory, no partially filled maps on the UI thread, and matches upstream Mechvibes lifecycle. | Selection becomes audible only after asynchronous preload completes; invalid packs fall back to built-in sounds. |
 
 New verification output:
 
@@ -910,17 +914,17 @@ BUILD SUCCESSFUL in 2m 14s
 47 actionable tasks: 10 executed, 37 up-to-date
 
 > .\gradlew.bat testDebugUnitTest assembleDebug --stacktrace
-BUILD SUCCESSFUL in 2m 17s
-47 actionable tasks: 11 executed, 36 up-to-date
+BUILD SUCCESSFUL in 2m 13s
+47 actionable tasks: 8 executed, 39 up-to-date
 
-> .\gradlew.bat lintDebug --warning-mode all --stacktrace
+> .\gradlew.bat lintDebug --no-daemon --no-parallel --warning-mode all --stacktrace
 Wrote HTML report to file:///C:/Users/DELL/Documents/Bluke/app/build/reports/lint-results-debug.html
-BUILD SUCCESSFUL in 2m 5s
+BUILD SUCCESSFUL in 2m 15s
 29 actionable tasks: 8 executed, 21 up-to-date
 
 lint-results-debug.xml: issues=21 errors=0 warnings=21
 AndroidGradlePluginVersion=1 GradleDependency=10 NewerVersionAvailable=8 ObsoleteSdkInt=1 OldTargetApi=1
-JUnit XML: files=15 tests=52 failures=0 errors=0 skipped=0
+JUnit XML: files=17 tests=57 failures=0 errors=0 skipped=0
 ```
 
 Two setup/source failures were retained rather than concealed:
@@ -946,6 +950,6 @@ The supplied video could not be decoded in this workstation environment: no loca
 5. Can the same Windows pairing switch back to Native Hat mode and immediately expose a POV Hat in Windows Game Controllers/SDL without removing the device?
 6. Do macOS, iOS/iPadOS, Android TV, and the available Samsung TV expose both mutually exclusive encodings correctly, and which exact OS/model combinations reject the generic HID gamepad collection?
 7. After device validation, should the next refactor mechanically split `GamepadView.kt`, `TouchpadView.kt`, and `BehaviorActivity.kt`, or keep that separate from this compatibility branch?
-8. Which real Mechvibes V2 multi-file packs should be added to the release acceptance set, and should Bluke later ship an offline converter for legacy audio-sprite packs?
+8. Does the inspected CherryMX Black V1 pack import and play on the minimum API 28 device and current API 36 device, and do both use the expected per-key slices without audible clipping?
 9. Which ISO/JIS or regional keyboard geometries are release priorities beyond the five ANSI-compatible character profiles, and can each be tested against a host configured to the matching input source?
 10. On an RTL-language device with developer “Force RTL” both off and on, does the keyboard remain physically LTR while the settings and navigation chrome still localize correctly?
