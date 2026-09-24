@@ -25,4 +25,14 @@ class CustomThemeColorsTest {
         assertEquals(0xFFFFFFFF.toInt(), contrastingContentColor(0xFF101010.toInt()))
         assertEquals(0xFF000000.toInt(), contrastingContentColor(0xFFF0E060.toInt()))
     }
+
+    @Test
+    fun composesAndExtractsRgbChannels() {
+        val color = opaqueRgb(26, 178, 195)
+
+        assertEquals(0xFF1AB2C3.toInt(), color)
+        assertEquals(26, redChannel(color))
+        assertEquals(178, greenChannel(color))
+        assertEquals(195, blueChannel(color))
+    }
 }

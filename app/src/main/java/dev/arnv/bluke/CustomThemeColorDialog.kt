@@ -8,15 +8,20 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Slider
+import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -26,7 +31,18 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import dev.arnv.bluke.ui.theme.formatOpaqueHexColor
+import dev.arnv.bluke.ui.theme.blueChannel
+import dev.arnv.bluke.ui.theme.greenChannel
+import dev.arnv.bluke.ui.theme.opaqueRgb
 import dev.arnv.bluke.ui.theme.parseOpaqueHexColor
+import dev.arnv.bluke.ui.theme.redChannel
+import kotlin.math.roundToInt
+
+private enum class CustomColorRole(val label: String) {
+    BACKGROUND("Background"),
+    SURFACE("Keys"),
+    ACCENT("Accent"),
+}
 
 @Composable
 internal fun CustomPalettePreview(background: Color, surface: Color, accent: Color) {
@@ -50,12 +66,22 @@ internal fun CustomColorDialog(
     onDismiss: () -> Unit,
     onSave: (background: Int, surface: Int, accent: Int) -> Unit,
 ) {
-    var backgroundText by remember(initialBackground) { mutableStateOf(formatOpaqueHexColor(initialBackground)) }
-    var surfaceText by remember(initialSurface) { mutableStateOf(formatOpaqueHexColor(initialSurface)) }
-    var accentText by remember(initialAccent) { mutableStateOf(formatOpaqueHexColor(initialAccent)) }
-    val background = parseOpaqueHexColor(backgroundText)
-    val surface = parseOpaqueHexColor(surfaceText)
-    val accent = parseOpaqueHexColor(accentText)
+    var background by remember(initialBackground) { mutableIntStateOf(initialBackground) }
+    var surface by remember(initialSurface) { mutableIntStateOf(initialSurface) }
+    var accent by remember(initialAccent) { mutableIntStateOf(initialAccent) }
+    var selectedRole by remember { mutableStateOf(CustomColorRole.BACKGROUND) }
+    val selectedColor = when (selectedRole) {
+        CustomColorRole.BACKGROUND -> background
+        CustomColorRole.SURFACE -> surface
+        CustomColorRole.ACCENT -> accent
+    }
+    fun updateSelectedColor(color: Int) {
+        when (selectedRole) {
+            CustomColorRole.BACKGROUND -> background = color
+            CustomColorRole.SURFACE -> surface = color
+            CustomColorRole.ACCENT -> accent = color
+        }
+    }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -63,41 +89,66 @@ internal fun CustomColorDialog(
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 Text(
-                    "Enter six-digit RGB hex colors. Preview updates as each value becomes valid.",
+                    "Select a theme part, then use the RGB sliders or enter an exact hex color.",
                     style = MaterialTheme.typography.bodyMedium,
                 )
-                CustomHexColorField("Background", backgroundText, background) { backgroundText = it }
-                CustomHexColorField("Keys & surfaces", surfaceText, surface) { surfaceText = it }
-                CustomHexColorField("Accent & text", accentText, accent) { accentText = it }
-                if (background != null && surface != null && accent != null) {
-                    Surface(
-                        color = Color(background),
-                        shape = MaterialTheme.shapes.medium,
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(16.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(12.dp),
-                        ) {
-                            Surface(color = Color(surface), shape = MaterialTheme.shapes.small) {
-                                Text(
-                                    "Aa",
-                                    modifier = Modifier.padding(horizontal = 18.dp, vertical = 12.dp),
-                                    color = Color(accent),
-                                    style = MaterialTheme.typography.titleMedium,
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    CustomColorRole.entries.forEach { role ->
+                        FilterChip(
+                            selected = selectedRole == role,
+                            onClick = { selectedRole = role },
+                            label = { Text(role.label) },
+                            leadingIcon = {
+                                val roleColor = when (role) {
+                                    CustomColorRole.BACKGROUND -> background
+                                    CustomColorRole.SURFACE -> surface
+                                    CustomColorRole.ACCENT -> accent
+                                }
+                                Box(
+                                    Modifier
+                                        .size(14.dp)
+                                        .clip(CircleShape)
+                                        .background(Color(roleColor))
                                 )
-                            }
-                            Text("Theme preview", color = Color(accent))
+                            },
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
+                }
+                SelectedColorEditor(
+                    role = selectedRole,
+                    color = selectedColor,
+                    onColorChange = ::updateSelectedColor,
+                )
+                Surface(
+                    color = Color(background),
+                    shape = MaterialTheme.shapes.medium,
+                    modifier = Modifier.fillMaxWidth(),
+                ) {
+                    Row(
+                        modifier = Modifier.padding(16.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                    ) {
+                        Surface(color = Color(surface), shape = MaterialTheme.shapes.small) {
+                            Text(
+                                "Aa",
+                                modifier = Modifier.padding(horizontal = 18.dp, vertical = 12.dp),
+                                color = Color(accent),
+                                style = MaterialTheme.typography.titleMedium,
+                            )
                         }
+                        Text("Theme preview", color = Color(accent))
                     }
                 }
             }
         },
         confirmButton = {
             TextButton(
-                enabled = background != null && surface != null && accent != null,
-                onClick = { onSave(background!!, surface!!, accent!!) },
+                onClick = { onSave(background, surface, accent) },
             ) { Text("Use colors") }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
@@ -105,34 +156,77 @@ internal fun CustomColorDialog(
 }
 
 @Composable
-private fun CustomHexColorField(
-    label: String,
-    value: String,
-    parsedColor: Int?,
-    onValueChange: (String) -> Unit,
+private fun SelectedColorEditor(
+    role: CustomColorRole,
+    color: Int,
+    onColorChange: (Int) -> Unit,
 ) {
+    var hexText by remember(role) { mutableStateOf(formatOpaqueHexColor(color)) }
+    val parsedHex = parseOpaqueHexColor(hexText)
+    val red = redChannel(color)
+    val green = greenChannel(color)
+    val blue = blueChannel(color)
+
     OutlinedTextField(
-        value = value,
+        value = hexText,
         onValueChange = { candidate ->
             val normalized = candidate.uppercase().filterIndexed { index, character ->
                 character.isDigit() || character in 'A'..'F' || (index == 0 && character == '#')
             }.let { filtered -> if (filtered.startsWith('#')) filtered.take(7) else filtered.take(6) }
-            onValueChange(normalized)
+            hexText = normalized
+            parseOpaqueHexColor(normalized)?.let(onColorChange)
         },
-        label = { Text(label) },
+        label = { Text("${role.label} hex") },
         singleLine = true,
-        isError = parsedColor == null,
-        supportingText = if (parsedColor == null) ({ Text("Use #RRGGBB") }) else null,
+        isError = parsedHex == null,
+        supportingText = if (parsedHex == null) ({ Text("Use #RRGGBB") }) else null,
         trailingIcon = {
-            if (parsedColor != null) {
-                Box(
-                    modifier = Modifier
-                        .size(28.dp)
-                        .clip(CircleShape)
-                        .background(Color(parsedColor)),
-                )
-            }
+            Box(
+                modifier = Modifier
+                    .size(28.dp)
+                    .clip(CircleShape)
+                    .background(Color(color)),
+            )
         },
         modifier = Modifier.fillMaxWidth(),
     )
+    RgbChannelSlider("R", red, Color.Red) { value ->
+        onColorChange(opaqueRgb(value, green, blue))
+        hexText = formatOpaqueHexColor(opaqueRgb(value, green, blue))
+    }
+    RgbChannelSlider("G", green, Color.Green) { value ->
+        onColorChange(opaqueRgb(red, value, blue))
+        hexText = formatOpaqueHexColor(opaqueRgb(red, value, blue))
+    }
+    RgbChannelSlider("B", blue, Color.Blue) { value ->
+        onColorChange(opaqueRgb(red, green, value))
+        hexText = formatOpaqueHexColor(opaqueRgb(red, green, value))
+    }
+}
+
+@Composable
+private fun RgbChannelSlider(
+    label: String,
+    value: Int,
+    channelColor: Color,
+    onValueChange: (Int) -> Unit,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Text(label, modifier = Modifier.width(16.dp))
+        Slider(
+            value = value.toFloat(),
+            onValueChange = { onValueChange(it.roundToInt()) },
+            valueRange = 0f..255f,
+            colors = SliderDefaults.colors(
+                thumbColor = channelColor,
+                activeTrackColor = channelColor,
+            ),
+            modifier = Modifier.weight(1f),
+        )
+        Text(value.toString(), modifier = Modifier.width(32.dp))
+    }
 }

@@ -18,6 +18,16 @@ internal fun parseOpaqueHexColor(value: String): Int? {
 internal fun formatOpaqueHexColor(argb: Int): String =
     "#%06X".format(argb and 0x00FFFFFF)
 
+internal fun opaqueRgb(red: Int, green: Int, blue: Int): Int =
+    (0xFF000000L or
+        (red.coerceIn(0, 255).toLong() shl 16) or
+        (green.coerceIn(0, 255).toLong() shl 8) or
+        blue.coerceIn(0, 255).toLong()).toInt()
+
+internal fun redChannel(argb: Int): Int = argb shr 16 and 0xFF
+internal fun greenChannel(argb: Int): Int = argb shr 8 and 0xFF
+internal fun blueChannel(argb: Int): Int = argb and 0xFF
+
 internal fun contrastingContentColor(argb: Int): Int {
     fun linear(channel: Int): Double {
         val value = channel / 255.0
