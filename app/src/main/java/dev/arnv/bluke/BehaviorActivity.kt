@@ -23,6 +23,8 @@ import dev.arnv.bluke.ui.SettingsGroup
 import dev.arnv.bluke.ui.SettingsItemData
 import dev.arnv.bluke.ui.theme.MyApplicationTheme
 import dev.arnv.bluke.ui.KeyboardLayoutType
+import dev.arnv.bluke.ui.KeyboardCharacterLayout
+import dev.arnv.bluke.ui.KEYBOARD_CHARACTER_LAYOUT_PREFERENCE
 import dev.arnv.bluke.sound.SwitchType
 import dev.arnv.bluke.ui.CaseColor
 import androidx.compose.material.icons.filled.Keyboard
@@ -71,6 +73,13 @@ class BehaviorActivity : ComponentActivity() {
                 }
                 var keySensitivity by remember { mutableFloatStateOf(sharedPrefs.getFloat("key_sensitivity", 6f)) }
                 var lockSyncMode by remember { mutableStateOf(sharedPrefs.getString("lock_sync_mode", "host") ?: "host") }
+                var keyboardCharacterLayout by remember {
+                    mutableStateOf(
+                        KeyboardCharacterLayout.fromPreference(
+                            sharedPrefs.getString(KEYBOARD_CHARACTER_LAYOUT_PREFERENCE, null)
+                        )
+                    )
+                }
                 
                 val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
 
@@ -258,6 +267,46 @@ class BehaviorActivity : ComponentActivity() {
                                         gamepadDpadOutputMode = mode
                                         sharedPrefs.edit {
                                             putString(GAMEPAD_DPAD_MODE_PREFERENCE, mode.preferenceValue)
+                                        }
+                                    },
+                                )
+                            },
+                        )
+
+                        SettingsCardGroup(
+                            title = "Typing Layout",
+                            items = KeyboardCharacterLayout.entries.map { layout ->
+                                SettingsItemData(
+                                    title = layout.displayName,
+                                    subtitle = "Match the host's ${layout.hostLayoutName} input source; HID positions stay standard",
+                                    icon = {
+                                        Icon(
+                                            Icons.Default.Keyboard,
+                                            null,
+                                            tint = MaterialTheme.colorScheme.primary,
+                                        )
+                                    },
+                                    action = {
+                                        RadioButton(
+                                            selected = keyboardCharacterLayout == layout,
+                                            onClick = {
+                                                keyboardCharacterLayout = layout
+                                                sharedPrefs.edit {
+                                                    putString(
+                                                        KEYBOARD_CHARACTER_LAYOUT_PREFERENCE,
+                                                        layout.preferenceValue,
+                                                    )
+                                                }
+                                            },
+                                        )
+                                    },
+                                    onClick = {
+                                        keyboardCharacterLayout = layout
+                                        sharedPrefs.edit {
+                                            putString(
+                                                KEYBOARD_CHARACTER_LAYOUT_PREFERENCE,
+                                                layout.preferenceValue,
+                                            )
                                         }
                                     },
                                 )

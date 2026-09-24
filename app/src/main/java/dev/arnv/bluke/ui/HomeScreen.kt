@@ -69,12 +69,19 @@ fun HomeScreen(
     val homeUiState by homeViewModel.uiState.collectAsStateWithLifecycle()
     
     // UI state
-    var selectedLayoutType by rememberSaveable { mutableStateOf(KeyboardLayoutType.OBLIVION_75) }
-    var selectedCaseColor by rememberSaveable { mutableStateOf(CaseColor.BLACK) }
-    var isKeyboardActive by rememberSaveable { mutableStateOf(false) }
     val sharedPrefs = remember(context) {
         context.getSharedPreferences("app_prefs", Context.MODE_PRIVATE)
     }
+    var selectedLayoutType by rememberSaveable { mutableStateOf(KeyboardLayoutType.OBLIVION_75) }
+    var characterLayout by rememberSaveable {
+        mutableStateOf(
+            KeyboardCharacterLayout.fromPreference(
+                sharedPrefs.getString(KEYBOARD_CHARACTER_LAYOUT_PREFERENCE, null)
+            )
+        )
+    }
+    var selectedCaseColor by rememberSaveable { mutableStateOf(CaseColor.BLACK) }
+    var isKeyboardActive by rememberSaveable { mutableStateOf(false) }
     var hideUnknownDevices by remember { mutableStateOf(sharedPrefs.getBoolean("hide_unknown", false)) }
     var hideUnsupportedDevices by remember { mutableStateOf(sharedPrefs.getBoolean("hide_unsupported", true)) }
     var showMacAddress by remember { mutableStateOf(sharedPrefs.getBoolean("show_mac", false)) }
@@ -108,6 +115,9 @@ fun HomeScreen(
                 isHapticsEnabled = sharedPrefs.getBoolean("haptics_enabled", true)
                 keySensitivity = sharedPrefs.getFloat("key_sensitivity", 6f)
                 lockSyncMode = sharedPrefs.getString("lock_sync_mode", "host") ?: "host"
+                characterLayout = KeyboardCharacterLayout.fromPreference(
+                    sharedPrefs.getString(KEYBOARD_CHARACTER_LAYOUT_PREFERENCE, null)
+                )
                 val enabledModes = listOf(0, 1, 2).filter { mode ->
                     val modeStr = when (mode) {
                         0 -> "keyboard"
@@ -853,6 +863,7 @@ fun HomeScreen(
                         ) {
                             KeyboardView(
                                 layoutType = selectedLayoutType,
+                                characterLayout = characterLayout,
                                 caseColor = selectedCaseColor,
                                 activePressedKeys = activePressedKeys,
                                 isConnected = isConnected,

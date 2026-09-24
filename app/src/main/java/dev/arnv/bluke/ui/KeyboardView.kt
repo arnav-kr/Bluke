@@ -10,12 +10,15 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.LayoutDirection
 
 @Suppress("UnusedBoxWithConstraintsScope")
 @Composable
 fun KeyboardView(
     layoutType: KeyboardLayoutType,
+    characterLayout: KeyboardCharacterLayout = KeyboardCharacterLayout.US_QWERTY,
     caseColor: CaseColor,
     activePressedKeys: List<Int>,
     isConnected: Boolean = false,
@@ -27,12 +30,13 @@ fun KeyboardView(
 ) {
     val palette = Colorways.PALETTES[layoutType] ?: Colorways.PALETTES[KeyboardLayoutType.OBLIVION_75]!!
 
-    BoxWithConstraints(
-        modifier = Modifier.fillMaxSize(),
-        contentAlignment = Alignment.Center
-    ) {
-        val keyboardRows = KeyboardLayouts.getLayout(layoutType)
-        val allKeys = keyboardRows.flatten()
+    CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+        BoxWithConstraints(
+            modifier = Modifier.fillMaxSize(),
+            contentAlignment = Alignment.Center
+        ) {
+            val keyboardRows = KeyboardLayouts.getLayout(layoutType, characterLayout)
+            val allKeys = keyboardRows.flatten()
 
         val totalLayoutWidthInUnits = allKeys.maxOfOrNull { it.x + it.widthRatio } ?: 15.0f
         val totalLayoutHeightInUnits = allKeys.maxOfOrNull { it.y + it.heightRatio } ?: 5.0f
@@ -181,5 +185,6 @@ fun KeyboardView(
                     )
                 }
             }
+        }
         }
     }

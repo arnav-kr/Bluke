@@ -274,9 +274,12 @@ object KeyboardLayouts {
     const val MOD_RALT = 0xE6
     const val MOD_RWIN = 0xE7
 
-    fun getLayout(type: KeyboardLayoutType): List<List<KeyLayoutInfo>> {
+    fun getLayout(
+        type: KeyboardLayoutType,
+        characterLayout: KeyboardCharacterLayout = KeyboardCharacterLayout.US_QWERTY,
+    ): List<List<KeyLayoutInfo>> {
         val kle = getKleString(type)
-        return parseKleString(kle)
+        return parseKleString(kle).withCharacterLayout(characterLayout)
     }
 
     private fun getKleString(type: KeyboardLayoutType): String {
