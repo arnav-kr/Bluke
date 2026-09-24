@@ -69,6 +69,9 @@ class MainActivity : ComponentActivity() {
         if (::btManager.isInitialized) {
             btManager.checkBluetoothCapabilities()
         }
+        if (::soundSynth.isInitialized) {
+            soundSynth.reloadSelectedSoundPack()
+        }
     }
 
     override fun onDestroy() {

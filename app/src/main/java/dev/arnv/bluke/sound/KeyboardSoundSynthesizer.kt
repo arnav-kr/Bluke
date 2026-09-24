@@ -8,6 +8,7 @@ import java.io.File
 import java.io.FileOutputStream
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
+import java.util.concurrent.Executors
 import kotlin.math.sin
 import kotlin.math.exp
 import kotlin.random.Random
@@ -29,7 +30,21 @@ enum class SwitchType(val displayName: String) {
 }
 
 class KeyboardSoundSynthesizer(private val context: Context) {
+    private data class CustomSoundBank(
+        val packId: String,
+        val packName: String,
+        val pressIds: Map<Int, List<Int>>,
+        val releaseIds: Map<Int, List<Int>>,
+        val defaultPressIds: List<Int>,
+        val defaultReleaseIds: List<Int>,
+    )
+
     private var soundPool: SoundPool? = null
+    private val soundLoader = Executors.newSingleThreadExecutor { runnable ->
+        Thread(runnable, "BlukeSoundLoader")
+    }
+    private val customSoundPacks = CustomSoundPackRepository(context)
+    @Volatile private var customSoundBank: CustomSoundBank? = null
     
     // Playback maps for compiled sounds (mapping variation index to SoundPool ID)
     private val pressSoundIds = mutableMapOf<Int, Int>()
@@ -46,7 +61,9 @@ class KeyboardSoundSynthesizer(private val context: Context) {
     
     init {
         createSoundPool()
-        recompileSounds(SwitchType.CHERRY_MX_BROWN)
+        val selectedPack = customSoundPacks.selectedPack()
+        if (selectedPack == null) recompileSounds(SwitchType.CHERRY_MX_BROWN)
+        else loadCustomSoundPack(selectedPack)
     }
 
     @Suppress("DEPRECATION")
@@ -75,12 +92,28 @@ class KeyboardSoundSynthesizer(private val context: Context) {
     }
 
     fun changeSwitchType(switchType: SwitchType) {
-        if (currentSwitchType == switchType) return
+        if (currentSwitchType == switchType && customSoundBank == null) return
+        customSoundPacks.select(null)
         currentSwitchType = switchType
         recompileSounds(switchType)
     }
 
     fun getCurrentSwitch(): SwitchType = currentSwitchType
+
+    fun getCurrentSoundProfileName(): String =
+        customSoundBank?.packName ?: currentSwitchType.displayName
+
+    fun getSelectedSoundProfileName(): String =
+        customSoundPacks.selectedPack()?.name ?: currentSwitchType.displayName
+
+    fun reloadSelectedSoundPack() {
+        val selectedPack = customSoundPacks.selectedPack()
+        if (selectedPack == null) {
+            if (customSoundBank != null) recompileSounds(currentSwitchType)
+        } else if (customSoundBank?.packId != selectedPack.id) {
+            loadCustomSoundPack(selectedPack)
+        }
+    }
 
     private fun SwitchType.toFolderName(): String {
         return when (this) {
@@ -176,14 +209,21 @@ class KeyboardSoundSynthesizer(private val context: Context) {
      * Synthesizes and loads keyboard sounds into SoundPool in a background thread
      */
     private fun recompileSounds(switchType: SwitchType) {
-        Thread {
+        soundLoader.execute {
             try {
                 soundPool?.let { pool ->
                     pressSoundIds.values.forEach { id -> pool.unload(id) }
                     releaseSoundIds.values.forEach { id -> pool.unload(id) }
                     loadedPressIds.values.forEach { id -> pool.unload(id) }
                     loadedReleaseIds.values.forEach { id -> pool.unload(id) }
+                    customSoundBank?.let { bank ->
+                        (bank.pressIds.values.flatten() + bank.releaseIds.values.flatten() +
+                            bank.defaultPressIds + bank.defaultReleaseIds)
+                            .distinct()
+                            .forEach(pool::unload)
+                    }
                 }
+                customSoundBank = null
                 pressSoundIds.clear()
                 releaseSoundIds.clear()
                 
@@ -222,11 +262,62 @@ class KeyboardSoundSynthesizer(private val context: Context) {
             } catch (e: Exception) {
                 Log.e("KeyboardSoundSynth", "Failed to compile switch wav files", e)
             }
-        }.start()
+        }
+    }
+
+    private fun loadCustomSoundPack(pack: CustomSoundPack) {
+        soundLoader.execute {
+            try {
+                val pool = soundPool ?: return@execute
+                pressSoundIds.values.forEach(pool::unload)
+                releaseSoundIds.values.forEach(pool::unload)
+                loadedPressIds.values.forEach(pool::unload)
+                loadedReleaseIds.values.forEach(pool::unload)
+                customSoundBank?.let { bank ->
+                    (bank.pressIds.values.flatten() + bank.releaseIds.values.flatten() +
+                        bank.defaultPressIds + bank.defaultReleaseIds)
+                        .distinct()
+                        .forEach(pool::unload)
+                }
+                pressSoundIds.clear()
+                releaseSoundIds.clear()
+                loadedPressIds.clear()
+                loadedReleaseIds.clear()
+
+                val loadedFiles = mutableMapOf<String, Int>()
+                fun load(files: List<File>): List<Int> = files.mapNotNull { file ->
+                    val id = loadedFiles.getOrPut(file.absolutePath) {
+                        pool.load(file.absolutePath, 1)
+                    }
+                    id.takeIf { it > 0 }
+                }
+                customSoundBank = CustomSoundBank(
+                    packId = pack.id,
+                    packName = pack.name,
+                    pressIds = pack.pressFiles.mapValues { (_, files) -> load(files) },
+                    releaseIds = pack.releaseFiles.mapValues { (_, files) -> load(files) },
+                    defaultPressIds = load(pack.defaultPressFiles),
+                    defaultReleaseIds = load(pack.defaultReleaseFiles),
+                )
+                Log.d("KeyboardSoundSynth", "Loaded custom sound pack: ${pack.name}")
+            } catch (error: Exception) {
+                customSoundBank = null
+                Log.e("KeyboardSoundSynth", "Failed to load custom sound pack", error)
+                recompileSounds(currentSwitchType)
+            }
+        }
     }
 
     fun playPress(keyCode: Int = 0) {
         if (isMuted) return
+
+        customSoundBank?.let { bank ->
+            val ids = mechvibesKeyCodeForHid(keyCode)?.let(bank.pressIds::get)
+                .orEmpty()
+                .ifEmpty { bank.defaultPressIds }
+            ids.randomOrNull()?.let { id -> soundPool?.play(id, 0.8f, 0.8f, 1, 0, 1.0f) }
+            return
+        }
         
         val key = getSoundKey(keyCode)
         val soundId = if (key == "GENERIC") {
@@ -260,6 +351,14 @@ class KeyboardSoundSynthesizer(private val context: Context) {
 
     fun playRelease(keyCode: Int = 0) {
         if (isMuted) return
+
+        customSoundBank?.let { bank ->
+            val ids = mechvibesKeyCodeForHid(keyCode)?.let(bank.releaseIds::get)
+                .orEmpty()
+                .ifEmpty { bank.defaultReleaseIds }
+            ids.randomOrNull()?.let { id -> soundPool?.play(id, 0.8f, 0.8f, 1, 0, 1.0f) }
+            return
+        }
         
         val key = getSoundKey(keyCode)
         val soundId = loadedReleaseIds[key] ?: loadedReleaseIds["GENERIC"]
@@ -286,6 +385,7 @@ class KeyboardSoundSynthesizer(private val context: Context) {
     }
 
     fun release() {
+        soundLoader.shutdownNow()
         soundPool?.release()
         soundPool = null
     }

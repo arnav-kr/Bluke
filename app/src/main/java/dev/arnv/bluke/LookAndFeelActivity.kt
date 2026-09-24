@@ -288,6 +288,14 @@ class LookAndFeelActivity : ComponentActivity() {
                                             }
                                         )
                                     }
+                                ),
+                                SettingsItemData(
+                                    title = "Custom key sounds",
+                                    subtitle = "Import and select Mechvibes sound packs",
+                                    icon = { Icon(Icons.Default.GraphicEq, null, tint = MaterialTheme.colorScheme.primary) },
+                                    onClick = {
+                                        startActivity(Intent(this@LookAndFeelActivity, SoundPacksActivity::class.java))
+                                    }
                                 )
                             )
                         )

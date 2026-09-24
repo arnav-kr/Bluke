@@ -95,6 +95,7 @@ fun HomeScreen(
 
     // Sound synth switch state
     var currentSwitch by remember { mutableStateOf(soundSynth.getCurrentSwitch()) }
+    var currentSoundProfileName by remember { mutableStateOf(soundSynth.getSelectedSoundProfileName()) }
 
     // Mute state
     var isMuted by rememberSaveable { mutableStateOf(!sharedPrefs.getBoolean("key_sound_enabled", true)) }
@@ -112,6 +113,7 @@ fun HomeScreen(
                 isMuted = !soundEnabled
                 soundSynth.setMute(!soundEnabled)
                 currentSwitch = soundSynth.getCurrentSwitch()
+                currentSoundProfileName = soundSynth.getSelectedSoundProfileName()
                 isHapticsEnabled = sharedPrefs.getBoolean("haptics_enabled", true)
                 keySensitivity = sharedPrefs.getFloat("key_sensitivity", 6f)
                 lockSyncMode = sharedPrefs.getString("lock_sync_mode", "host") ?: "host"
@@ -774,6 +776,7 @@ fun HomeScreen(
                                             val nextSwitch = enabledSwitches[nextIndex]
                                             soundSynth.changeSwitchType(nextSwitch)
                                             currentSwitch = nextSwitch
+                                            currentSoundProfileName = nextSwitch.displayName
                                             soundSynth.playPress()
                                         }
                                         .padding(horizontal = 8.dp),
@@ -787,7 +790,7 @@ fun HomeScreen(
                                     )
                                     Spacer(modifier = Modifier.width(4.dp))
                                     Text(
-                                        text = currentSwitch.displayName,
+                                        text = currentSoundProfileName,
                                         color = Color.White,
                                         fontSize = 9.sp,
                                         fontWeight = FontWeight.Bold
