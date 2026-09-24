@@ -25,7 +25,7 @@ Working branch: `refactor`
 - **P2 open — Compose alignment:** Material3 `1.4.0-alpha04` still lifts runtime to `1.8.0-alpha06`; removing the override fails compilation because `ThemeConfig.kt` uses Expressive-only APIs. A BOM/toolchain upgrade was prohibited in this pass.
 - **P2 fixed — resources:** unused resources and three malformed high-density WebPs were removed; adaptive icon background is explicitly `nodpi`.
 - Baseline: `assembleDebug` passed; lint reported 2 errors and 42 warnings; 3 tests passed and zero exercised Bluetooth/HID.
-- Final: `assembleDebug`, 60 unit tests, and full `lintDebug` pass after the custom-theme follow-up. The suite includes 18 facade/OEM-behavior contract runs across simulated API 28/31/36 plus HID UI policy, sound-pack archive safety/parsing and stale-selection recovery, audio-sprite WAV framing, sound-preference migration, locale output mapping, custom-theme parsing/contrast logic, gamepad input/report, and compatibility-classification coverage. Debug lint reports 0 errors/21 warnings. The physical Android/OEM matrix and platform-codec decode of a real OGG pack remain open because ADB found no attached target.
+- Final: `assembleDebug`, 61 unit tests, and full `lintDebug` pass after the RGB-picker follow-up. The suite includes 18 facade/OEM-behavior contract runs across simulated API 28/31/36 plus HID UI policy, sound-pack archive safety/parsing and stale-selection recovery, audio-sprite WAV framing, sound-preference migration, locale output mapping, custom-theme parsing/RGB/contrast logic, gamepad input/report, and compatibility-classification coverage. Debug lint reports 0 errors/21 warnings. The physical Android/OEM matrix and platform-codec decode of a real OGG pack remain open because ADB found no attached target.
 - No SDK, AGP, Kotlin, Compose BOM, signing, Fastlane, or F-Droid version/config changes were made. DataStore `1.2.1` is the only new dependency.
 
 ## 2. Repository reconnaissance
@@ -944,19 +944,23 @@ The supplied video could not be decoded in this workstation environment: no loca
 
 ### 7.6 Manual custom theme follow-up (2026-09-24)
 
-Manual theme selection previously exposed only 20 fixed accent swatches; background and surface roles remained hardcoded. The new Custom colors entry accepts three opaque six-digit RGB values: background, keys/surfaces, and accent/text. Values are validated before saving, previewed together, persisted in `app_prefs`, and observed by `MyApplicationTheme` for immediate recomposition. Choosing a fixed swatch disables Custom mode; enabling Custom also disables wallpaper Dynamic Colors. The saved custom palette remains available when switching away and back.
+Manual theme selection previously exposed only 20 fixed accent swatches; background and surface roles remained hardcoded. The new Custom colors entry edits three opaque RGB values: background, keys/surfaces, and accent/text. A compact role selector exposes synchronized red/green/blue sliders, exact `#RRGGBB` entry, individual swatches, and a combined preview. Values are validated before saving, persisted in `app_prefs`, and observed by `MyApplicationTheme` for immediate recomposition. Choosing a fixed swatch disables Custom mode; enabling Custom also disables wallpaper Dynamic Colors. The saved custom palette remains available when switching away and back.
 
 The requested colors are mapped to Material roles rather than applied ad hoc to individual screens. Background drives `background` and `surface`; keys/surfaces drive container and `surfaceVariant` roles; accent/text drives primary and foreground roles. Button text over the accent uses a luminance-selected black or white foreground. This keeps the feature descriptor-neutral and requires neither re-pairing nor a new dependency. A deliberately low-contrast background/accent combination remains possible because these are user-authored colors; the dialog preview makes that choice visible before application.
 
-New source inventory: `CustomThemeColorDialog.kt` 138 lines (hex editor and palette preview), `ui/theme/CustomThemeColors.kt` 30 lines (preference keys, parser/formatter, contrast helper), and `ui/theme/CustomThemeColorsTest.kt` 28 lines (pure validation tests).
+New source inventory: `CustomThemeColorDialog.kt` 232 lines (role selector, RGB/hex editor, and palette preview), `ui/theme/CustomThemeColors.kt` 40 lines (preference keys, RGB/parser/formatter, and contrast helpers), and `ui/theme/CustomThemeColorsTest.kt` 38 lines (pure validation tests).
 
 ```text
-> .\gradlew testDebugUnitTest assembleDebug lintDebug --no-daemon --no-parallel --warning-mode all --stacktrace
-Wrote HTML report to file:///C:/Users/DELL/Documents/Bluke/app/build/reports/lint-results-debug.html
-BUILD SUCCESSFUL in 5m 54s
-56 actionable tasks: 18 executed, 38 up-to-date
+> .\gradlew testDebugUnitTest assembleDebug --stacktrace
+BUILD SUCCESSFUL in 3m 23s
+47 actionable tasks: 8 executed, 39 up-to-date
 
-JUnit XML: files=18 tests=60 failures=0 errors=0 skipped=0
+> .\gradlew lintDebug --no-daemon --no-parallel --warning-mode all --stacktrace
+Wrote HTML report to file:///C:/Users/DELL/Documents/Bluke/app/build/reports/lint-results-debug.html
+BUILD SUCCESSFUL in 2m 46s
+29 actionable tasks: 8 executed, 21 up-to-date
+
+JUnit XML: files=18 tests=61 failures=0 errors=0 skipped=0
 lint-results-debug.xml: issues=21 errors=0 warnings=21
 ```
 
