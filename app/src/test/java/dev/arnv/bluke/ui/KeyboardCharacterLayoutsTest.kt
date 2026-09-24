@@ -11,9 +11,15 @@ class KeyboardCharacterLayoutsTest {
             KeyboardCharacterLayout.FRENCH_AZERTY,
         ).flatten()
 
-        assertEquals("A", keys.single { it.keyCode == KeyboardLayouts.KEY_Q }.legend)
-        assertEquals("Q", keys.single { it.keyCode == KeyboardLayouts.KEY_A }.legend)
-        assertEquals("M", keys.single { it.keyCode == KeyboardLayouts.KEY_SEMICOLON }.legend)
+        val physicalQ = keys.single { it.physicalKeyCode == KeyboardLayouts.KEY_Q }
+        val physicalA = keys.single { it.physicalKeyCode == KeyboardLayouts.KEY_A }
+        val physicalSemicolon = keys.single { it.physicalKeyCode == KeyboardLayouts.KEY_SEMICOLON }
+        assertEquals("A", physicalQ.legend)
+        assertEquals(KeyboardLayouts.KEY_A, physicalQ.keyCode)
+        assertEquals("Q", physicalA.legend)
+        assertEquals(KeyboardLayouts.KEY_Q, physicalA.keyCode)
+        assertEquals("M", physicalSemicolon.legend)
+        assertEquals(KeyboardLayouts.KEY_M, physicalSemicolon.keyCode)
     }
 
     @Test
@@ -27,10 +33,12 @@ class KeyboardCharacterLayoutsTest {
             KeyboardCharacterLayout.DVORAK,
         ).flatten()
 
-        assertEquals("Z", qwertz.single { it.keyCode == KeyboardLayouts.KEY_Y }.legend)
-        assertEquals("Y", qwertz.single { it.keyCode == KeyboardLayouts.KEY_Z }.legend)
-        assertEquals("'", dvorak.single { it.keyCode == KeyboardLayouts.KEY_Q }.legend)
-        assertEquals("A", dvorak.single { it.keyCode == KeyboardLayouts.KEY_A }.legend)
+        assertEquals("Z", qwertz.single { it.physicalKeyCode == KeyboardLayouts.KEY_Y }.legend)
+        assertEquals(KeyboardLayouts.KEY_Z, qwertz.single { it.physicalKeyCode == KeyboardLayouts.KEY_Y }.keyCode)
+        assertEquals("Y", qwertz.single { it.physicalKeyCode == KeyboardLayouts.KEY_Z }.legend)
+        assertEquals("'", dvorak.single { it.physicalKeyCode == KeyboardLayouts.KEY_Q }.legend)
+        assertEquals(KeyboardLayouts.KEY_APOSTROPHE, dvorak.single { it.physicalKeyCode == KeyboardLayouts.KEY_Q }.keyCode)
+        assertEquals("A", dvorak.single { it.physicalKeyCode == KeyboardLayouts.KEY_A }.legend)
     }
 
     @Test

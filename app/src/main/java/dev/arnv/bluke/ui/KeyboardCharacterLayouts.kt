@@ -19,7 +19,11 @@ enum class KeyboardCharacterLayout(
     }
 }
 
-private data class KeyLegend(val normal: String, val shifted: String = "")
+private data class KeyLegend(
+    val normal: String,
+    val shifted: String = "",
+    val outputKeyCode: Int? = outputKeyCodeForLegend(normal),
+)
 
 internal fun List<List<KeyLayoutInfo>>.withCharacterLayout(
     characterLayout: KeyboardCharacterLayout,
@@ -30,7 +34,11 @@ internal fun List<List<KeyLayoutInfo>>.withCharacterLayout(
     return map { row ->
         row.map { key ->
             overrides[key.keyCode]?.let { legend ->
-                key.copy(legend = legend.normal, shiftedLegend = legend.shifted)
+                key.copy(
+                    legend = legend.normal,
+                    shiftedLegend = legend.shifted,
+                    keyCode = legend.outputKeyCode ?: key.keyCode,
+                )
             } ?: key
         }
     }
@@ -48,22 +56,8 @@ private fun KeyboardCharacterLayout.legendOverrides(): Map<Int, KeyLegend> = whe
         KeyboardLayouts.KEY_A to KeyLegend("Q"),
         KeyboardLayouts.KEY_Z to KeyLegend("W"),
         KeyboardLayouts.KEY_SEMICOLON to KeyLegend("M"),
-        KeyboardLayouts.KEY_M to KeyLegend(",", "?"),
+        KeyboardLayouts.KEY_M to KeyLegend(",", "<"),
         KeyboardLayouts.KEY_COMMA to KeyLegend(";", "."),
-        KeyboardLayouts.KEY_PERIOD to KeyLegend(":", "/"),
-        KeyboardLayouts.KEY_SLASH to KeyLegend("!", "§"),
-        KeyboardLayouts.KEY_1 to KeyLegend("&", "1"),
-        KeyboardLayouts.KEY_2 to KeyLegend("é", "2"),
-        KeyboardLayouts.KEY_3 to KeyLegend("\"", "3"),
-        KeyboardLayouts.KEY_4 to KeyLegend("'", "4"),
-        KeyboardLayouts.KEY_5 to KeyLegend("(", "5"),
-        KeyboardLayouts.KEY_6 to KeyLegend("-", "6"),
-        KeyboardLayouts.KEY_7 to KeyLegend("è", "7"),
-        KeyboardLayouts.KEY_8 to KeyLegend("_", "8"),
-        KeyboardLayouts.KEY_9 to KeyLegend("ç", "9"),
-        KeyboardLayouts.KEY_0 to KeyLegend("à", "0"),
-        KeyboardLayouts.KEY_MINUS to KeyLegend(")", "°"),
-        KeyboardLayouts.KEY_EQUAL to KeyLegend("^", "¨"),
     )
     KeyboardCharacterLayout.DVORAK -> legendMap(
         KeyboardLayouts.KEY_Q to "'", KeyboardLayouts.KEY_W to ",",
@@ -99,3 +93,23 @@ private fun KeyboardCharacterLayout.legendOverrides(): Map<Int, KeyLegend> = whe
 
 private fun legendMap(vararg entries: Pair<Int, String>): Map<Int, KeyLegend> =
     entries.associate { (keyCode, legend) -> keyCode to KeyLegend(legend) }
+
+private fun outputKeyCodeForLegend(legend: String): Int? {
+    if (legend.length == 1 && legend[0].isLetter() && legend[0].code < 128) {
+        return KeyboardLayouts.KEY_A + (legend[0].uppercaseChar() - 'A')
+    }
+    return when (legend) {
+        "-" -> KeyboardLayouts.KEY_MINUS
+        "=" -> KeyboardLayouts.KEY_EQUAL
+        "[" -> KeyboardLayouts.KEY_LBRACKET
+        "]" -> KeyboardLayouts.KEY_RBRACKET
+        "\\" -> KeyboardLayouts.KEY_BACKSLASH
+        ";" -> KeyboardLayouts.KEY_SEMICOLON
+        "'" -> KeyboardLayouts.KEY_APOSTROPHE
+        "`" -> KeyboardLayouts.KEY_GRAVE
+        "," -> KeyboardLayouts.KEY_COMMA
+        "." -> KeyboardLayouts.KEY_PERIOD
+        "/" -> KeyboardLayouts.KEY_SLASH
+        else -> null
+    }
+}

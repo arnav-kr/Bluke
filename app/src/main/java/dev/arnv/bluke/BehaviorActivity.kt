@@ -278,7 +278,7 @@ class BehaviorActivity : ComponentActivity() {
                             items = KeyboardCharacterLayout.entries.map { layout ->
                                 SettingsItemData(
                                     title = layout.displayName,
-                                    subtitle = "Match the host's ${layout.hostLayoutName} input source; HID positions stay standard",
+                                    subtitle = "Emit ${layout.displayName} keys while the host uses a US QWERTY input source",
                                     icon = {
                                         Icon(
                                             Icons.Default.Keyboard,

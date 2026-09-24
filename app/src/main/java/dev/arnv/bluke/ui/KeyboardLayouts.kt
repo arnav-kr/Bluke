@@ -175,6 +175,7 @@ data class KeyLayoutInfo(
     val x: Float = 0.0f,
     val y: Float = 0.0f,
     val keyCode: Int = 0,
+    val physicalKeyCode: Int = keyCode,
     val category: KeyColorCategory = KeyColorCategory.ALPHA
 )
 
