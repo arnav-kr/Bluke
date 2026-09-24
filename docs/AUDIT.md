@@ -949,7 +949,9 @@ The supplied video could not be decoded in this workstation environment: no loca
 
 The earlier three-color implementation was incorrectly scoped to the Material app theme. It has been removed: wallpaper/app accent behavior remains under Look & Feel, while the new **Custom keyboard theme** destination changes only the rendered keyboard. In this model, “Background” is the keyboard plate behind the keys, “Key color” is the keycap, and “Key text color” is the key legend. No Material background, settings screen, Bluetooth state UI, HID descriptor, or report byte is changed.
 
-The old `KeyboardLayoutType` combined a KLE geometry and a colorway. The runtime now selects a `KeyboardGeometry` and `KeyboardThemeDefinition` independently. At the maintainer's direction, all ten existing KLE definitions remain ten separate layout choices even where their geometry is similar; no legacy entry is collapsed or relabelled as a layout it does not actually implement. The ten existing colorways are independently reusable built-in themes. The top keyboard toolbar still cycles enabled layouts, but its former case-color control is now a Theme button that opens the theme library. Settings exposes the same library under **Custom keyboard theme**.
+The old `KeyboardLayoutType` combined a KLE geometry and a colorway. The runtime now selects a `KeyboardGeometry` and `KeyboardThemeDefinition` independently. The ten colorways remain ten independently reusable built-in themes, but duplicate geometry is no longer repeated: Olivia, Dracula, Model M, and 9009 share one **Classic 75%** geometry. The remaining distinct choices are Standard 65%, HHKB 60%, Balanced 65%, Inline 75%, Compact 75%, and Extended 65% (seven geometry choices total). This changes only which duplicate names are offered; each retained geometry still uses an existing byte-for-byte KLE definition.
+
+The keyboard toolbar preserves fast traversal: tapping the Theme pill advances to the next available theme and persists it, while a long press opens the theme library/customizer. Custom themes automatically join the tap cycle. The separate layout pill continues to cycle only enabled geometries.
 
 Three editor models were considered:
 
@@ -957,11 +959,13 @@ Three editor models were considered:
 2. Per-key editing only: expressive, but forces repetitive edits and is error-prone on a phone.
 3. Group defaults plus per-key overrides: selected. Alpha, control, and accent groups each have key color, legend color, and legend-size controls; tapping the live keyboard preview creates or edits a single-key override, and Reset returns that key to its group.
 
-This follows established keyboard-editor interaction rather than inventing a hidden property sheet. Keyboard Layout Editor applies key color to the current selection and supports separate legend colors ([Keyboard Layout Editor](https://www.keyboard-layout-editor.com/)). VIA's official layout guidance also uses distinct alpha, modifier, and accent group colors and treats legend color separately ([VIA layouts reference](https://caniusevia.com/docs/layouts/)). Bluke adds a phone-sized workflow: horizontally scrollable target/layout chips, synchronized RGB sliders and exact `#RRGGBB` input, a live non-transmitting preview, and a dedicated library where built-ins can be selected or copied and custom themes can be named, edited, copied, and deleted. Font family import was intentionally not added: font licensing, glyph coverage, and keycap fit need a separate design and validation pass; legend scale is included now because it is bounded and mechanically previewable.
+This follows established keyboard-editor interaction rather than inventing a hidden property sheet. Keyboard Layout Editor applies key color to the current selection and supports separate legend colors ([Keyboard Layout Editor](https://www.keyboard-layout-editor.com/)). VIA's official layout guidance also uses distinct alpha, modifier, and accent group colors and treats legend color separately ([VIA layouts reference](https://caniusevia.com/docs/layouts/)). Bluke adds a phone-sized workflow: wrapped target/layout chips that do not clip off-screen, synchronized RGB sliders and exact `#RRGGBB` input, a live non-transmitting preview, and a dedicated library where built-ins can be selected or copied and custom themes can be named, edited, copied, and deleted. Font family import was intentionally not added: font licensing, glyph coverage, and keycap fit need a separate design and validation pass; legend scale is included now because it is bounded and mechanically previewable.
+
+The customizer was then aligned with the rest of Bluke's Material You UI: a collapsing `LargeTopAppBar`, large grouped tonal surfaces, semantic `primaryContainer` selection state, theme typography, one non-duplicated create action, and full-width primary/secondary actions. The mini keyboard now derives legend size from the actual rendered key width, applies additional scaling for long labels, and clips to a single line, preventing labels such as Backspace and Caps Lock from escaping their keycaps. This is consistent with Android's current Material 3 guidance that color roles communicate state and prominence, and that shapes and typography establish hierarchy; no new Compose dependency or version change was made ([Material Design 3 in Compose](https://developer.android.com/develop/ui/compose/designsystems/material3)). The source was retrieved and inspected with Firecrawl CLI `1.24.4`.
 
 Custom themes are stored as versioned JSON in app-private storage. Writes use a temporary file followed by rename/copy publication so an interrupted save does not expose a partially written theme. Per-key overrides use stable physical key IDs (`HID usage:occurrence`) and therefore survive character-layout changes; the same theme can be previewed on every retained layout. Corrupt/missing custom storage falls back to built-ins. Deleting the selected custom theme safely selects Oblivion.
 
-Upgrade behavior is explicit and idempotent. Schema 1 reads the existing `cycle_keyboard_layouts` set, maps every retained legacy entry one-to-one into both the independent layout set and built-in theme set, and starts at the previous runtime default (Oblivion layout + Oblivion theme). Once migrated, later launches do not overwrite a user's new selection. This feature does not alter the HID descriptor, so selecting layouts or themes does not require forgetting or re-pairing a host.
+Upgrade behavior is explicit and idempotent. A pre-separation install maps `cycle_keyboard_layouts` into the seven unique geometries and all ten built-in themes. Schema-1 users from the intermediate ten-geometry build are upgraded by normalizing their selected geometry and cycle set: Olivia/Dracula/Model M/9009 converge to Classic 75%, while every other prior name maps to its corresponding distinct geometry. Theme selections are preserved. Schema 2 then prevents repeat migration. This feature does not alter the HID descriptor, so selecting layouts or themes does not require forgetting or re-pairing a host.
 
 Verification output:
 
@@ -991,6 +995,18 @@ BUILD SUCCESSFUL in 1m
 
 JUnit XML: files=19 tests=65 failures=0 errors=0 skipped=0
 lint-results-debug.xml: issues=21 errors=0 warnings=21
+
+> .\gradlew.bat testDebugUnitTest --stacktrace
+> Task :app:testDebugUnitTest
+BUILD SUCCESSFUL in 1m 6s
+30 actionable tasks: 4 executed, 26 up-to-date
+
+JUnit XML: files=19 tests=66 failures=0 errors=0 skipped=0
+
+> .\gradlew.bat assembleDebug --stacktrace
+> Task :app:assembleDebug
+BUILD SUCCESSFUL in 11s
+38 actionable tasks: 3 executed, 35 up-to-date
 ```
 
 The first sandboxed build attempts failed before compilation because Gradle targeted unwritable `C:\.gradle` / `C:\.android` locations. A later complete-test attempt also deliberately retained its real failure output: pointing Java's `user.home` at the Gradle cache made Robolectric resolve mismatched artifacts (`AndroidVersions.CURRENT` was null and `DisplayMetrics.noncompatWidthPixels` was absent). The final successful run used the repository Gradle/Android caches and the real Windows user home for Robolectric's Maven cache. These were host-path corrections; no Gradle, AGP, Kotlin, Compose, or dependency version changed.
@@ -1007,5 +1023,5 @@ The first sandboxed build attempts failed before compilation because Gradle targ
 8. Does the inspected CherryMX Black V1 pack import and play on the minimum API 28 device and current API 36 device, and do both use the expected per-key slices without audible clipping?
 9. Which ISO/JIS or regional keyboard geometries are release priorities beyond the five ANSI-compatible character profiles, and can each be tested against a host configured to the matching input source?
 10. On an RTL-language device with developer “Force RTL” both off and on, does the keyboard remain physically LTR while the settings and navigation chrome still localize correctly?
-11. On a small phone and a tablet, is the custom-theme preview large enough for reliable individual-key selection, and does the landscape keyboard toolbar remain usable with the longest custom theme/layout names?
+11. On a small phone and a tablet, are the wrapped customizer controls and 180 dp preview comfortable for reliable individual-key selection, and does tap-to-cycle / hold-to-customize remain discoverable in the landscape keyboard toolbar?
 12. Should a future release add licensed font-family packs after glyph-coverage and key-fit rules are specified, or keep customization limited to legend color and scale?
