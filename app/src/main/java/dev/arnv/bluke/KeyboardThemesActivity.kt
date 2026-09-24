@@ -6,10 +6,12 @@ import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.ColumnScope
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -35,20 +37,24 @@ import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FilterChip
-import androidx.compose.material3.FloatingActionButton
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LargeTopAppBar
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -60,6 +66,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import dev.arnv.bluke.data.KEYBOARD_GEOMETRY_PREFERENCE
 import dev.arnv.bluke.data.KeyboardThemeRepository
@@ -83,7 +91,7 @@ import java.util.UUID
 import kotlin.math.roundToInt
 
 class KeyboardThemesActivity : ComponentActivity() {
-    @OptIn(ExperimentalMaterial3Api::class)
+    @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContent {
@@ -93,6 +101,7 @@ class KeyboardThemesActivity : ComponentActivity() {
                 var selectedThemeId by remember { mutableStateOf(repository.selectedThemeId()) }
                 var editingTheme by remember { mutableStateOf<KeyboardThemeDefinition?>(null) }
                 var pendingDelete by remember { mutableStateOf<KeyboardThemeDefinition?>(null) }
+                val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
 
                 fun beginCopy(source: KeyboardThemeDefinition) {
                     editingTheme = source.copy(
@@ -104,8 +113,9 @@ class KeyboardThemesActivity : ComponentActivity() {
 
                 BackHandler(enabled = editingTheme != null) { editingTheme = null }
                 Scaffold(
+                    modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
                     topBar = {
-                        TopAppBar(
+                        LargeTopAppBar(
                             title = { Text(if (editingTheme == null) "Keyboard themes" else "Edit keyboard theme") },
                             navigationIcon = {
                                 IconButton(onClick = {
@@ -114,16 +124,8 @@ class KeyboardThemesActivity : ComponentActivity() {
                                     Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                                 }
                             },
+                            scrollBehavior = scrollBehavior,
                         )
-                    },
-                    floatingActionButton = {
-                        if (editingTheme == null) {
-                            FloatingActionButton(onClick = {
-                                beginCopy(repository.selectedTheme())
-                            }) {
-                                Icon(Icons.Default.Add, contentDescription = "Create custom keyboard theme")
-                            }
-                        }
                     },
                 ) { padding ->
                     val theme = editingTheme
@@ -197,29 +199,35 @@ private fun KeyboardThemeLibrary(
 ) {
     LazyColumn(
         modifier = modifier.fillMaxSize(),
-        contentPadding = PaddingValues(16.dp),
+        contentPadding = PaddingValues(horizontal = 20.dp, vertical = 12.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         item {
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .clickable(onClick = onCreate),
+            Text(
+                text = "Choose a keyboard look. Layout and letter arrangement stay independent.",
+                style = MaterialTheme.typography.bodyLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(bottom = 4.dp),
+            )
+        }
+        item {
+            FilledTonalButton(
+                onClick = onCreate,
+                modifier = Modifier.fillMaxWidth(),
+                shape = MaterialTheme.shapes.extraLarge,
+                contentPadding = PaddingValues(horizontal = 20.dp, vertical = 18.dp),
             ) {
-                Row(
-                    modifier = Modifier.padding(18.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(16.dp),
+                Icon(Icons.Default.Add, contentDescription = null)
+                Spacer(Modifier.width(16.dp))
+                Column(
+                    modifier = Modifier.weight(1f),
+                    horizontalAlignment = Alignment.Start,
                 ) {
-                    Icon(Icons.Default.Add, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-                    Column {
-                        Text("Create custom theme", style = MaterialTheme.typography.titleMedium)
-                        Text(
-                            "Copy the selected theme, then edit groups or individual keys",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
+                    Text("Create custom theme", style = MaterialTheme.typography.titleMedium)
+                    Text(
+                        "Start from the selected theme, then edit groups or individual keys",
+                        style = MaterialTheme.typography.bodySmall,
+                    )
                 }
             }
         }
@@ -245,7 +253,7 @@ private fun KeyboardThemeLibrary(
                 onCopy = { onCopy(theme) },
             )
         }
-        item { Spacer(Modifier.height(72.dp)) }
+        item { Spacer(Modifier.height(24.dp)) }
     }
 }
 
@@ -272,6 +280,19 @@ private fun KeyboardThemeCard(
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onSelect),
+        shape = MaterialTheme.shapes.extraLarge,
+        colors = CardDefaults.cardColors(
+            containerColor = if (selected) {
+                MaterialTheme.colorScheme.primaryContainer
+            } else {
+                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f)
+            },
+            contentColor = if (selected) {
+                MaterialTheme.colorScheme.onPrimaryContainer
+            } else {
+                MaterialTheme.colorScheme.onSurface
+            },
+        ),
     ) {
         Row(
             modifier = Modifier.padding(16.dp),
@@ -280,15 +301,23 @@ private fun KeyboardThemeCard(
             KeyboardThemeSwatches(theme)
             Spacer(Modifier.width(14.dp))
             Column(Modifier.weight(1f)) {
-                Text(theme.name, style = MaterialTheme.typography.titleMedium)
                 Text(
-                    if (theme.editable) "Custom" else "Built-in",
+                    theme.name,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+                )
+                Text(
+                    if (theme.editable) "Custom theme" else "Built-in theme",
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = if (selected) {
+                        MaterialTheme.colorScheme.onPrimaryContainer
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    },
                 )
             }
             if (selected) {
-                Icon(Icons.Default.Check, contentDescription = "Selected", tint = MaterialTheme.colorScheme.primary)
+                Icon(Icons.Default.Check, contentDescription = "Selected")
             }
             IconButton(onClick = onCopy) {
                 Icon(Icons.Default.ContentCopy, contentDescription = "Copy ${theme.name}")
@@ -329,6 +358,7 @@ private enum class ThemeEditTarget(val label: String) {
     KEY("One key"),
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun KeyboardThemeEditor(
     modifier: Modifier,
@@ -387,129 +417,190 @@ private fun KeyboardThemeEditor(
         modifier = modifier
             .fillMaxSize()
             .verticalScroll(rememberScrollState())
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(16.dp),
+            .padding(horizontal = 20.dp, vertical = 12.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp),
     ) {
-        OutlinedTextField(
-            value = name,
-            onValueChange = { name = it.take(40) },
-            label = { Text("Theme name") },
-            singleLine = true,
-            modifier = Modifier.fillMaxWidth(),
-        )
-
-        Text("Preview layout", style = MaterialTheme.typography.titleSmall)
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .horizontalScroll(rememberScrollState()),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ThemeEditorSection(
+            title = "Theme details",
+            supportingText = "Give this keyboard-only theme a name you will recognize.",
         ) {
-            KeyboardGeometry.entries.forEach { geometry ->
-                FilterChip(
-                    selected = previewGeometry == geometry,
-                    onClick = {
-                        previewGeometry = geometry
-                        selectedKey = null
-                    },
-                    label = { Text(geometry.displayName) },
-                )
-            }
-        }
-
-        Card(Modifier.fillMaxWidth()) {
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(230.dp)
-                    .padding(8.dp),
-            ) {
-                KeyboardView(
-                    geometry = previewGeometry,
-                    theme = previewTheme,
-                    characterLayout = KeyboardCharacterLayout.US_QWERTY,
-                    activePressedKeys = emptyList(),
-                    isCapsLockActive = false,
-                    isNumLockActive = false,
-                    isScrollLockActive = false,
-                    selectedStyleId = selectedKey?.styleId,
-                    onKeySelected = { key ->
-                        selectedKey = key
-                        target = ThemeEditTarget.KEY
-                    },
-                    onKeyPressChange = { _, _ -> },
-                )
-            }
-        }
-        Text(
-            "Tap a key in the preview for a one-key override, or edit a group below.",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .horizontalScroll(rememberScrollState()),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            ThemeEditTarget.entries.forEach { editTarget ->
-                FilterChip(
-                    selected = target == editTarget,
-                    enabled = editTarget != ThemeEditTarget.KEY || selectedKey != null,
-                    onClick = { target = editTarget },
-                    label = {
-                        Text(
-                            if (editTarget == ThemeEditTarget.KEY && selectedKey != null) {
-                                "Key: ${selectedKey?.legend?.ifEmpty { "Space" }}"
-                            } else {
-                                editTarget.label
-                            },
-                        )
-                    },
-                )
-            }
-        }
-
-        if (target == ThemeEditTarget.PLATE) {
-            RgbColorEditor("Keyboard background", plateArgb) { plateArgb = it }
-        } else if (selectedStyle != null) {
-            RgbColorEditor("Key color", selectedStyle.backgroundArgb) { color ->
-                updateTargetStyle { it.copy(backgroundArgb = color) }
-            }
-            RgbColorEditor("Key text color", selectedStyle.legendArgb) { color ->
-                updateTargetStyle { it.copy(legendArgb = color) }
-            }
-            Text("Text size: ${(selectedStyle.legendScale * 100).roundToInt()}%")
-            Slider(
-                value = selectedStyle.legendScale,
-                onValueChange = { scale -> updateTargetStyle { it.copy(legendScale = scale) } },
-                valueRange = 0.7f..1.5f,
+            OutlinedTextField(
+                value = name,
+                onValueChange = { name = it.take(40) },
+                label = { Text("Theme name") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
             )
-            if (target == ThemeEditTarget.KEY) {
-                OutlinedButton(onClick = {
-                    selectedKey?.let { overrides.remove(it.styleId) }
-                }) { Text("Reset this key to its group") }
+        }
+
+        ThemeEditorSection(
+            title = "Live preview",
+            supportingText = "Pick a geometry to preview. This does not change the layout saved on the keyboard screen.",
+        ) {
+            Text(
+                "Preview layout",
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            FlowRow(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                KeyboardGeometry.entries.forEach { geometry ->
+                    FilterChip(
+                        selected = previewGeometry == geometry,
+                        onClick = {
+                            previewGeometry = geometry
+                            selectedKey = null
+                        },
+                        label = { Text(geometry.displayName) },
+                    )
+                }
+            }
+            Surface(
+                modifier = Modifier.fillMaxWidth(),
+                shape = MaterialTheme.shapes.large,
+                color = MaterialTheme.colorScheme.surface,
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(180.dp)
+                        .padding(8.dp),
+                ) {
+                    KeyboardView(
+                        geometry = previewGeometry,
+                        theme = previewTheme,
+                        characterLayout = KeyboardCharacterLayout.US_QWERTY,
+                        activePressedKeys = emptyList(),
+                        isCapsLockActive = false,
+                        isNumLockActive = false,
+                        isScrollLockActive = false,
+                        selectedStyleId = selectedKey?.styleId,
+                        onKeySelected = { key ->
+                            selectedKey = key
+                            target = ThemeEditTarget.KEY
+                        },
+                        onKeyPressChange = { _, _ -> },
+                    )
+                }
+            }
+            Text(
+                "Tap a key for a one-key override, or edit a key group below.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+
+        ThemeEditorSection(
+            title = "Customize keys",
+            supportingText = "Change the keyboard background, a whole key group, or the selected key.",
+        ) {
+            FlowRow(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                ThemeEditTarget.entries.forEach { editTarget ->
+                    FilterChip(
+                        selected = target == editTarget,
+                        enabled = editTarget != ThemeEditTarget.KEY || selectedKey != null,
+                        onClick = { target = editTarget },
+                        label = {
+                            Text(
+                                if (editTarget == ThemeEditTarget.KEY && selectedKey != null) {
+                                    "Key: ${selectedKey?.legend?.ifEmpty { "Space" }}"
+                                } else {
+                                    editTarget.label
+                                },
+                            )
+                        },
+                    )
+                }
+            }
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+
+            if (target == ThemeEditTarget.PLATE) {
+                RgbColorEditor("Keyboard background", plateArgb) { plateArgb = it }
+            } else if (selectedStyle != null) {
+                RgbColorEditor("Key color", selectedStyle.backgroundArgb) { color ->
+                    updateTargetStyle { it.copy(backgroundArgb = color) }
+                }
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                RgbColorEditor("Key text color", selectedStyle.legendArgb) { color ->
+                    updateTargetStyle { it.copy(legendArgb = color) }
+                }
+                Text(
+                    "Text size: ${(selectedStyle.legendScale * 100).roundToInt()}%",
+                    style = MaterialTheme.typography.titleSmall,
+                )
+                Slider(
+                    value = selectedStyle.legendScale,
+                    onValueChange = { scale -> updateTargetStyle { it.copy(legendScale = scale) } },
+                    valueRange = 0.7f..1.5f,
+                )
+                if (target == ThemeEditTarget.KEY) {
+                    OutlinedButton(
+                        onClick = { selectedKey?.let { overrides.remove(it.styleId) } },
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text("Reset this key to its group")
+                    }
+                }
             }
         }
 
         Row(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.End,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            TextButton(onClick = onCancel) { Text("Cancel") }
-            Spacer(Modifier.width(8.dp))
+            OutlinedButton(
+                onClick = onCancel,
+                modifier = Modifier.weight(1f),
+            ) {
+                Text("Cancel")
+            }
             Button(
                 enabled = name.isNotBlank(),
                 onClick = { onSave(previewTheme.copy(name = name.trim())) },
+                modifier = Modifier.weight(1f),
             ) {
                 Icon(Icons.Default.Palette, contentDescription = null)
                 Spacer(Modifier.width(8.dp))
-                Text("Save theme")
+                Text("Save")
             }
         }
         Spacer(Modifier.height(24.dp))
+    }
+}
+
+@Composable
+private fun ThemeEditorSection(
+    title: String,
+    supportingText: String,
+    content: @Composable ColumnScope.() -> Unit,
+) {
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.extraLarge,
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 18.dp, vertical = 16.dp),
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                Text(title, style = MaterialTheme.typography.titleLarge)
+                Text(
+                    supportingText,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            content()
+        }
     }
 }
 

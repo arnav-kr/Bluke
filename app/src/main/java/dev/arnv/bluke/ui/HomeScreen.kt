@@ -12,9 +12,11 @@ import android.os.Build
 import android.view.View
 import androidx.compose.animation.*
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
@@ -58,11 +60,12 @@ import dev.arnv.bluke.bluetooth.requiresHidDescriptorRefresh
 import dev.arnv.bluke.sound.KeyboardSoundSynthesizer
 import dev.arnv.bluke.sound.SwitchType
 import dev.arnv.bluke.data.CYCLE_KEYBOARD_GEOMETRIES_PREFERENCE
+import dev.arnv.bluke.data.CYCLE_KEYBOARD_THEMES_PREFERENCE
 import dev.arnv.bluke.data.KEYBOARD_GEOMETRY_PREFERENCE
 import dev.arnv.bluke.data.KeyboardThemeRepository
 
 @SuppressLint("MissingPermission")
-@OptIn(ExperimentalLayoutApi::class, ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalFoundationApi::class, ExperimentalLayoutApi::class, ExperimentalMaterial3Api::class)
 @Composable
 fun HomeScreen(
     btManager: BluetoothKeyboardManager,
@@ -822,9 +825,40 @@ fun HomeScreen(
                                         .height(28.dp)
                                         .clip(RoundedCornerShape(6.dp))
                                         .background(Color.White.copy(alpha = 0.15f))
-                                        .clickable {
-                                            context.startActivity(Intent(context, KeyboardThemesActivity::class.java))
-                                        }
+                                        .combinedClickable(
+                                            onClickLabel = "Next keyboard theme",
+                                            onLongClickLabel = "Customize keyboard themes",
+                                            onClick = {
+                                                val availableThemes = keyboardThemeRepository.allThemes()
+                                                val savedThemeIds = sharedPrefs.getStringSet(
+                                                    CYCLE_KEYBOARD_THEMES_PREFERENCE,
+                                                    null,
+                                                )
+                                                val enabledThemes = if (savedThemeIds == null) {
+                                                    availableThemes
+                                                } else {
+                                                    availableThemes.filter { theme ->
+                                                        theme.editable || theme.id in savedThemeIds
+                                                    }
+                                                }.ifEmpty { listOf(selectedKeyboardTheme) }
+                                                val currentIndex = enabledThemes.indexOfFirst {
+                                                    it.id == selectedKeyboardTheme.id
+                                                }
+                                                val nextIndex = if (currentIndex < 0) {
+                                                    0
+                                                } else {
+                                                    (currentIndex + 1) % enabledThemes.size
+                                                }
+                                                selectedKeyboardTheme = enabledThemes[nextIndex]
+                                                keyboardThemeRepository.selectTheme(selectedKeyboardTheme.id)
+                                                soundSynth.playPress()
+                                            },
+                                            onLongClick = {
+                                                context.startActivity(
+                                                    Intent(context, KeyboardThemesActivity::class.java),
+                                                )
+                                            },
+                                        )
                                         .padding(horizontal = 8.dp),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
