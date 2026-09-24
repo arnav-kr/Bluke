@@ -263,14 +263,8 @@ fun HomeScreen(
     }
 
     // Show Toast for connection errors, timeouts, rejections, or pairing failures
-    LaunchedEffect(btMessage) {
-        val lowerMessage = btMessage.lowercase()
-        if (lowerMessage.contains("timed out") ||
-            lowerMessage.contains("rejected") ||
-            lowerMessage.contains("failed") ||
-            lowerMessage.contains("refused") ||
-            lowerMessage.contains("error")
-        ) {
+    LaunchedEffect(btMessage, btState) {
+        if (shouldShowBluetoothErrorToast(btState, btMessage)) {
             android.widget.Toast.makeText(context, btMessage, android.widget.Toast.LENGTH_SHORT).show()
         }
     }
@@ -914,7 +908,7 @@ fun HomeScreen(
                         .padding(top = innerPadding.calculateTopPadding())
                         .background(MaterialTheme.colorScheme.background)
                 ) {
-                    if (btState is BluetoothState.BluetoothOff || btState is BluetoothState.Unsupported || btState is BluetoothState.ProfileNotSupported) {
+                    if (btState.blocksInputLaunch()) {
                         ProfileNotSupportedScreen(
                             bluetoothState = btState,
                             onEnableBluetooth = {
@@ -968,7 +962,7 @@ fun HomeScreen(
                     }
 
                     // Sticky Launch Button
-                    Box(
+                    if (!btState.blocksInputLaunch()) Box(
                         modifier = Modifier
                             .align(Alignment.BottomCenter)
                             .fillMaxWidth()
