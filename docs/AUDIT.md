@@ -25,7 +25,7 @@ Working branch: `refactor`
 - **P2 open — Compose alignment:** Material3 `1.4.0-alpha04` still lifts runtime to `1.8.0-alpha06`; removing the override fails compilation because `ThemeConfig.kt` uses Expressive-only APIs. A BOM/toolchain upgrade was prohibited in this pass.
 - **P2 fixed — resources:** unused resources and three malformed high-density WebPs were removed; adaptive icon background is explicitly `nodpi`.
 - Baseline: `assembleDebug` passed; lint reported 2 errors and 42 warnings; 3 tests passed and zero exercised Bluetooth/HID.
-- Final: `assembleDebug`, 61 unit tests, and full `lintDebug` pass after the RGB-picker follow-up. The suite includes 18 facade/OEM-behavior contract runs across simulated API 28/31/36 plus HID UI policy, sound-pack archive safety/parsing and stale-selection recovery, audio-sprite WAV framing, sound-preference migration, locale output mapping, custom-theme parsing/RGB/contrast logic, gamepad input/report, and compatibility-classification coverage. Debug lint reports 0 errors/21 warnings. The physical Android/OEM matrix and platform-codec decode of a real OGG pack remain open because ADB found no attached target.
+- Final: `assembleDebug`, 65 unit tests, and full `lintDebug` pass after the keyboard-theme follow-up. The suite includes 18 facade/OEM-behavior contract runs across simulated API 28/31/36 plus HID UI policy, sound-pack archive safety/parsing and stale-selection recovery, audio-sprite WAV framing, sound-preference migration, locale output mapping, keyboard layout/theme migration and per-key style precedence, color parsing/RGB/contrast logic, gamepad input/report, and compatibility-classification coverage. Debug lint reports 0 errors/21 warnings. The physical Android/OEM matrix, interactive theme-editor device check, and platform-codec decode of a real OGG pack remain open because ADB found no attached target.
 - No SDK, AGP, Kotlin, Compose BOM, signing, Fastlane, or F-Droid version/config changes were made. DataStore `1.2.1` is the only new dependency.
 
 ## 2. Repository reconnaissance
@@ -61,6 +61,7 @@ app/src/main/
 │   ├── HelpActivity.kt
 │   ├── LicensesActivity.kt
 │   ├── LookAndFeelActivity.kt
+│   ├── KeyboardThemesActivity.kt
 │   ├── MainActivity.kt
 │   ├── OnboardingActivity.kt
 │   ├── SettingsActivity.kt
@@ -71,6 +72,7 @@ app/src/main/
 │   ├── bluetooth/HidRegistrationCoordinator.kt
 │   ├── bluetooth/LatestRequestProcessor.kt
 │   ├── data/LayoutRepository.kt
+│   ├── data/KeyboardThemeRepository.kt
 │   ├── sound/{CustomSoundPackRepository,KeyboardSoundSynthesizer}.kt
 │   ├── utils/DeveloperLogManager.kt
 │   └── ui/
@@ -81,11 +83,12 @@ app/src/main/
 │       ├── HomeViewModel.kt
 │       ├── KeyboardLayouts.kt
 │       ├── KeyboardCharacterLayouts.kt
+│       ├── KeyboardThemes.kt
 │       ├── KeyboardView.kt
 │       ├── KeyCap.kt
 │       ├── SettingsComponents.kt
 │       ├── TouchpadView.kt
-│       └── theme/{Color,Theme,ThemeConfig,Type}.kt
+│       └── theme/{Color,CustomThemeColors,Theme,ThemeConfig,Type}.kt
 └── res/
     ├── drawable/{ic_dialpad_off,ic_dpad,ic_github,ic_launcher_foreground,ic_launcher_monochrome,ic_vibration_off,ic_wordmark}.xml
     ├── drawable/{ic_launcher_background,skin_0}.png
@@ -137,7 +140,7 @@ The refactor adds `BlukeApplication.kt`, `HidLifecycle.kt`, `HidRegistrationCoor
 
 After extraction, `HomeScreen.kt` is 1,026 lines; the new files are `DeviceListSection.kt` (204), `StatusHeaderCard.kt` (144), and `ProfileNotSupportedScreen.kt` (99). `HomeScreen.kt` remains critical and needs state-hoisting work.
 
-Post-refactor inventory additions/changed counts: `BlukeApplication.kt` 24 (process owner), `bluetooth/HidLifecycle.kt` 87 (state/retry/capability models), `bluetooth/HidRegistrationCoordinator.kt` 74 (facade-backed registration policy), `bluetooth/LatestRequestProcessor.kt` 26 (conflated cancellation policy), `bluetooth/GamepadReport.kt` 71 (pure HID gamepad packing and D-pad output policy), `ui/GamepadInput.kt` 39 (pure D-pad geometry), `data/LayoutRepository.kt` 65 (DataStore persistence/migration), `ui/HomeViewModel.kt` 102 (immutable Bluetooth UI state), `sound/AudioSpriteConverter.kt` 215 (platform-codec sprite decode and WAV slicing), `sound/SoundPreferences.kt` 27 (sound-setting migration), `sound/CustomSoundPackRepository.kt` 320 (safe pack import/selection), `sound/KeyboardSoundSynthesizer.kt` 661 (preloaded audio-bank lifecycle/playback; **refactor candidate**), `ui/KeyboardCharacterLayouts.kt` 115 (logical output profiles), `ui/KeyboardLayouts.kt` 654 (keyboard geometry/key models; **refactor candidate**), `MainActivity.kt` 85, `BehaviorActivity.kt` 1,136 (**critical**), `BluetoothKeyboardManager.kt` 1,250 (**critical**), `GamepadView.kt` 2,802 (**critical**), and `HomeScreen.kt` 1,033 (**critical**). Test additions: `sound/AudioSpriteConverterTest.kt` 32 and `sound/SoundPreferencesTest.kt` 54. The original `main` inventory above remains the audit baseline.
+Post-refactor inventory additions/changed counts: `BlukeApplication.kt` 24 (process owner), `bluetooth/HidLifecycle.kt` 87 (state/retry/capability models), `bluetooth/HidRegistrationCoordinator.kt` 74 (facade-backed registration policy), `bluetooth/LatestRequestProcessor.kt` 26 (conflated cancellation policy), `bluetooth/GamepadReport.kt` 71 (pure HID gamepad packing and D-pad output policy), `ui/GamepadInput.kt` 39 (pure D-pad geometry), `data/LayoutRepository.kt` 65 (DataStore persistence/migration), `data/KeyboardThemeRepository.kt` 155 (custom-theme JSON persistence and upgrade migration), `ui/HomeViewModel.kt` 102 (immutable Bluetooth UI state), `KeyboardThemesActivity.kt` 581 (theme library/live editor; **refactor candidate**), `ui/KeyboardThemes.kt` 77 (theme models/catalog), `sound/AudioSpriteConverter.kt` 215 (platform-codec sprite decode and WAV slicing), `sound/SoundPreferences.kt` 27 (sound-setting migration), `sound/CustomSoundPackRepository.kt` 320 (safe pack import/selection), `sound/KeyboardSoundSynthesizer.kt` 661 (preloaded audio-bank lifecycle/playback; **refactor candidate**), `ui/KeyboardCharacterLayouts.kt` 115 (logical output profiles), `ui/KeyboardLayouts.kt` 654 (keyboard geometry/key models; **refactor candidate**), `MainActivity.kt` 85, `BehaviorActivity.kt` 1,136 (**critical**), `BluetoothKeyboardManager.kt` 1,250 (**critical**), `GamepadView.kt` 2,802 (**critical**), and `HomeScreen.kt` 1,033 (**critical**). Test additions include `sound/AudioSpriteConverterTest.kt`, `sound/SoundPreferencesTest.kt`, and `data/KeyboardThemeMigrationTest.kt` 81 (one-to-one upgrade, per-key precedence, and stable key IDs). The original `main` inventory above remains the audit baseline.
 
 ### 2.3 Build configuration
 
@@ -942,27 +945,55 @@ The first was corrected by explicitly using the existing user Gradle cache. The 
 
 The supplied video could not be decoded in this workstation environment: no local video decoder was available, and the in-app browser correctly blocked local `file://` access. The two supplied screenshots and executable UI branch were sufficient to prove the unsupported-screen layering issue. This limitation is not treated as evidence about device timing or animation behavior.
 
-### 7.6 Manual custom theme follow-up (2026-09-24)
+### 7.6 Keyboard layout/theme separation and custom editor (2026-09-24)
 
-Manual theme selection previously exposed only 20 fixed accent swatches; background and surface roles remained hardcoded. The new Custom colors entry edits three opaque RGB values: background, keys/surfaces, and accent/text. A compact role selector exposes synchronized red/green/blue sliders, exact `#RRGGBB` entry, individual swatches, and a combined preview. Values are validated before saving, persisted in `app_prefs`, and observed by `MyApplicationTheme` for immediate recomposition. Choosing a fixed swatch disables Custom mode; enabling Custom also disables wallpaper Dynamic Colors. The saved custom palette remains available when switching away and back.
+The earlier three-color implementation was incorrectly scoped to the Material app theme. It has been removed: wallpaper/app accent behavior remains under Look & Feel, while the new **Custom keyboard theme** destination changes only the rendered keyboard. In this model, “Background” is the keyboard plate behind the keys, “Key color” is the keycap, and “Key text color” is the key legend. No Material background, settings screen, Bluetooth state UI, HID descriptor, or report byte is changed.
 
-The requested colors are mapped to Material roles rather than applied ad hoc to individual screens. Background drives `background` and `surface`; keys/surfaces drive container and `surfaceVariant` roles; accent/text drives primary and foreground roles. Button text over the accent uses a luminance-selected black or white foreground. This keeps the feature descriptor-neutral and requires neither re-pairing nor a new dependency. A deliberately low-contrast background/accent combination remains possible because these are user-authored colors; the dialog preview makes that choice visible before application.
+The old `KeyboardLayoutType` combined a KLE geometry and a colorway. The runtime now selects a `KeyboardGeometry` and `KeyboardThemeDefinition` independently. At the maintainer's direction, all ten existing KLE definitions remain ten separate layout choices even where their geometry is similar; no legacy entry is collapsed or relabelled as a layout it does not actually implement. The ten existing colorways are independently reusable built-in themes. The top keyboard toolbar still cycles enabled layouts, but its former case-color control is now a Theme button that opens the theme library. Settings exposes the same library under **Custom keyboard theme**.
 
-New source inventory: `CustomThemeColorDialog.kt` 232 lines (role selector, RGB/hex editor, and palette preview), `ui/theme/CustomThemeColors.kt` 40 lines (preference keys, RGB/parser/formatter, and contrast helpers), and `ui/theme/CustomThemeColorsTest.kt` 38 lines (pure validation tests).
+Three editor models were considered:
+
+1. Three global colors only: compact, but cannot represent common alpha/modifier/accent grouping or the requested one-off keys.
+2. Per-key editing only: expressive, but forces repetitive edits and is error-prone on a phone.
+3. Group defaults plus per-key overrides: selected. Alpha, control, and accent groups each have key color, legend color, and legend-size controls; tapping the live keyboard preview creates or edits a single-key override, and Reset returns that key to its group.
+
+This follows established keyboard-editor interaction rather than inventing a hidden property sheet. Keyboard Layout Editor applies key color to the current selection and supports separate legend colors ([Keyboard Layout Editor](https://www.keyboard-layout-editor.com/)). VIA's official layout guidance also uses distinct alpha, modifier, and accent group colors and treats legend color separately ([VIA layouts reference](https://caniusevia.com/docs/layouts/)). Bluke adds a phone-sized workflow: horizontally scrollable target/layout chips, synchronized RGB sliders and exact `#RRGGBB` input, a live non-transmitting preview, and a dedicated library where built-ins can be selected or copied and custom themes can be named, edited, copied, and deleted. Font family import was intentionally not added: font licensing, glyph coverage, and keycap fit need a separate design and validation pass; legend scale is included now because it is bounded and mechanically previewable.
+
+Custom themes are stored as versioned JSON in app-private storage. Writes use a temporary file followed by rename/copy publication so an interrupted save does not expose a partially written theme. Per-key overrides use stable physical key IDs (`HID usage:occurrence`) and therefore survive character-layout changes; the same theme can be previewed on every retained layout. Corrupt/missing custom storage falls back to built-ins. Deleting the selected custom theme safely selects Oblivion.
+
+Upgrade behavior is explicit and idempotent. Schema 1 reads the existing `cycle_keyboard_layouts` set, maps every retained legacy entry one-to-one into both the independent layout set and built-in theme set, and starts at the previous runtime default (Oblivion layout + Oblivion theme). Once migrated, later launches do not overwrite a user's new selection. This feature does not alter the HID descriptor, so selecting layouts or themes does not require forgetting or re-pairing a host.
+
+Verification output:
 
 ```text
-> .\gradlew testDebugUnitTest assembleDebug --stacktrace
-BUILD SUCCESSFUL in 3m 23s
-47 actionable tasks: 8 executed, 39 up-to-date
+> .\gradlew.bat :app:compileDebugKotlin --stacktrace
+> Task :app:compileDebugKotlin
+BUILD SUCCESSFUL in 1m 49s
+7 actionable tasks: 1 executed, 6 up-to-date
 
-> .\gradlew lintDebug --no-daemon --no-parallel --warning-mode all --stacktrace
+> .\gradlew.bat testDebugUnitTest --tests dev.arnv.bluke.data.KeyboardThemeMigrationTest --max-workers=1
+> Task :app:testDebugUnitTest
+BUILD SUCCESSFUL in 1m 54s
+30 actionable tasks: 5 executed, 25 up-to-date
+
+> .\gradlew.bat assembleDebug lintDebug --warning-mode all --stacktrace
+> Task :app:assembleDebug
+> Task :app:lintReportDebug
 Wrote HTML report to file:///C:/Users/DELL/Documents/Bluke/app/build/reports/lint-results-debug.html
-BUILD SUCCESSFUL in 2m 46s
-29 actionable tasks: 8 executed, 21 up-to-date
+> Task :app:lintDebug
+BUILD SUCCESSFUL in 3m 22s
+48 actionable tasks: 12 executed, 36 up-to-date
 
-JUnit XML: files=18 tests=61 failures=0 errors=0 skipped=0
+> .\gradlew.bat testDebugUnitTest --no-daemon --max-workers=1 --warning-mode all --stacktrace
+> Task :app:testDebugUnitTest
+BUILD SUCCESSFUL in 1m
+30 actionable tasks: 1 executed, 29 up-to-date
+
+JUnit XML: files=19 tests=65 failures=0 errors=0 skipped=0
 lint-results-debug.xml: issues=21 errors=0 warnings=21
 ```
+
+The first sandboxed build attempts failed before compilation because Gradle targeted unwritable `C:\.gradle` / `C:\.android` locations. A later complete-test attempt also deliberately retained its real failure output: pointing Java's `user.home` at the Gradle cache made Robolectric resolve mismatched artifacts (`AndroidVersions.CURRENT` was null and `DisplayMetrics.noncompatWidthPixels` was absent). The final successful run used the repository Gradle/Android caches and the real Windows user home for Robolectric's Maven cache. These were host-path corrections; no Gradle, AGP, Kotlin, Compose, or dependency version changed.
 
 ## 8. Open questions for the maintainer
 
@@ -976,3 +1007,5 @@ lint-results-debug.xml: issues=21 errors=0 warnings=21
 8. Does the inspected CherryMX Black V1 pack import and play on the minimum API 28 device and current API 36 device, and do both use the expected per-key slices without audible clipping?
 9. Which ISO/JIS or regional keyboard geometries are release priorities beyond the five ANSI-compatible character profiles, and can each be tested against a host configured to the matching input source?
 10. On an RTL-language device with developer “Force RTL” both off and on, does the keyboard remain physically LTR while the settings and navigation chrome still localize correctly?
+11. On a small phone and a tablet, is the custom-theme preview large enough for reliable individual-key selection, and does the landscape keyboard toolbar remain usable with the longest custom theme/layout names?
+12. Should a future release add licensed font-family packs after glyph-coverage and key-fit rules are specified, or keep customization limited to legend color and scale?
