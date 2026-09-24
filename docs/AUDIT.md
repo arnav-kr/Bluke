@@ -1,6 +1,6 @@
 # Bluke Android platform audit
 
-Audit date: 2026-09-15/16 (Asia/Calcutta)  
+Audit date: 2026-09-15–24 (Asia/Calcutta)
 Audited revision: `ec01041` (`main`)  
 Working branch: `refactor`
 
@@ -14,14 +14,17 @@ Working branch: `refactor`
 - **P1 fixed, application retest required — gamepad compatibility:** the supplied Bluetooth capture proves the Hat descriptor reached the host and `evtest` proves all D-pad directions arrive. Guide/Share were moved out of canonical Web positions 12–15. Native Hat remains the default; an optional Web Compatibility encoder instead emits D-pad buttons 12–15 while holding the Hat neutral. The descriptor is identical in both modes.
 - **P1 fixed — compatibility mode discoverability:** the gamepad toolbar now shows the active `D-pad: Native` / `D-pad: Web` policy and switches it immediately; the Behavior screen remains the explanatory settings surface.
 - **P1 mitigated, device validation required — unsupported firmware:** repeated synchronous HID proxy or registration rejection now opens an explicit `Device Not Compatible` screen with Retry. Callback timeouts remain inconclusive and no manufacturer/model blacklist is used.
+- **P1 fixed — unsupported-state UX:** the incompatibility screen is now exclusive: launch/mode controls are hidden and the duplicate rejection toast is suppressed. Bluetooth-off and no-hardware states use the same blocking policy; transient registration and pairing states do not.
 - **P1 fixed — misleading restart action:** normal startup, registration, pairing, and pairing refusal no longer expose `Restart HID Service`; the action is restricted to exhausted proxy-binding or app-registration failures.
 - **P1 mitigated — cached gamepad descriptor:** existing installations now receive a descriptor-revision prompt explaining the one-time requirement to forget and re-pair on both sides; fresh installs record the current revision during onboarding. Once refreshed, switching between Native Hat and Web Compatibility never changes SDP and does not require another pairing.
 - **P1 fixed — layout persistence:** gesture changes are staged in memory and committed at gesture end through a single Preferences DataStore repository with one-time migration.
+- **P1 fixed — keyboard locale architecture/RTL:** physical board style is separated from character legend profile; US QWERTY, French AZERTY, German QWERTZ, Dvorak, and Colemak are selectable while HID usages remain physical. The keyboard surface is explicitly LTR, so Android's developer “Force RTL” option no longer mirrors it.
+- **P1 added with bounded scope — custom key sounds:** Mechvibes V2 multi-file ZIP packs can be safely imported and preloaded into the existing low-latency `SoundPool`. Audio-sprite packs are explicitly rejected pending an offline converter; no decoder dependency was added.
 - **P1 partially fixed — UI state/performance:** Bluetooth, discovery, connection, lifecycle, and lock state are hoisted into immutable `HomeUiState`; rapidly changing gamepad button reads are isolated to child restart scopes and long-lived pointer handlers observe current callbacks. Editor/transient presentation state remains local.
 - **P2 open — Compose alignment:** Material3 `1.4.0-alpha04` still lifts runtime to `1.8.0-alpha06`; removing the override fails compilation because `ThemeConfig.kt` uses Expressive-only APIs. A BOM/toolchain upgrade was prohibited in this pass.
 - **P2 fixed — resources:** unused resources and three malformed high-density WebPs were removed; adaptive icon background is explicitly `nodpi`.
 - Baseline: `assembleDebug` passed; lint reported 2 errors and 42 warnings; 3 tests passed and zero exercised Bluetooth/HID.
-- Final: `assembleDebug`, 44 unit tests, and full `lintDebug` pass after the Web-profile follow-up. The suite includes 18 facade/OEM-behavior contract runs across simulated API 28/31/36 plus cardinal, diagonal, neutral-Hat, default-policy, toolbar-toggle policy, and compatibility-classification coverage. Debug lint reports 0 errors/21 warnings. The physical Android/OEM matrix remains open because ADB found no attached target.
+- Final: `assembleDebug`, 52 unit tests, and full `lintDebug` pass after the custom-sound/layout follow-up. The suite includes 18 facade/OEM-behavior contract runs across simulated API 28/31/36 plus HID UI policy, sound-pack archive safety/parsing, locale legend mapping, gamepad input/report, and compatibility-classification coverage. Debug lint reports 0 errors/21 warnings. The physical Android/OEM matrix remains open because ADB found no attached target.
 - No SDK, AGP, Kotlin, Compose BOM, signing, Fastlane, or F-Droid version/config changes were made. DataStore `1.2.1` is the only new dependency.
 
 ## 2. Repository reconnaissance
@@ -60,13 +63,14 @@ app/src/main/
 │   ├── MainActivity.kt
 │   ├── OnboardingActivity.kt
 │   ├── SettingsActivity.kt
+│   ├── SoundPacksActivity.kt
 │   ├── bluetooth/BluetoothKeyboardManager.kt
 │   ├── bluetooth/GamepadReport.kt
 │   ├── bluetooth/HidLifecycle.kt
 │   ├── bluetooth/HidRegistrationCoordinator.kt
 │   ├── bluetooth/LatestRequestProcessor.kt
 │   ├── data/LayoutRepository.kt
-│   ├── sound/KeyboardSoundSynthesizer.kt
+│   ├── sound/{CustomSoundPackRepository,KeyboardSoundSynthesizer}.kt
 │   ├── utils/DeveloperLogManager.kt
 │   └── ui/
 │       ├── DeviceRow.kt
@@ -75,6 +79,7 @@ app/src/main/
 │       ├── HomeScreen.kt
 │       ├── HomeViewModel.kt
 │       ├── KeyboardLayouts.kt
+│       ├── KeyboardCharacterLayouts.kt
 │       ├── KeyboardView.kt
 │       ├── KeyCap.kt
 │       ├── SettingsComponents.kt
@@ -181,6 +186,9 @@ flowchart TD
     HS --> KB[KeyboardView]
     HS --> TP[TouchpadView]
     HS --> GP[GamepadView]
+    HS --> KSS[KeyboardSoundSynthesizer / SoundPool]
+    SPA[SoundPacksActivity] --> CSP[CustomSoundPackRepository]
+    CSP -->|selected V2 multi-file pack| KSS
     GP --> LR[LayoutRepository / Preferences DataStore]
     HS --> DLS[DeviceListSection]
     HS --> SHC[StatusHeaderCard]
@@ -860,6 +868,75 @@ List of devices attached
 
 Required physical confirmation: install this final build, forget the host in Android, remove Bluke on the host, and pair again once because report ID 3 changed to 12 bytes. In Native Hat mode, `evtest` must retain `ABS_HAT0X/Y` and buttons 12–15 must remain inactive. In Web Compatibility mode, the Hat must remain neutral and buttons 12–15 must carry the four directions, including two buttons for a diagonal. Guide/Share/Touchpad must remain at 16/17/18 in both modes. Test Dynamine/Brave plus Windows Game Controllers and a native SDL/DirectInput game, then switch back to Native mode without re-pairing. The empty ADB list means the API 28/31/36 and Motorola/Tecno/LG physical matrix could not be executed on this workstation.
 
+### 7.5 Unsupported-state, keyboard-layout, and custom-sound follow-up (2026-09-24)
+
+#### Unsupported HID state
+
+The reported visual contradiction was deterministic in `HomeScreen`: `ProfileNotSupportedScreen` was selected in the content branch, but the sticky mode and Launch controls were rendered after that branch and therefore remained visible. A `LaunchedEffect` independently turned the same rejected-registration message into a toast. `BluetoothState.blocksInputLaunch()` is now the single policy for `BluetoothOff`, `Unsupported`, and `ProfileNotSupported`; the sticky controls are absent for all three. `ProfileNotSupported` also suppresses the duplicate toast because the full-screen state already contains the reason and Retry action. Pairing, binding, registration, and connection refusal remain non-blocking and do not get falsely classified as unsupported.
+
+#### Keyboard layout architecture and RTL
+
+The old `KeyboardLayoutType` mixes physical geometry and colorway names such as Olivia, Dracula, and HHKB. It is retained for compatibility, while `KeyboardCharacterLayout` now independently models the host typing layout with stable preference values. Character profiles transform legends *after* parsing the KLE geometry, so each key retains its original USB HID usage. This is required because the host OS—not the HID peripheral—maps physical usages to characters. For example, French AZERTY displays `A` at the physical Q position but continues transmitting usage `KEY_Q`; a host configured for French produces `A`.
+
+The first registry contains US QWERTY, French AZERTY, German QWERTZ, Dvorak, and Colemak. This is an extensible baseline, not a claim to cover every international keyboard. “All international layouts” is not a finite interoperable set: regional variants differ in dead keys, AltGr layers, ISO/JIS geometry, and input-method behavior. The current on-screen boards are ANSI-derived and do not contain the ISO extra key. The next safe expansion should add a geometry capability model (`ANSI`, `ISO`, `JIS`) and profile layers instead of hardcoding more labels into KLE strings. Unicode LDML similarly separates physical key maps, modifier maps, and output transforms: [Unicode LDML Keyboard Layouts](https://www.unicode.org/reports/tr35/tr35-keyboards.html).
+
+`KeyboardView` now provides `LayoutDirection.Ltr` at its root. App chrome can still localize and follow RTL normally, but developer-forced RTL can no longer mirror physical key coordinates or touch hitboxes.
+
+#### Mechvibes custom sound packs
+
+Upstream source and format documentation were inspected rather than inferred. Mechvibes V2 supports `key_define_type: "multi"` with a default `sound`, optional/default `soundup`, numeric standard key-code overrides, `-up` release definitions, and filename ranges such as `GENERIC_R{0-4}.mp3`. It unloads the previous pack and preloads only the selected pack. Sources: [Mechvibes config versions](https://github.com/hainguyents13/mechvibes/wiki/Config-Versions), [Mechvibes sound packs](https://github.com/hainguyents13/mechvibes/wiki/Soundpacks), [MechvibesDX V2 format](https://github.com/hainguyents13/mechvibes-dx/blob/main/docs/soundpack-config-v2.md), and [MechvibesDX architecture](https://github.com/hainguyents13/mechvibes-dx/blob/main/docs/system-architecture.md).
+
+Bluke now follows that lifecycle using its existing low-latency `SoundPool`: import through Android's document picker, validate/extract in app-private storage, unload the previous bank, deduplicate audio files, preload the selected bank on one loader executor, and play by an explicit USB-HID-to-Mechvibes-standard-keycode map. ZIP import rejects absolute/traversal paths, limits entries to 512, individual files to 16 MiB, and total expanded data to 64 MiB. Selection is persistent and switching back to a built-in profile unloads the custom bank. No storage permission and no new third-party dependency are required.
+
+Mechvibes `single` packs are audio sprites: each key definition is a start/duration range in one file. Android `SoundPool` cannot seek and play arbitrary sprite slices. Playing the entire file or adding a general-purpose FFmpeg decoder would violate the low-latency/low-risk goal. These packs therefore return a clear “convert to V2 multi-file” error. A future offline importer may decode and split sprites once, then use the same `SoundPool` bank.
+
+| Decision | Benefit | Cost / follow-up |
+|---|---|---|
+| Keep physical HID usages stable and transform legends only. | Correct host-side layout semantics; no descriptor or pairing migration. | Host input source must match the selected Bluke legend profile. |
+| Add five character profiles over existing ANSI boards. | Covers the requested major arrangements with a testable registry. | ISO/JIS and full dead-key/AltGr layers remain future work. |
+| Force only the keyboard surface LTR. | Fixes forced-RTL geometry without breaking localized app chrome. | Must be visually checked on an RTL-language device. |
+| Support V2 multi-file packs with platform APIs. | Low latency, no dependency/version change, bounded archive attack surface. | Audio-sprite packs need prior conversion. |
+| Keep one active preloaded bank. | Bounded memory and matches upstream Mechvibes lifecycle. | A newly selected pack may be silent for its brief asynchronous preload window. |
+
+New verification output:
+
+```text
+> .\gradlew.bat testDebugUnitTest assembleDebug
+BUILD SUCCESSFUL in 56s
+47 actionable tasks: 2 executed, 45 up-to-date
+
+> .\gradlew.bat testDebugUnitTest assembleDebug
+BUILD SUCCESSFUL in 2m 14s
+47 actionable tasks: 10 executed, 37 up-to-date
+
+> .\gradlew.bat testDebugUnitTest assembleDebug --stacktrace
+BUILD SUCCESSFUL in 2m 17s
+47 actionable tasks: 11 executed, 36 up-to-date
+
+> .\gradlew.bat lintDebug --warning-mode all --stacktrace
+Wrote HTML report to file:///C:/Users/DELL/Documents/Bluke/app/build/reports/lint-results-debug.html
+BUILD SUCCESSFUL in 2m 5s
+29 actionable tasks: 8 executed, 21 up-to-date
+
+lint-results-debug.xml: issues=21 errors=0 warnings=21
+AndroidGradlePluginVersion=1 GradleDependency=10 NewerVersionAvailable=8 ObsoleteSdkInt=1 OldTargetApi=1
+JUnit XML: files=15 tests=52 failures=0 errors=0 skipped=0
+```
+
+Two setup/source failures were retained rather than concealed:
+
+```text
+Exception in thread "main" java.lang.RuntimeException: Could not create parent directory for lock file C:\.gradle\wrapper\dists\gradle-9.5.1-bin\...\gradle-9.5.1-bin.zip.lck
+
+e: .../LookAndFeelActivity.kt:289:34 Syntax error: Unexpected tokens
+> Task :app:compileDebugKotlin FAILED
+BUILD FAILED in 34s
+```
+
+The first was corrected by explicitly using the existing user Gradle cache. The second was an intermediate settings-list edit and was corrected before the successful compile/test/lint gates above. One test-source compile failure (`BluetoothState.PairingMode` referenced without its required name) was likewise corrected before the successful 52-test run.
+
+The supplied video could not be decoded in this workstation environment: no local video decoder was available, and the in-app browser correctly blocked local `file://` access. The two supplied screenshots and executable UI branch were sufficient to prove the unsupported-screen layering issue. This limitation is not treated as evidence about device timing or animation behavior.
+
 ## 8. Open questions for the maintainer
 
 1. On which API 28, 31, and 36 devices did the physical matrix pass or fail, and can the resulting developer logs/build fingerprints be attached?
@@ -869,3 +946,6 @@ Required physical confirmation: install this final build, forget the host in And
 5. Can the same Windows pairing switch back to Native Hat mode and immediately expose a POV Hat in Windows Game Controllers/SDL without removing the device?
 6. Do macOS, iOS/iPadOS, Android TV, and the available Samsung TV expose both mutually exclusive encodings correctly, and which exact OS/model combinations reject the generic HID gamepad collection?
 7. After device validation, should the next refactor mechanically split `GamepadView.kt`, `TouchpadView.kt`, and `BehaviorActivity.kt`, or keep that separate from this compatibility branch?
+8. Which real Mechvibes V2 multi-file packs should be added to the release acceptance set, and should Bluke later ship an offline converter for legacy audio-sprite packs?
+9. Which ISO/JIS or regional keyboard geometries are release priorities beyond the five ANSI-compatible character profiles, and can each be tested against a host configured to the matching input source?
+10. On an RTL-language device with developer “Force RTL” both off and on, does the keyboard remain physically LTR while the settings and navigation chrome still localize correctly?
