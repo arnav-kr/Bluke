@@ -25,6 +25,8 @@ fun KeyCap(
     isPressed: Boolean,
     keyBgColor: Color,
     legendColor: Color,
+    legendScale: Float = 1f,
+    isSelected: Boolean = false,
     baseUnitWidth: androidx.compose.ui.unit.Dp,
     modifier: Modifier = Modifier,
     glowColor: Color? = null
@@ -46,6 +48,10 @@ fun KeyCap(
             .height(height)
             .testTag("key_$legend")
             .padding(1.dp)
+            .then(
+                if (isSelected) Modifier.border(2.dp, Color(0xFF00BCD4), RoundedCornerShape(outerRadius))
+                else Modifier
+            )
     ) {
         // Underglow if active
         if (glowColor != null && glowColor != Color.Transparent) {
@@ -83,8 +89,8 @@ fun KeyCap(
                 .border(1.dp, Color.Black.copy(alpha = 0.15f), RoundedCornerShape(innerRadius)),
             contentAlignment = Alignment.Center
         ) {
-            val mainFontSize = (baseUnitWidth.value * 0.24f).coerceIn(7f, 13f).sp
-            val shiftFontSize = (baseUnitWidth.value * 0.17f).coerceIn(5f, 9f).sp
+            val mainFontSize = ((baseUnitWidth.value * 0.24f).coerceIn(7f, 13f) * legendScale).sp
+            val shiftFontSize = ((baseUnitWidth.value * 0.17f).coerceIn(5f, 9f) * legendScale).sp
 
             if (shiftedLegend.isNotEmpty()) {
                 // Stack legends inside a column so the secondary text sits exactly slightly above the primary with perfect alignment

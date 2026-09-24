@@ -22,11 +22,12 @@ import dev.arnv.bluke.ui.SettingsCardGroup
 import dev.arnv.bluke.ui.SettingsGroup
 import dev.arnv.bluke.ui.SettingsItemData
 import dev.arnv.bluke.ui.theme.MyApplicationTheme
-import dev.arnv.bluke.ui.KeyboardLayoutType
+import dev.arnv.bluke.ui.KeyboardGeometry
 import dev.arnv.bluke.ui.KeyboardCharacterLayout
 import dev.arnv.bluke.ui.KEYBOARD_CHARACTER_LAYOUT_PREFERENCE
 import dev.arnv.bluke.sound.SwitchType
 import dev.arnv.bluke.ui.CaseColor
+import dev.arnv.bluke.data.CYCLE_KEYBOARD_GEOMETRIES_PREFERENCE
 import androidx.compose.material.icons.filled.Keyboard
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.SportsEsports
@@ -314,9 +315,9 @@ class BehaviorActivity : ComponentActivity() {
                         )
                         
                         // Quick Cycle Configurations
-                        val allLayoutTypes = KeyboardLayoutType.entries
+                        val allLayoutTypes = KeyboardGeometry.entries
                         var activeLayoutsSet by remember {
-                            mutableStateOf(sharedPrefs.getStringSet("cycle_keyboard_layouts", allLayoutTypes.map { it.name }.toSet()) ?: emptySet())
+                            mutableStateOf(sharedPrefs.getStringSet(CYCLE_KEYBOARD_GEOMETRIES_PREFERENCE, allLayoutTypes.map { it.name }.toSet()) ?: emptySet())
                         }
                         val layoutsDescription = if (activeLayoutsSet.size == allLayoutTypes.size) {
                             "All layouts active in cycle"
@@ -572,7 +573,7 @@ class BehaviorActivity : ComponentActivity() {
                                 confirmButton = {
                                     TextButton(
                                         onClick = {
-                                            sharedPrefs.edit { putStringSet("cycle_keyboard_layouts", selectedLayouts.toSet()) }
+                                            sharedPrefs.edit { putStringSet(CYCLE_KEYBOARD_GEOMETRIES_PREFERENCE, selectedLayouts.toSet()) }
                                             activeLayoutsSet = selectedLayouts.toSet()
                                             showLayoutsDialog = false
                                         }

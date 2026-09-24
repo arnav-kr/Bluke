@@ -82,6 +82,14 @@ class SettingsActivity : ComponentActivity() {
                                     }
                                 ),
                                 SettingsItemData(
+                                    title = "Custom keyboard theme",
+                                    subtitle = "Choose, copy, and customize keyboard colors",
+                                    icon = { Icon(Icons.Default.Keyboard, null, tint = MaterialTheme.colorScheme.primary) },
+                                    onClick = {
+                                        startActivity(Intent(this@SettingsActivity, KeyboardThemesActivity::class.java))
+                                    }
+                                ),
+                                SettingsItemData(
                                     title = "Behavior",
                                     subtitle = "Modify certain behavior of the app",
                                     icon = { Icon(Icons.Default.Settings, null, tint = MaterialTheme.colorScheme.primary) },

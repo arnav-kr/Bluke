@@ -41,10 +41,12 @@ import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import android.content.Context
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.res.stringResource
 import dev.arnv.bluke.R
+import dev.arnv.bluke.KeyboardThemesActivity
 import androidx.compose.ui.unit.sp
 import androidx.core.content.edit
 import androidx.core.net.toUri
@@ -55,6 +57,9 @@ import dev.arnv.bluke.bluetooth.HID_DESCRIPTOR_REVISION_PREFERENCE
 import dev.arnv.bluke.bluetooth.requiresHidDescriptorRefresh
 import dev.arnv.bluke.sound.KeyboardSoundSynthesizer
 import dev.arnv.bluke.sound.SwitchType
+import dev.arnv.bluke.data.CYCLE_KEYBOARD_GEOMETRIES_PREFERENCE
+import dev.arnv.bluke.data.KEYBOARD_GEOMETRY_PREFERENCE
+import dev.arnv.bluke.data.KeyboardThemeRepository
 
 @SuppressLint("MissingPermission")
 @OptIn(ExperimentalLayoutApi::class, ExperimentalMaterial3Api::class)
@@ -72,7 +77,13 @@ fun HomeScreen(
     val sharedPrefs = remember(context) {
         context.getSharedPreferences("app_prefs", Context.MODE_PRIVATE)
     }
-    var selectedLayoutType by rememberSaveable { mutableStateOf(KeyboardLayoutType.OBLIVION_75) }
+    val keyboardThemeRepository = remember(context) { KeyboardThemeRepository(context) }
+    var selectedGeometry by rememberSaveable {
+        mutableStateOf(
+            KeyboardGeometry.fromPreference(sharedPrefs.getString(KEYBOARD_GEOMETRY_PREFERENCE, null))
+        )
+    }
+    var selectedKeyboardTheme by remember { mutableStateOf(keyboardThemeRepository.selectedTheme()) }
     var characterLayout by rememberSaveable {
         mutableStateOf(
             KeyboardCharacterLayout.fromPreference(
@@ -120,6 +131,10 @@ fun HomeScreen(
                 characterLayout = KeyboardCharacterLayout.fromPreference(
                     sharedPrefs.getString(KEYBOARD_CHARACTER_LAYOUT_PREFERENCE, null)
                 )
+                selectedGeometry = KeyboardGeometry.fromPreference(
+                    sharedPrefs.getString(KEYBOARD_GEOMETRY_PREFERENCE, null)
+                )
+                selectedKeyboardTheme = keyboardThemeRepository.selectedTheme()
                 val enabledModes = listOf(0, 1, 2).filter { mode ->
                     val modeStr = when (mode) {
                         0 -> "keyboard"
@@ -732,15 +747,16 @@ fun HomeScreen(
                                         .clip(RoundedCornerShape(6.dp))
                                         .background(Color.White.copy(alpha = 0.15f))
                                         .clickable {
-                                            val savedSet = sharedPrefs.getStringSet("cycle_keyboard_layouts", null)
+                                            val savedSet = sharedPrefs.getStringSet(CYCLE_KEYBOARD_GEOMETRIES_PREFERENCE, null)
                                             val enabledLayouts = if (savedSet == null) {
-                                                KeyboardLayoutType.entries
+                                                KeyboardGeometry.entries
                                             } else {
-                                                KeyboardLayoutType.entries.filter { savedSet.contains(it.name) }
-                                            }.ifEmpty { listOf(selectedLayoutType) }
-                                            val currentIndexInEnabled = enabledLayouts.indexOf(selectedLayoutType)
+                                                KeyboardGeometry.entries.filter { savedSet.contains(it.name) }
+                                            }.ifEmpty { listOf(selectedGeometry) }
+                                            val currentIndexInEnabled = enabledLayouts.indexOf(selectedGeometry)
                                             val nextIndex = if (currentIndexInEnabled < 0) 0 else (currentIndexInEnabled + 1) % enabledLayouts.size
-                                            selectedLayoutType = enabledLayouts[nextIndex]
+                                            selectedGeometry = enabledLayouts[nextIndex]
+                                            sharedPrefs.edit { putString(KEYBOARD_GEOMETRY_PREFERENCE, selectedGeometry.name) }
                                             soundSynth.playPress()
                                         }
                                         .padding(horizontal = 8.dp),
@@ -754,10 +770,13 @@ fun HomeScreen(
                                     )
                                     Spacer(modifier = Modifier.width(4.dp))
                                     Text(
-                                        text = selectedLayoutType.displayName,
+                                        text = selectedGeometry.displayName,
                                         color = Color.White,
                                         fontSize = 9.sp,
-                                        fontWeight = FontWeight.Bold
+                                        fontWeight = FontWeight.Bold,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                        modifier = Modifier.widthIn(max = 90.dp),
                                     )
                                 }
 
@@ -797,20 +816,14 @@ fun HomeScreen(
                                     )
                                 }
 
-                                // 4. Case Color Selector Pill
+                                // 4. Keyboard Theme Selector Pill
                                 Row(
                                     modifier = Modifier
                                         .height(28.dp)
                                         .clip(RoundedCornerShape(6.dp))
                                         .background(Color.White.copy(alpha = 0.15f))
                                         .clickable {
-                                            val enabledColors = CaseColor.entries.filter { color ->
-                                                sharedPrefs.getStringSet("cycle_case_colors", CaseColor.entries.map { it.name }.toSet())?.contains(color.name) == true
-                                            }.ifEmpty { listOf(selectedCaseColor) }
-                                            val currentIndexInEnabled = enabledColors.indexOf(selectedCaseColor)
-                                            val nextIndex = (currentIndexInEnabled + 1) % enabledColors.size
-                                            selectedCaseColor = enabledColors[nextIndex]
-                                            soundSynth.playRelease()
+                                            context.startActivity(Intent(context, KeyboardThemesActivity::class.java))
                                         }
                                         .padding(horizontal = 8.dp),
                                     verticalAlignment = Alignment.CenterVertically
@@ -819,15 +832,18 @@ fun HomeScreen(
                                         modifier = Modifier
                                             .size(8.dp)
                                             .clip(CircleShape)
-                                            .background(selectedCaseColor.getActualColor(sharedPrefs))
+                                            .background(Color(selectedKeyboardTheme.accentStyle.backgroundArgb))
                                             .border(0.5.dp, Color.White, CircleShape)
                                     )
                                     Spacer(modifier = Modifier.width(4.dp))
                                     Text(
-                                        text = selectedCaseColor.displayName,
+                                        text = selectedKeyboardTheme.name,
                                         color = Color.White,
                                         fontSize = 9.sp,
-                                        fontWeight = FontWeight.Bold
+                                        fontWeight = FontWeight.Bold,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                        modifier = Modifier.widthIn(max = 80.dp),
                                     )
                                 }
 
@@ -865,9 +881,9 @@ fun HomeScreen(
                             contentAlignment = Alignment.Center
                         ) {
                             KeyboardView(
-                                layoutType = selectedLayoutType,
+                                geometry = selectedGeometry,
+                                theme = selectedKeyboardTheme,
                                 characterLayout = characterLayout,
-                                caseColor = selectedCaseColor,
                                 activePressedKeys = activePressedKeys,
                                 isConnected = isConnected,
                                 isCapsLockActive = isCapsLockActive,

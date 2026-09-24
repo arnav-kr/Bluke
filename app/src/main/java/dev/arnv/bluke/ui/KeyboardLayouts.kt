@@ -21,6 +21,30 @@ enum class KeyboardLayoutType(val displayName: String) {
     EIGHT_ZERO_ZERO_EIGHT_65("GMK 8008 65%")
 }
 
+enum class KeyboardGeometry(
+    val displayName: String,
+    internal val legacySource: KeyboardLayoutType,
+) {
+    OLIVIA_75("Olivia 75%", KeyboardLayoutType.OLIVIA_75),
+    DRACULA_75("Dracula 75%", KeyboardLayoutType.DRACULA_75),
+    CAFE_65("Cafe 65%", KeyboardLayoutType.CAFE_65),
+    HHKB_60("HHKB 60%", KeyboardLayoutType.HHKB_60),
+    MODEL_M_75("Model M 75%", KeyboardLayoutType.MODEL_M_VINTAGE),
+    MIZU_65("Mizu 65%", KeyboardLayoutType.MIZU_65),
+    LASER_75("Laser 75%", KeyboardLayoutType.LASER_75),
+    OBLIVION_75("Oblivion 75%", KeyboardLayoutType.OBLIVION_75),
+    NINE_ZERO_ZERO_NINE("9009 compact", KeyboardLayoutType.NINE_ZERO_ZERO_NINE_TKL),
+    EIGHT_ZERO_ZERO_EIGHT_65("8008 65%", KeyboardLayoutType.EIGHT_ZERO_ZERO_EIGHT_65);
+
+    companion object {
+        fun fromPreference(value: String?): KeyboardGeometry =
+            entries.firstOrNull { it.name == value } ?: OBLIVION_75
+
+        fun fromLegacy(type: KeyboardLayoutType): KeyboardGeometry =
+            entries.first { it.legacySource == type }
+    }
+}
+
 enum class CaseColor(val displayName: String, val caseColor: Color, val metallic: Boolean) {
     BLACK("Black", Color(0xFF1E1E20), false),
     GRAY("Gray", Color(0xFF5A5C61), false),
@@ -169,6 +193,7 @@ object Colorways {
 
 data class KeyLayoutInfo(
     val legend: String,
+    val styleId: String = "",
     val shiftedLegend: String = "",
     val widthRatio: Float = 1.0f,
     val heightRatio: Float = 1.0f,
@@ -283,6 +308,11 @@ object KeyboardLayouts {
         return parseKleString(kle).withCharacterLayout(characterLayout)
     }
 
+    fun getLayout(
+        geometry: KeyboardGeometry,
+        characterLayout: KeyboardCharacterLayout = KeyboardCharacterLayout.US_QWERTY,
+    ): List<List<KeyLayoutInfo>> = getLayout(geometry.legacySource, characterLayout)
+
     private fun getKleString(type: KeyboardLayoutType): String {
         return when (type) {
             KeyboardLayoutType.OLIVIA_75 -> """
@@ -381,6 +411,7 @@ object KeyboardLayouts {
         
         var currentY = 0.0f
         var rowIndex = 0
+        val styleIdOccurrences = mutableMapOf<Int, Int>()
         
         // Key state modifiers
         var keyW = 1.0f
@@ -471,6 +502,7 @@ object KeyboardLayouts {
                     
                     currentRow.add(
                         KeyLayoutInfo(
+                            styleId = "$kCode:${styleIdOccurrences.getOrDefault(kCode, 0)}",
                             legend = pLegend,
                             shiftedLegend = pShifted,
                             widthRatio = keyW,
@@ -481,6 +513,7 @@ object KeyboardLayouts {
                             category = cat
                         )
                     )
+                    styleIdOccurrences[kCode] = styleIdOccurrences.getOrDefault(kCode, 0) + 1
                     
                     currentX += keyW
                     keyW = 1.0f

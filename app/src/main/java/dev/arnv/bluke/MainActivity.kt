@@ -9,6 +9,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import dev.arnv.bluke.bluetooth.BluetoothKeyboardManager
 import dev.arnv.bluke.sound.KeyboardSoundSynthesizer
 import dev.arnv.bluke.sound.migrateSoundPreferences
+import dev.arnv.bluke.data.migrateKeyboardCustomizationPreferences
 import dev.arnv.bluke.ui.theme.MyApplicationTheme
 import dev.arnv.bluke.ui.HomeScreen
 
@@ -28,6 +29,7 @@ class MainActivity : ComponentActivity() {
         
         val sharedPrefs = getSharedPreferences("app_prefs", MODE_PRIVATE)
         migrateSoundPreferences(sharedPrefs)
+        migrateKeyboardCustomizationPreferences(sharedPrefs)
         if (!sharedPrefs.getBoolean("has_seen_onboarding", false)) {
             startActivity(android.content.Intent(this, OnboardingActivity::class.java))
             finish()
