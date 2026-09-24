@@ -20,20 +20,12 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.unit.dp
 import dev.arnv.bluke.ui.SettingsCardGroup
 import dev.arnv.bluke.ui.SettingsItemData
 import dev.arnv.bluke.ui.theme.MyApplicationTheme
 import dev.arnv.bluke.ui.theme.AccentColors
-import dev.arnv.bluke.ui.theme.CUSTOM_THEME_ACCENT
-import dev.arnv.bluke.ui.theme.CUSTOM_THEME_BACKGROUND
-import dev.arnv.bluke.ui.theme.CUSTOM_THEME_ENABLED
-import dev.arnv.bluke.ui.theme.CUSTOM_THEME_SURFACE
-import dev.arnv.bluke.ui.theme.DEFAULT_CUSTOM_ACCENT
-import dev.arnv.bluke.ui.theme.DEFAULT_CUSTOM_BACKGROUND
-import dev.arnv.bluke.ui.theme.DEFAULT_CUSTOM_SURFACE
 import dev.arnv.bluke.ui.theme.getCookieShape
 import kotlinx.coroutines.launch
 
@@ -54,14 +46,12 @@ class LookAndFeelActivity : ComponentActivity() {
             MyApplicationTheme {
                 var dynamicColor by remember { mutableStateOf(sharedPrefs.getBoolean("dynamic_color", isDynamicColorDefault)) }
                 var accentColorIndex by remember { mutableIntStateOf(sharedPrefs.getInt("accent_color_index", 0)) }
-                var customThemeEnabled by remember { mutableStateOf(sharedPrefs.getBoolean(CUSTOM_THEME_ENABLED, false)) }
                 var paletteStyleState by remember { mutableStateOf(sharedPrefs.getString("palette_style", "Tonal Spot") ?: "Tonal Spot") }
                 
                 var hapticsEnabled by remember { mutableStateOf(sharedPrefs.getBoolean("haptics_enabled", true)) }
                 var keySoundEnabled by remember { mutableStateOf(sharedPrefs.getBoolean("key_sound_enabled", true)) }
                 
                 var showPaletteDialog by remember { mutableStateOf(false) }
-                var showCustomColorDialog by remember { mutableStateOf(false) }
                 val themeMode by themeModeState
                 
                 val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
@@ -123,7 +113,7 @@ class LookAndFeelActivity : ComponentActivity() {
                                             val index = startIndex + i
                                             if (index < AccentColors.size) {
                                                 val color = AccentColors[index]
-                                                val isSelected = !customThemeEnabled && accentColorIndex == index
+                                                val isSelected = accentColorIndex == index
                                                 Box(
                                                     modifier = Modifier
                                                         .size(64.dp)
@@ -131,10 +121,8 @@ class LookAndFeelActivity : ComponentActivity() {
                                                         .background(color)
                                                         .clickable {
                                                             accentColorIndex = index
-                                                            customThemeEnabled = false
                                                             sharedPrefs.edit {
                                                                 putInt("accent_color_index", index)
-                                                                putBoolean(CUSTOM_THEME_ENABLED, false)
                                                             }
                                                         },
                                                     contentAlignment = Alignment.Center
@@ -196,63 +184,7 @@ class LookAndFeelActivity : ComponentActivity() {
                                         )
                                     }
                                 }
-
-                                Spacer(modifier = Modifier.height(16.dp))
-
-                                Surface(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .padding(horizontal = 24.dp)
-                                        .clickable { showCustomColorDialog = true },
-                                    shape = MaterialTheme.shapes.large,
-                                    color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f),
-                                ) {
-                                    Row(
-                                        modifier = Modifier.padding(16.dp),
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(12.dp),
-                                    ) {
-                                        CustomPalettePreview(
-                                            background = Color(sharedPrefs.getInt(CUSTOM_THEME_BACKGROUND, DEFAULT_CUSTOM_BACKGROUND)),
-                                            surface = Color(sharedPrefs.getInt(CUSTOM_THEME_SURFACE, DEFAULT_CUSTOM_SURFACE)),
-                                            accent = Color(sharedPrefs.getInt(CUSTOM_THEME_ACCENT, DEFAULT_CUSTOM_ACCENT)),
-                                        )
-                                        Column(modifier = Modifier.weight(1f)) {
-                                            Text("Custom colors", style = MaterialTheme.typography.titleMedium)
-                                            Text(
-                                                "Background, keys/surfaces, and accent/text",
-                                                style = MaterialTheme.typography.bodySmall,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                            )
-                                        }
-                                        RadioButton(
-                                            selected = customThemeEnabled,
-                                            onClick = { showCustomColorDialog = true },
-                                        )
-                                    }
-                                }
                             }
-                        }
-
-                        if (showCustomColorDialog) {
-                            CustomColorDialog(
-                                initialBackground = sharedPrefs.getInt(CUSTOM_THEME_BACKGROUND, DEFAULT_CUSTOM_BACKGROUND),
-                                initialSurface = sharedPrefs.getInt(CUSTOM_THEME_SURFACE, DEFAULT_CUSTOM_SURFACE),
-                                initialAccent = sharedPrefs.getInt(CUSTOM_THEME_ACCENT, DEFAULT_CUSTOM_ACCENT),
-                                onDismiss = { showCustomColorDialog = false },
-                                onSave = { background, surface, accent ->
-                                    customThemeEnabled = true
-                                    sharedPrefs.edit {
-                                        putInt(CUSTOM_THEME_BACKGROUND, background)
-                                        putInt(CUSTOM_THEME_SURFACE, surface)
-                                        putInt(CUSTOM_THEME_ACCENT, accent)
-                                        putBoolean(CUSTOM_THEME_ENABLED, true)
-                                        putBoolean("dynamic_color", false)
-                                    }
-                                    dynamicColor = false
-                                    showCustomColorDialog = false
-                                },
-                            )
                         }
 
                         SettingsCardGroup(

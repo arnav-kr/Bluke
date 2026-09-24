@@ -75,18 +75,6 @@ fun MyApplicationTheme(
   var accentColorIndex by androidx.compose.runtime.remember {
       androidx.compose.runtime.mutableIntStateOf(sharedPrefs.getInt("accent_color_index", 0))
   }
-  var customThemeEnabled by androidx.compose.runtime.remember {
-      androidx.compose.runtime.mutableStateOf(sharedPrefs.getBoolean(CUSTOM_THEME_ENABLED, false))
-  }
-  var customBackground by androidx.compose.runtime.remember {
-      androidx.compose.runtime.mutableIntStateOf(sharedPrefs.getInt(CUSTOM_THEME_BACKGROUND, DEFAULT_CUSTOM_BACKGROUND))
-  }
-  var customSurface by androidx.compose.runtime.remember {
-      androidx.compose.runtime.mutableIntStateOf(sharedPrefs.getInt(CUSTOM_THEME_SURFACE, DEFAULT_CUSTOM_SURFACE))
-  }
-  var customAccent by androidx.compose.runtime.remember {
-      androidx.compose.runtime.mutableIntStateOf(sharedPrefs.getInt(CUSTOM_THEME_ACCENT, DEFAULT_CUSTOM_ACCENT))
-  }
   var themeMode by androidx.compose.runtime.remember {
       androidx.compose.runtime.mutableIntStateOf(sharedPrefs.getInt("theme_mode", 0))
   }
@@ -103,10 +91,6 @@ fun MyApplicationTheme(
           when (key) {
               "dynamic_color" -> dynamicColor = prefs.getBoolean("dynamic_color", isDynamicColorDefault)
               "accent_color_index" -> accentColorIndex = prefs.getInt("accent_color_index", 0)
-              CUSTOM_THEME_ENABLED -> customThemeEnabled = prefs.getBoolean(CUSTOM_THEME_ENABLED, false)
-              CUSTOM_THEME_BACKGROUND -> customBackground = prefs.getInt(CUSTOM_THEME_BACKGROUND, DEFAULT_CUSTOM_BACKGROUND)
-              CUSTOM_THEME_SURFACE -> customSurface = prefs.getInt(CUSTOM_THEME_SURFACE, DEFAULT_CUSTOM_SURFACE)
-              CUSTOM_THEME_ACCENT -> customAccent = prefs.getInt(CUSTOM_THEME_ACCENT, DEFAULT_CUSTOM_ACCENT)
               "theme_mode" -> themeMode = prefs.getInt("theme_mode", 0)
               "high_contrast_mode" -> highContrastMode = prefs.getBoolean("high_contrast_mode", false)
               "palette_style" -> paletteStyle = prefs.getString("palette_style", "Tonal Spot") ?: "Tonal Spot"
@@ -138,35 +122,6 @@ fun MyApplicationTheme(
         if (useDarkTheme && highContrastMode) {
             baseScheme.copy(background = Color.Black, surface = Color.Black, surfaceVariant = Color(0xFF1C1C1E))
         } else baseScheme
-      }
-      customThemeEnabled -> {
-        val background = Color(customBackground)
-        val surface = Color(customSurface)
-        val accent = Color(customAccent)
-        val onAccent = Color(contrastingContentColor(customAccent))
-        val baseScheme = if (useDarkTheme) DarkColorScheme else LightColorScheme
-        baseScheme.copy(
-          primary = accent,
-          onPrimary = onAccent,
-          primaryContainer = surface,
-          onPrimaryContainer = accent,
-          secondary = accent,
-          onSecondary = onAccent,
-          secondaryContainer = surface,
-          onSecondaryContainer = accent,
-          tertiary = accent,
-          onTertiary = onAccent,
-          tertiaryContainer = surface,
-          onTertiaryContainer = accent,
-          background = background,
-          onBackground = accent,
-          surface = background,
-          onSurface = accent,
-          surfaceVariant = surface,
-          onSurfaceVariant = accent,
-          outline = accent.copy(alpha = 0.65f),
-          surfaceTint = accent,
-        )
       }
       useDarkTheme -> DarkColorScheme.copy(
           primary = baseColor,

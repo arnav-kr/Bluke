@@ -1,14 +1,5 @@
 package dev.arnv.bluke.ui.theme
 
-internal const val CUSTOM_THEME_ENABLED = "custom_theme_enabled"
-internal const val CUSTOM_THEME_BACKGROUND = "custom_theme_background"
-internal const val CUSTOM_THEME_SURFACE = "custom_theme_surface"
-internal const val CUSTOM_THEME_ACCENT = "custom_theme_accent"
-
-internal const val DEFAULT_CUSTOM_BACKGROUND = 0xFF141218.toInt()
-internal const val DEFAULT_CUSTOM_SURFACE = 0xFF2B2930.toInt()
-internal const val DEFAULT_CUSTOM_ACCENT = 0xFFD4E3FF.toInt()
-
 internal fun parseOpaqueHexColor(value: String): Int? {
     val hex = value.trim().removePrefix("#")
     if (hex.length != 6 || hex.any { it.digitToIntOrNull(16) == null }) return null
