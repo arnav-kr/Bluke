@@ -1,6 +1,7 @@
 package dev.arnv.bluke
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -10,6 +11,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
@@ -93,7 +95,9 @@ internal fun CustomColorDialog(
                     style = MaterialTheme.typography.bodyMedium,
                 )
                 Row(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .horizontalScroll(rememberScrollState()),
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     CustomColorRole.entries.forEach { role ->
@@ -114,7 +118,6 @@ internal fun CustomColorDialog(
                                         .background(Color(roleColor))
                                 )
                             },
-                            modifier = Modifier.weight(1f),
                         )
                     }
                 }
