@@ -38,6 +38,8 @@ class KeyboardThemeRepository(context: Context) {
     fun selectedTheme(): KeyboardThemeDefinition =
         resolve(selectedThemeId()) ?: KeyboardThemeCatalog.defaultTheme.also { selectTheme(it.id) }
 
+    fun allThemes(): List<KeyboardThemeDefinition> = KeyboardThemeCatalog.builtIns + listCustomThemes()
+
     fun listCustomThemes(): List<KeyboardThemeDefinition> = runCatching {
         if (!file.isFile) return emptyList()
         val root = JSONObject(file.readText())
@@ -120,7 +122,22 @@ class KeyboardThemeRepository(context: Context) {
 }
 
 fun migrateKeyboardCustomizationPreferences(preferences: SharedPreferences) {
-    if (preferences.getInt("keyboard_customization_schema", 0) >= 1) return
+    val schema = preferences.getInt("keyboard_customization_schema", 0)
+    if (schema >= 2) return
+    if (schema == 1) {
+        val selectedGeometry = KeyboardGeometry.fromPreference(
+            preferences.getString(KEYBOARD_GEOMETRY_PREFERENCE, null),
+        )
+        val geometryNames = migrateStoredGeometryNames(
+            preferences.getStringSet(CYCLE_KEYBOARD_GEOMETRIES_PREFERENCE, null),
+        )
+        preferences.edit {
+            putString(KEYBOARD_GEOMETRY_PREFERENCE, selectedGeometry.name)
+            putStringSet(CYCLE_KEYBOARD_GEOMETRIES_PREFERENCE, geometryNames)
+            putInt("keyboard_customization_schema", 2)
+        }
+        return
+    }
     val legacyNames = preferences.getStringSet(
         "cycle_keyboard_layouts",
         KeyboardLayoutType.entries.mapTo(mutableSetOf()) { it.name },
@@ -131,9 +148,16 @@ fun migrateKeyboardCustomizationPreferences(preferences: SharedPreferences) {
         putString(KEYBOARD_THEME_PREFERENCE, migration.selectedTheme.id)
         putStringSet(CYCLE_KEYBOARD_GEOMETRIES_PREFERENCE, migration.geometryNames)
         putStringSet(CYCLE_KEYBOARD_THEMES_PREFERENCE, migration.themeIds)
-        putInt("keyboard_customization_schema", 1)
+        putInt("keyboard_customization_schema", 2)
     }
 }
+
+internal fun migrateStoredGeometryNames(storedNames: Set<String>?): Set<String> =
+    storedNames
+        ?.mapNotNullTo(mutableSetOf()) { KeyboardGeometry.fromStoredName(it) }
+        ?.mapTo(mutableSetOf()) { it.name }
+        ?.ifEmpty { KeyboardGeometry.entries.mapTo(mutableSetOf()) { it.name } }
+        ?: KeyboardGeometry.entries.mapTo(mutableSetOf()) { it.name }
 
 internal data class KeyboardCustomizationMigration(
     val selectedGeometry: KeyboardGeometry,
@@ -147,7 +171,7 @@ internal fun legacyKeyboardCustomizationMigration(legacyNames: Set<String>): Key
         KeyboardLayoutType.entries.firstOrNull { it.name == name }
     }.ifEmpty { KeyboardLayoutType.entries.toList() }
     return KeyboardCustomizationMigration(
-        selectedGeometry = KeyboardGeometry.OBLIVION_75,
+        selectedGeometry = KeyboardGeometry.COMPACT_75,
         selectedTheme = BuiltinKeyboardTheme.OBLIVION,
         geometryNames = legacyTypes.mapTo(mutableSetOf()) { KeyboardGeometry.fromLegacy(it).name },
         themeIds = legacyTypes.mapTo(mutableSetOf()) { BuiltinKeyboardTheme.fromLegacy(it).id },

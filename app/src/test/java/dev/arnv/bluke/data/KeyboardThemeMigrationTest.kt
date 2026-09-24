@@ -14,17 +14,31 @@ import org.junit.Test
 
 class KeyboardThemeMigrationTest {
     @Test
-    fun everyLegacyPresetMigratesToASeparateLayoutAndTheme() {
+    fun identicalLegacyLayoutsCollapseButThemesRemainSeparate() {
         val migration = legacyKeyboardCustomizationMigration(
             KeyboardLayoutType.entries.mapTo(mutableSetOf()) { it.name },
         )
 
         assertEquals(KeyboardGeometry.entries.mapTo(mutableSetOf()) { it.name }, migration.geometryNames)
         assertEquals(BuiltinKeyboardTheme.entries.mapTo(mutableSetOf()) { it.id }, migration.themeIds)
-        assertEquals(KeyboardLayoutType.entries.size, migration.geometryNames.size)
+        assertEquals(7, migration.geometryNames.size)
         assertEquals(KeyboardLayoutType.entries.size, migration.themeIds.size)
-        assertEquals(KeyboardGeometry.OBLIVION_75, migration.selectedGeometry)
+        assertEquals(KeyboardGeometry.COMPACT_75, migration.selectedGeometry)
         assertEquals(BuiltinKeyboardTheme.OBLIVION, migration.selectedTheme)
+    }
+
+    @Test
+    fun schemaOneGeometryNamesMigrateWithoutRepeatingIdenticalLayouts() {
+        val migrated = migrateStoredGeometryNames(
+            setOf("OLIVIA_75", "DRACULA_75", "MODEL_M_75", "NINE_ZERO_ZERO_NINE", "MIZU_65"),
+        )
+
+        assertEquals(
+            setOf(KeyboardGeometry.CLASSIC_75.name, KeyboardGeometry.BALANCED_65.name),
+            migrated,
+        )
+        assertEquals(KeyboardGeometry.CLASSIC_75, KeyboardGeometry.fromPreference("DRACULA_75"))
+        assertEquals(KeyboardGeometry.COMPACT_75, KeyboardGeometry.fromPreference("OBLIVION_75"))
     }
 
     @Test

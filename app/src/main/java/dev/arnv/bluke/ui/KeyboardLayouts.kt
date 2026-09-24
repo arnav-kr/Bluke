@@ -25,23 +25,45 @@ enum class KeyboardGeometry(
     val displayName: String,
     internal val legacySource: KeyboardLayoutType,
 ) {
-    OLIVIA_75("Olivia 75%", KeyboardLayoutType.OLIVIA_75),
-    DRACULA_75("Dracula 75%", KeyboardLayoutType.DRACULA_75),
-    CAFE_65("Cafe 65%", KeyboardLayoutType.CAFE_65),
+    CLASSIC_75("Classic 75%", KeyboardLayoutType.OLIVIA_75),
+    STANDARD_65("Standard 65%", KeyboardLayoutType.CAFE_65),
     HHKB_60("HHKB 60%", KeyboardLayoutType.HHKB_60),
-    MODEL_M_75("Model M 75%", KeyboardLayoutType.MODEL_M_VINTAGE),
-    MIZU_65("Mizu 65%", KeyboardLayoutType.MIZU_65),
-    LASER_75("Laser 75%", KeyboardLayoutType.LASER_75),
-    OBLIVION_75("Oblivion 75%", KeyboardLayoutType.OBLIVION_75),
-    NINE_ZERO_ZERO_NINE("9009 compact", KeyboardLayoutType.NINE_ZERO_ZERO_NINE_TKL),
-    EIGHT_ZERO_ZERO_EIGHT_65("8008 65%", KeyboardLayoutType.EIGHT_ZERO_ZERO_EIGHT_65);
+    BALANCED_65("Balanced 65%", KeyboardLayoutType.MIZU_65),
+    INLINE_75("Inline 75%", KeyboardLayoutType.LASER_75),
+    COMPACT_75("Compact 75%", KeyboardLayoutType.OBLIVION_75),
+    EXTENDED_65("Extended 65%", KeyboardLayoutType.EIGHT_ZERO_ZERO_EIGHT_65);
 
     companion object {
         fun fromPreference(value: String?): KeyboardGeometry =
-            entries.firstOrNull { it.name == value } ?: OBLIVION_75
+            fromStoredName(value) ?: COMPACT_75
 
-        fun fromLegacy(type: KeyboardLayoutType): KeyboardGeometry =
-            entries.first { it.legacySource == type }
+        internal fun fromStoredName(value: String?): KeyboardGeometry? = when (value) {
+            CLASSIC_75.name,
+            "OLIVIA_75",
+            "DRACULA_75",
+            "MODEL_M_75",
+            "NINE_ZERO_ZERO_NINE" -> CLASSIC_75
+            STANDARD_65.name, "CAFE_65" -> STANDARD_65
+            HHKB_60.name -> HHKB_60
+            BALANCED_65.name, "MIZU_65" -> BALANCED_65
+            INLINE_75.name, "LASER_75" -> INLINE_75
+            COMPACT_75.name, "OBLIVION_75" -> COMPACT_75
+            EXTENDED_65.name, "EIGHT_ZERO_ZERO_EIGHT_65" -> EXTENDED_65
+            else -> null
+        }
+
+        fun fromLegacy(type: KeyboardLayoutType): KeyboardGeometry = when (type) {
+            KeyboardLayoutType.OLIVIA_75,
+            KeyboardLayoutType.DRACULA_75,
+            KeyboardLayoutType.MODEL_M_VINTAGE,
+            KeyboardLayoutType.NINE_ZERO_ZERO_NINE_TKL -> CLASSIC_75
+            KeyboardLayoutType.CAFE_65 -> STANDARD_65
+            KeyboardLayoutType.HHKB_60 -> HHKB_60
+            KeyboardLayoutType.MIZU_65 -> BALANCED_65
+            KeyboardLayoutType.LASER_75 -> INLINE_75
+            KeyboardLayoutType.OBLIVION_75 -> COMPACT_75
+            KeyboardLayoutType.EIGHT_ZERO_ZERO_EIGHT_65 -> EXTENDED_65
+        }
     }
 }
 
