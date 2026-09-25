@@ -63,8 +63,6 @@ import dev.arnv.bluke.RemoteVolumeKeyHost
 import dev.arnv.bluke.bluetooth.BluetoothKeyboardManager
 import dev.arnv.bluke.bluetooth.ConsumerControl
 
-private const val HARDWARE_VOLUME_REMOTE_PREFERENCE = "media_hardware_volume_remote"
-
 internal fun consumerControlForHardwareVolumeKey(keyCode: Int): ConsumerControl? = when (keyCode) {
     KeyEvent.KEYCODE_VOLUME_UP -> ConsumerControl.VOLUME_UP
     KeyEvent.KEYCODE_VOLUME_DOWN -> ConsumerControl.VOLUME_DOWN

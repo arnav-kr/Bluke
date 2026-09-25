@@ -1,108 +1,114 @@
 package dev.arnv.bluke
 
+import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.foundation.clickable
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.Info
-import androidx.compose.material.icons.filled.PhoneAndroid
-import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.filled.BluetoothConnected
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
-import androidx.compose.ui.Alignment
+import androidx.compose.material.icons.filled.Gamepad
+import androidx.compose.material.icons.filled.Keyboard
+import androidx.compose.material.icons.filled.MusicNote
+import androidx.compose.material.icons.filled.PhoneAndroid
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.SwapHoriz
+import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.LargeTopAppBar
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.RadioButton
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Slider
+import androidx.compose.material3.Switch
+import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.rememberTopAppBarState
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.unit.dp
+import androidx.core.content.edit
+import dev.arnv.bluke.bluetooth.GAMEPAD_DPAD_MODE_PREFERENCE
+import dev.arnv.bluke.bluetooth.GamepadDpadOutputMode
+import dev.arnv.bluke.ui.HARDWARE_VOLUME_REMOTE_PREFERENCE
+import dev.arnv.bluke.ui.KEYBOARD_CHARACTER_LAYOUT_PREFERENCE
+import dev.arnv.bluke.ui.KeyboardCharacterLayout
 import dev.arnv.bluke.ui.SettingsCardGroup
 import dev.arnv.bluke.ui.SettingsGroup
 import dev.arnv.bluke.ui.SettingsItemData
 import dev.arnv.bluke.ui.theme.MyApplicationTheme
-import dev.arnv.bluke.ui.KeyboardGeometry
-import dev.arnv.bluke.ui.KeyboardCharacterLayout
-import dev.arnv.bluke.ui.InputMode
-import dev.arnv.bluke.ui.KEYBOARD_CHARACTER_LAYOUT_PREFERENCE
-import dev.arnv.bluke.ui.enabledInputModes
-import dev.arnv.bluke.sound.SwitchType
-import dev.arnv.bluke.ui.CaseColor
-import dev.arnv.bluke.data.CYCLE_KEYBOARD_GEOMETRIES_PREFERENCE
-import androidx.compose.material.icons.filled.Keyboard
-import androidx.compose.material.icons.filled.MusicNote
-import androidx.compose.material.icons.filled.SportsEsports
-import androidx.compose.material.icons.filled.Palette
-import androidx.compose.ui.draw.scale
-import androidx.compose.ui.input.nestedscroll.nestedScroll
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.state.ToggleableState
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
-
-
-import androidx.core.content.edit
-import dev.arnv.bluke.bluetooth.GAMEPAD_DPAD_MODE_PREFERENCE
-import dev.arnv.bluke.bluetooth.GamepadDpadOutputMode
 
 class BehaviorActivity : ComponentActivity() {
     @OptIn(ExperimentalMaterial3Api::class)
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        
         val sharedPrefs = getSharedPreferences("app_prefs", MODE_PRIVATE)
-        
+
         setContent {
             MyApplicationTheme {
                 var hideUnknownDevices by remember { mutableStateOf(sharedPrefs.getBoolean("hide_unknown", false)) }
                 var hideUnsupportedDevices by remember { mutableStateOf(sharedPrefs.getBoolean("hide_unsupported", true)) }
                 var showMacAddress by remember { mutableStateOf(sharedPrefs.getBoolean("show_mac", false)) }
                 var autoConnectEnabled by remember { mutableStateOf(sharedPrefs.getBoolean("auto_connect", true)) }
-                var disconnectAudioProfiles by remember {
-                    mutableStateOf(sharedPrefs.getBoolean("disconnect_audio_profiles", false))
-                }
-                var gamepadDpadOutputMode by remember {
-                    mutableStateOf(
-                        GamepadDpadOutputMode.fromPreference(
-                            sharedPrefs.getString(GAMEPAD_DPAD_MODE_PREFERENCE, null)
-                        )
-                    )
+                var keepAudioOnPhone by remember { mutableStateOf(sharedPrefs.getBoolean("disconnect_audio_profiles", false)) }
+                var hardwareVolumeRemote by remember {
+                    mutableStateOf(sharedPrefs.getBoolean(HARDWARE_VOLUME_REMOTE_PREFERENCE, false))
                 }
                 var keySensitivity by remember { mutableFloatStateOf(sharedPrefs.getFloat("key_sensitivity", 6f)) }
                 var lockSyncMode by remember { mutableStateOf(sharedPrefs.getString("lock_sync_mode", "host") ?: "host") }
-                var keyboardCharacterLayout by remember {
+                var characterLayout by remember {
                     mutableStateOf(
                         KeyboardCharacterLayout.fromPreference(
-                            sharedPrefs.getString(KEYBOARD_CHARACTER_LAYOUT_PREFERENCE, null)
-                        )
+                            sharedPrefs.getString(KEYBOARD_CHARACTER_LAYOUT_PREFERENCE, null),
+                        ),
                     )
                 }
-                
+                var dpadMode by remember {
+                    mutableStateOf(
+                        GamepadDpadOutputMode.fromPreference(
+                            sharedPrefs.getString(GAMEPAD_DPAD_MODE_PREFERENCE, null),
+                        ),
+                    )
+                }
+                var showTypingLayoutDialog by remember { mutableStateOf(false) }
+                var showDpadDialog by remember { mutableStateOf(false) }
                 val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
 
                 Scaffold(
                     modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
                     topBar = {
                         LargeTopAppBar(
-                            title = { Text("Behavior") },
+                            title = { Text("Controls & connection") },
                             navigationIcon = {
-                                IconButton(onClick = { finish() }) {
+                                IconButton(onClick = ::finish) {
                                     Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                                 }
                             },
                             colors = TopAppBarDefaults.largeTopAppBarColors(
                                 containerColor = MaterialTheme.colorScheme.surface,
-                                titleContentColor = MaterialTheme.colorScheme.onSurface
+                                titleContentColor = MaterialTheme.colorScheme.onSurface,
                             ),
-                            scrollBehavior = scrollBehavior
+                            scrollBehavior = scrollBehavior,
                         )
-                    }
+                    },
                 ) { innerPadding ->
                     Column(
                         modifier = Modifier
@@ -110,1025 +116,242 @@ class BehaviorActivity : ComponentActivity() {
                             .padding(innerPadding)
                             .verticalScroll(rememberScrollState()),
                         verticalArrangement = Arrangement.spacedBy(16.dp),
-                        horizontalAlignment = Alignment.CenterHorizontally
                     ) {
-                        Spacer(modifier = Modifier.height(8.dp))
-                        
-                        SettingsGroup(title = "Touch Sensitivity") {
-                            Column(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(horizontal = 24.dp, vertical = 16.dp)
-                            ) {
+                        Spacer(Modifier.height(8.dp))
+
+                        SettingsGroup(title = "Keyboard") {
+                            Column(modifier = Modifier.padding(horizontal = 24.dp, vertical = 16.dp)) {
+                                Text("Key touch area", style = MaterialTheme.typography.titleMedium)
                                 Text(
-                                    text = "Key Touch Area",
-                                    style = MaterialTheme.typography.titleMedium,
-                                    color = MaterialTheme.colorScheme.onSurface
-                                )
-                                Text(
-                                    text = "Adjusts the touch radius around keys to prevent accidental adjacent key presses",
+                                    "Broader values make keys easier to hit but can increase adjacent-key presses.",
                                     style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
-                                Spacer(modifier = Modifier.height(16.dp))
-                                Row(
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    modifier = Modifier.fillMaxWidth()
-                                ) {
-                                    Text(
-                                        text = "Precise",
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        modifier = Modifier.padding(end = 8.dp)
-                                    )
-                                    Slider(
-                                        value = keySensitivity,
-                                        onValueChange = {
-                                            keySensitivity = it
-                                            sharedPrefs.edit { putFloat("key_sensitivity", it) }
-                                        },
-                                        valueRange = 0f..10f,
-                                        steps = 9,
-                                        modifier = Modifier.weight(1f)
-                                    )
-                                    Text(
-                                        text = "Broad",
-                                        style = MaterialTheme.typography.bodyMedium,
-                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        modifier = Modifier.padding(start = 8.dp)
-                                    )
-                                }
+                                Slider(
+                                    value = keySensitivity,
+                                    onValueChange = { value ->
+                                        keySensitivity = value
+                                        sharedPrefs.edit { putFloat("key_sensitivity", value) }
+                                    },
+                                    valueRange = 0f..10f,
+                                    steps = 9,
+                                )
+                                Text(
+                                    text = if (keySensitivity <= 3f) "Precise" else if (keySensitivity >= 8f) "Broad" else "Balanced",
+                                    style = MaterialTheme.typography.labelLarge,
+                                    color = MaterialTheme.colorScheme.primary,
+                                )
                             }
                         }
 
                         SettingsCardGroup(
-                            title = "Device Scanning",
+                            title = "Keyboard behavior",
                             items = listOf(
                                 SettingsItemData(
-                                    title = "Hide Unknown Devices",
-                                    subtitle = "Filter out devices without a name",
+                                    title = "Typing layout",
+                                    subtitle = "${characterLayout.displayName} · set the host input source to ${characterLayout.hostLayoutName}",
+                                    icon = { Icon(Icons.Default.Keyboard, null, tint = MaterialTheme.colorScheme.primary) },
+                                    onClick = { showTypingLayoutDialog = true },
+                                ),
+                                SettingsItemData(
+                                    title = "Lock-key indicators",
+                                    subtitle = if (lockSyncMode == "host") {
+                                        "Follow the host (recommended for Windows and Linux)"
+                                    } else {
+                                        "Toggle on this phone (for hosts that do not return LED state)"
+                                    },
+                                    icon = { Icon(Icons.Default.Settings, null, tint = MaterialTheme.colorScheme.primary) },
+                                    action = {
+                                        Switch(
+                                            checked = lockSyncMode == "device",
+                                            onCheckedChange = { local ->
+                                                lockSyncMode = if (local) "device" else "host"
+                                                sharedPrefs.edit { putString("lock_sync_mode", lockSyncMode) }
+                                            },
+                                        )
+                                    },
+                                ),
+                            ),
+                        )
+
+                        SettingsCardGroup(
+                            title = "Connection",
+                            items = listOf(
+                                SettingsItemData(
+                                    title = "Hide unnamed devices",
+                                    subtitle = "Do not show scan results without a device name",
                                     icon = { Icon(Icons.Default.Warning, null, tint = MaterialTheme.colorScheme.primary) },
                                     action = {
-                                        Switch(
-                                            checked = hideUnknownDevices,
-                                            onCheckedChange = { 
-                                                hideUnknownDevices = it
-                                                sharedPrefs.edit { putBoolean("hide_unknown", it) }
-                                            }
-                                        )
-                                    }
+                                        Switch(hideUnknownDevices, { value ->
+                                            hideUnknownDevices = value
+                                            sharedPrefs.edit { putBoolean("hide_unknown", value) }
+                                        })
+                                    },
                                 ),
                                 SettingsItemData(
-                                    title = "Hide Unsupported Devices",
-                                    subtitle = "Filter out hosts lacking keyboard target capability",
-                                    icon = { Icon(Icons.Default.Info, null, tint = MaterialTheme.colorScheme.primary) },
-                                    action = {
-                                        Switch(
-                                            checked = hideUnsupportedDevices,
-                                            onCheckedChange = { 
-                                                hideUnsupportedDevices = it
-                                                sharedPrefs.edit { putBoolean("hide_unsupported", it) }
-                                            }
-                                        )
-                                    }
-                                ),
-                                SettingsItemData(
-                                    title = "Show MAC Address",
-                                    subtitle = "Display device hardware address",
+                                    title = "Hide unlikely hosts",
+                                    subtitle = "Filter scan results that do not appear able to accept keyboard input",
                                     icon = { Icon(Icons.Default.PhoneAndroid, null, tint = MaterialTheme.colorScheme.primary) },
                                     action = {
-                                        Switch(
-                                            checked = showMacAddress,
-                                            onCheckedChange = { 
-                                                showMacAddress = it
-                                                sharedPrefs.edit { putBoolean("show_mac", it) }
-                                            }
-                                        )
-                                    }
+                                        Switch(hideUnsupportedDevices, { value ->
+                                            hideUnsupportedDevices = value
+                                            sharedPrefs.edit { putBoolean("hide_unsupported", value) }
+                                        })
+                                    },
                                 ),
                                 SettingsItemData(
-                                    title = "Auto-Reconnect on Launch",
-                                    subtitle = "Automatically connect to the last paired device when Bluetooth is ready",
+                                    title = "Show device addresses",
+                                    subtitle = "Useful when similarly named Bluetooth devices are nearby",
+                                    icon = { Icon(Icons.Default.PhoneAndroid, null, tint = MaterialTheme.colorScheme.primary) },
+                                    action = {
+                                        Switch(showMacAddress, { value ->
+                                            showMacAddress = value
+                                            sharedPrefs.edit { putBoolean("show_mac", value) }
+                                        })
+                                    },
+                                ),
+                                SettingsItemData(
+                                    title = "Reconnect on launch",
+                                    subtitle = "Try the most recently connected host when Bluetooth is ready",
                                     icon = { Icon(Icons.Default.BluetoothConnected, null, tint = MaterialTheme.colorScheme.primary) },
                                     action = {
-                                        Switch(
-                                            checked = autoConnectEnabled,
-                                            onCheckedChange = { 
-                                                autoConnectEnabled = it
-                                                sharedPrefs.edit { putBoolean("auto_connect", it) }
-                                            }
-                                        )
-                                    }
+                                        Switch(autoConnectEnabled, { value ->
+                                            autoConnectEnabled = value
+                                            sharedPrefs.edit { putBoolean("auto_connect", value) }
+                                        })
+                                    },
                                 ),
                                 SettingsItemData(
-                                    title = "Prevent Host Audio Routing",
-                                    subtitle = "Optional Linux workaround; disconnects A2DP and headset profiles after HID connects",
+                                    title = "Keep audio on this phone",
+                                    subtitle = "Best-effort Linux workaround when connecting Bluke moves phone audio to the computer",
                                     icon = { Icon(Icons.Default.MusicNote, null, tint = MaterialTheme.colorScheme.primary) },
                                     action = {
-                                        Switch(
-                                            checked = disconnectAudioProfiles,
-                                            onCheckedChange = {
-                                                disconnectAudioProfiles = it
-                                                sharedPrefs.edit { putBoolean("disconnect_audio_profiles", it) }
-                                            }
-                                        )
-                                    }
-                                )
-                            )
+                                        Switch(keepAudioOnPhone, { value ->
+                                            keepAudioOnPhone = value
+                                            sharedPrefs.edit { putBoolean("disconnect_audio_profiles", value) }
+                                        })
+                                    },
+                                ),
+                            ),
                         )
 
                         SettingsCardGroup(
-                            title = "Gamepad D-pad Compatibility",
-                            items = GamepadDpadOutputMode.entries.map { mode ->
-                                val isNative = mode == GamepadDpadOutputMode.NATIVE_HAT
+                            title = "Remote controls",
+                            items = listOf(
                                 SettingsItemData(
-                                    title = if (isNative) "Native Hat / POV" else "Web Compatibility",
-                                    subtitle = if (isNative) {
-                                        "Standard HID Hat for native Windows, Linux, Android, macOS, and TV games"
+                                    title = "Gamepad D-pad",
+                                    subtitle = if (dpadMode == GamepadDpadOutputMode.NATIVE_HAT) {
+                                        "Native games · standard controller direction control"
                                     } else {
-                                        "Reports Up, Down, Left, and Right as browser buttons 12–15; use when web games ignore the Hat"
+                                        "Browser games · use when a web game ignores D-pad input"
                                     },
-                                    icon = {
-                                        Icon(
-                                            Icons.Default.SportsEsports,
-                                            null,
-                                            tint = MaterialTheme.colorScheme.primary,
-                                        )
-                                    },
-                                    action = {
-                                        RadioButton(
-                                            selected = gamepadDpadOutputMode == mode,
-                                            onClick = {
-                                                gamepadDpadOutputMode = mode
-                                                sharedPrefs.edit {
-                                                    putString(GAMEPAD_DPAD_MODE_PREFERENCE, mode.preferenceValue)
-                                                }
-                                            },
-                                        )
-                                    },
-                                    onClick = {
-                                        gamepadDpadOutputMode = mode
-                                        sharedPrefs.edit {
-                                            putString(GAMEPAD_DPAD_MODE_PREFERENCE, mode.preferenceValue)
-                                        }
-                                    },
-                                )
-                            },
-                        )
-
-                        SettingsCardGroup(
-                            title = "Typing Layout",
-                            items = KeyboardCharacterLayout.entries.map { layout ->
-                                SettingsItemData(
-                                    title = layout.displayName,
-                                    subtitle = "Emit ${layout.displayName} keys while the host uses a US QWERTY input source",
-                                    icon = {
-                                        Icon(
-                                            Icons.Default.Keyboard,
-                                            null,
-                                            tint = MaterialTheme.colorScheme.primary,
-                                        )
-                                    },
-                                    action = {
-                                        RadioButton(
-                                            selected = keyboardCharacterLayout == layout,
-                                            onClick = {
-                                                keyboardCharacterLayout = layout
-                                                sharedPrefs.edit {
-                                                    putString(
-                                                        KEYBOARD_CHARACTER_LAYOUT_PREFERENCE,
-                                                        layout.preferenceValue,
-                                                    )
-                                                }
-                                            },
-                                        )
-                                    },
-                                    onClick = {
-                                        keyboardCharacterLayout = layout
-                                        sharedPrefs.edit {
-                                            putString(
-                                                KEYBOARD_CHARACTER_LAYOUT_PREFERENCE,
-                                                layout.preferenceValue,
-                                            )
-                                        }
-                                    },
-                                )
-                            },
-                        )
-                        
-                        // Quick Cycle Configurations
-                        val allLayoutTypes = KeyboardGeometry.entries
-                        var activeLayoutsSet by remember {
-                            mutableStateOf(sharedPrefs.getStringSet(CYCLE_KEYBOARD_GEOMETRIES_PREFERENCE, allLayoutTypes.map { it.name }.toSet()) ?: emptySet())
-                        }
-                        val layoutsDescription = if (activeLayoutsSet.size == allLayoutTypes.size) {
-                            "All layouts active in cycle"
-                        } else {
-                            allLayoutTypes.filter { activeLayoutsSet.contains(it.name) }
-                                .joinToString(", ") { it.displayName }
-                        }
-
-                        val allSwitches = SwitchType.entries
-                        var activeSoundsSet by remember {
-                            mutableStateOf(sharedPrefs.getStringSet("cycle_key_sounds", allSwitches.map { it.name }.toSet()) ?: emptySet())
-                        }
-                        val soundsDescription = if (activeSoundsSet.size == allSwitches.size) {
-                            "All sound profiles active in cycle"
-                        } else {
-                            allSwitches.filter { activeSoundsSet.contains(it.name) }
-                                .joinToString(", ") { it.displayName }
-                        }
-
-                        var activeModesSet by remember {
-                            mutableStateOf<Set<String>>(
-                                sharedPrefs.enabledInputModes().mapTo(linkedSetOf(), InputMode::preferenceKey)
-                            )
-                        }
-                        val modesDescription = if (activeModesSet.size == InputMode.entries.size) {
-                            "All input modes active in cycle"
-                        } else {
-                            InputMode.entries
-                                .filter { activeModesSet.contains(it.preferenceKey) }
-                                .map { it.displayName }
-                                .joinToString(", ")
-                        }
-
-                        val allCaseColors = CaseColor.entries
-                        var activeColorsSet by remember {
-                            mutableStateOf(sharedPrefs.getStringSet("cycle_case_colors", allCaseColors.map { it.name }.toSet()) ?: emptySet())
-                        }
-                        val colorsDescription = if (activeColorsSet.size == allCaseColors.size) {
-                            "All colors active in cycle"
-                        } else {
-                            allCaseColors.filter { activeColorsSet.contains(it.name) }
-                                .joinToString(", ") { it.displayName }
-                        }
-
-                        var showLayoutsDialog by remember { mutableStateOf(false) }
-                        var showSoundsDialog by remember { mutableStateOf(false) }
-                        var showModesDialog by remember { mutableStateOf(false) }
-                        var showColorsDialog by remember { mutableStateOf(false) }
-
-                        SettingsCardGroup(
-                            title = "Quick Cycle Configurations",
-                            items = listOf(
-                                SettingsItemData(
-                                    title = "Keyboard Layouts",
-                                    subtitle = layoutsDescription,
-                                    icon = { Icon(Icons.Default.Keyboard, null, tint = MaterialTheme.colorScheme.primary) },
-                                    onClick = { showLayoutsDialog = true }
+                                    icon = { Icon(Icons.Default.Gamepad, null, tint = MaterialTheme.colorScheme.primary) },
+                                    onClick = { showDpadDialog = true },
                                 ),
                                 SettingsItemData(
-                                    title = "Key Sounds",
-                                    subtitle = soundsDescription,
+                                    title = "Phone volume buttons control host",
+                                    subtitle = "Only while Media + Presentation is open; off by default",
                                     icon = { Icon(Icons.Default.MusicNote, null, tint = MaterialTheme.colorScheme.primary) },
-                                    onClick = { showSoundsDialog = true }
-                                ),
-                                SettingsItemData(
-                                    title = "Active Connection Modes",
-                                    subtitle = modesDescription,
-                                    icon = { Icon(Icons.Default.SportsEsports, null, tint = MaterialTheme.colorScheme.primary) },
-                                    onClick = { showModesDialog = true }
-                                ),
-                                SettingsItemData(
-                                    title = "Case Colors",
-                                    subtitle = colorsDescription,
-                                    icon = { Icon(Icons.Default.Palette, null, tint = MaterialTheme.colorScheme.primary) },
-                                    onClick = { showColorsDialog = true }
-                                )
-                            )
-                        )
-                        
-                        SettingsCardGroup(
-                            title = "Lock State Synchronization",
-                            items = listOf(
-                                SettingsItemData(
-                                    title = "Host-Controlled (Windows / Linux)",
-                                    subtitle = "Modifier states (Caps/Num Lock) sync with host LED reports. Best for Windows & Linux.",
                                     action = {
-                                        RadioButton(
-                                            selected = lockSyncMode == "host",
-                                            onClick = {
-                                                lockSyncMode = "host"
-                                                sharedPrefs.edit { putString("lock_sync_mode", "host") }
-                                            }
-                                        )
+                                        Switch(hardwareVolumeRemote, { value ->
+                                            hardwareVolumeRemote = value
+                                            sharedPrefs.edit { putBoolean(HARDWARE_VOLUME_REMOTE_PREFERENCE, value) }
+                                        })
                                     },
-                                    onClick = {
-                                        lockSyncMode = "host"
-                                        sharedPrefs.edit { putString("lock_sync_mode", "host") }
-                                    }
                                 ),
                                 SettingsItemData(
-                                    title = "Device-Controlled (macOS / Android / TV)",
-                                    subtitle = "Modifier states toggle locally. Necessary for macOS, mobile devices, and Smart TVs.",
-                                    action = {
-                                        RadioButton(
-                                            selected = lockSyncMode == "device",
-                                            onClick = {
-                                                lockSyncMode = "device"
-                                                sharedPrefs.edit { putString("lock_sync_mode", "device") }
-                                            }
-                                        )
-                                    },
+                                    title = "Quick-cycle choices",
+                                    subtitle = "Choose what toolbar taps cycle through",
+                                    icon = { Icon(Icons.Default.SwapHoriz, null, tint = MaterialTheme.colorScheme.primary) },
                                     onClick = {
-                                        lockSyncMode = "device"
-                                        sharedPrefs.edit { putString("lock_sync_mode", "device") }
-                                    }
-                                )
-                            )
+                                        startActivity(Intent(this@BehaviorActivity, QuickCycleActivity::class.java))
+                                    },
+                                ),
+                            ),
                         )
-
-                        // Checkbox Dialogs
-                        if (showLayoutsDialog) {
-                            val selectedLayouts = remember {
-                                mutableStateListOf<String>().apply {
-                                    addAll(activeLayoutsSet)
-                                }
-                            }
-                            AlertDialog(
-                                onDismissRequest = { showLayoutsDialog = false },
-                                title = { Text("Keyboard Layouts to Cycle") },
-                                text = {
-                                    Column(
-                                        modifier = Modifier.fillMaxWidth()
-                                    ) {
-                                        val toggleState = remember(selectedLayouts.size) {
-                                            when (selectedLayouts.size) {
-                                                allLayoutTypes.size -> ToggleableState.On
-                                                0 -> ToggleableState.Off
-                                                else -> ToggleableState.Indeterminate
-                                            }
-                                        }
-                                        Row(
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .clickable {
-                                                    if (toggleState == ToggleableState.On) {
-                                                        selectedLayouts.clear()
-                                                        selectedLayouts.add(allLayoutTypes.first().name)
-                                                    } else {
-                                                        selectedLayouts.clear()
-                                                        selectedLayouts.addAll(allLayoutTypes.map { it.name })
-                                                    }
-                                                }
-                                                .padding(vertical = 6.dp, horizontal = 8.dp),
-                                            verticalAlignment = Alignment.CenterVertically
-                                        ) {
-                                            TriStateCheckbox(
-                                                state = toggleState,
-                                                onClick = {
-                                                    if (toggleState == ToggleableState.On) {
-                                                        selectedLayouts.clear()
-                                                        selectedLayouts.add(allLayoutTypes.first().name)
-                                                    } else {
-                                                        selectedLayouts.clear()
-                                                        selectedLayouts.addAll(allLayoutTypes.map { it.name })
-                                                    }
-                                                }
-                                            )
-                                            Spacer(modifier = Modifier.width(16.dp))
-                                            Text(
-                                                text = "Select All",
-                                                fontWeight = FontWeight.Bold,
-                                                style = MaterialTheme.typography.bodyMedium
-                                            )
-                                        }
-                                        
-                                        HorizontalDivider(
-                                            modifier = Modifier.padding(vertical = 4.dp),
-                                            color = MaterialTheme.colorScheme.outlineVariant
-                                        )
-                                        
-                                        val scrollState = rememberScrollState()
-                                        Box(
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .heightIn(max = 200.dp)
-                                        ) {
-                                            Column(
-                                                modifier = Modifier
-                                                    .fillMaxWidth()
-                                                    .verticalScroll(scrollState)
-                                            ) {
-                                                allLayoutTypes.forEach { layout ->
-                                                    Row(
-                                                        modifier = Modifier
-                                                            .fillMaxWidth()
-                                                            .clickable {
-                                                                if (selectedLayouts.contains(layout.name)) {
-                                                                    if (selectedLayouts.size > 1) {
-                                                                        selectedLayouts.remove(layout.name)
-                                                                    }
-                                                                } else {
-                                                                    selectedLayouts.add(layout.name)
-                                                                }
-                                                            }
-                                                            .padding(vertical = 4.dp, horizontal = 8.dp),
-                                                        verticalAlignment = Alignment.CenterVertically
-                                                    ) {
-                                                        Checkbox(
-                                                            checked = selectedLayouts.contains(layout.name),
-                                                            onCheckedChange = { checked ->
-                                                                if (checked) {
-                                                                    selectedLayouts.add(layout.name)
-                                                                } else {
-                                                                    if (selectedLayouts.size > 1) {
-                                                                        selectedLayouts.remove(layout.name)
-                                                                    }
-                                                                }
-                                                            },
-                                                            modifier = Modifier.scale(0.85f)
-                                                        )
-                                                        Spacer(modifier = Modifier.width(8.dp))
-                                                        Text(
-                                                            text = layout.displayName,
-                                                            style = MaterialTheme.typography.bodyMedium
-                                                        )
-                                                    }
-                                                }
-                                                Spacer(modifier = Modifier.height(16.dp))
-                                            }
-
-                                            if (scrollState.value < scrollState.maxValue) {
-                                                Box(
-                                                    modifier = Modifier
-                                                        .fillMaxWidth()
-                                                        .height(24.dp)
-                                                        .align(Alignment.BottomCenter)
-                                                        .background(
-                                                            Brush.verticalGradient(
-                                                                colors = listOf(
-                                                                    Color.Transparent,
-                                                                    AlertDialogDefaults.containerColor
-                                                                )
-                                                            )
-                                                        )
-                                                )
-                                            }
-                                        }
-                                    }
-                                },
-                                confirmButton = {
-                                    TextButton(
-                                        onClick = {
-                                            sharedPrefs.edit { putStringSet(CYCLE_KEYBOARD_GEOMETRIES_PREFERENCE, selectedLayouts.toSet()) }
-                                            activeLayoutsSet = selectedLayouts.toSet()
-                                            showLayoutsDialog = false
-                                        }
-                                    ) {
-                                        Text("Done")
-                                    }
-                                },
-                                dismissButton = {
-                                    TextButton(onClick = { showLayoutsDialog = false }) {
-                                        Text("Cancel")
-                                    }
-                                }
-                            )
-                        }
-
-                        if (showSoundsDialog) {
-                            val selectedSounds = remember {
-                                mutableStateListOf<String>().apply {
-                                    addAll(activeSoundsSet)
-                                }
-                            }
-                            AlertDialog(
-                                onDismissRequest = { showSoundsDialog = false },
-                                title = { Text("Key Sounds to Cycle") },
-                                text = {
-                                    Column(
-                                        modifier = Modifier.fillMaxWidth()
-                                    ) {
-                                        val toggleState = remember(selectedSounds.size) {
-                                            when (selectedSounds.size) {
-                                                allSwitches.size -> ToggleableState.On
-                                                0 -> ToggleableState.Off
-                                                else -> ToggleableState.Indeterminate
-                                            }
-                                        }
-                                        Row(
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .clickable {
-                                                    if (toggleState == ToggleableState.On) {
-                                                        selectedSounds.clear()
-                                                        selectedSounds.add(allSwitches.first().name)
-                                                    } else {
-                                                        selectedSounds.clear()
-                                                        selectedSounds.addAll(allSwitches.map { it.name })
-                                                    }
-                                                }
-                                                .padding(vertical = 6.dp, horizontal = 8.dp),
-                                            verticalAlignment = Alignment.CenterVertically
-                                        ) {
-                                            TriStateCheckbox(
-                                                state = toggleState,
-                                                onClick = {
-                                                    if (toggleState == ToggleableState.On) {
-                                                        selectedSounds.clear()
-                                                        selectedSounds.add(allSwitches.first().name)
-                                                    } else {
-                                                        selectedSounds.clear()
-                                                        selectedSounds.addAll(allSwitches.map { it.name })
-                                                    }
-                                                }
-                                            )
-                                            Spacer(modifier = Modifier.width(16.dp))
-                                            Text(
-                                                text = "Select All",
-                                                fontWeight = FontWeight.Bold,
-                                                style = MaterialTheme.typography.bodyMedium
-                                            )
-                                        }
-                                        
-                                        HorizontalDivider(
-                                            modifier = Modifier.padding(vertical = 4.dp),
-                                            color = MaterialTheme.colorScheme.outlineVariant
-                                        )
-                                        
-                                        val scrollState = rememberScrollState()
-                                        Box(
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .heightIn(max = 200.dp)
-                                        ) {
-                                            Column(
-                                                modifier = Modifier
-                                                    .fillMaxWidth()
-                                                    .verticalScroll(scrollState)
-                                            ) {
-                                                allSwitches.forEach { switch ->
-                                                    Row(
-                                                        modifier = Modifier
-                                                            .fillMaxWidth()
-                                                            .clickable {
-                                                                if (selectedSounds.contains(switch.name)) {
-                                                                    if (selectedSounds.size > 1) {
-                                                                        selectedSounds.remove(switch.name)
-                                                                    }
-                                                                } else {
-                                                                    selectedSounds.add(switch.name)
-                                                                }
-                                                            }
-                                                            .padding(vertical = 4.dp, horizontal = 8.dp),
-                                                        verticalAlignment = Alignment.CenterVertically
-                                                    ) {
-                                                        Checkbox(
-                                                            checked = selectedSounds.contains(switch.name),
-                                                            onCheckedChange = { checked ->
-                                                                if (checked) {
-                                                                    selectedSounds.add(switch.name)
-                                                                } else {
-                                                                    if (selectedSounds.size > 1) {
-                                                                        selectedSounds.remove(switch.name)
-                                                                    }
-                                                                }
-                                                            },
-                                                            modifier = Modifier.scale(0.85f)
-                                                        )
-                                                        Spacer(modifier = Modifier.width(8.dp))
-                                                        Text(
-                                                            text = switch.displayName,
-                                                            style = MaterialTheme.typography.bodyMedium
-                                                        )
-                                                    }
-                                                }
-                                                Spacer(modifier = Modifier.height(16.dp))
-                                            }
-
-                                            if (scrollState.value < scrollState.maxValue) {
-                                                Box(
-                                                    modifier = Modifier
-                                                        .fillMaxWidth()
-                                                        .height(24.dp)
-                                                        .align(Alignment.BottomCenter)
-                                                        .background(
-                                                            Brush.verticalGradient(
-                                                                colors = listOf(
-                                                                    Color.Transparent,
-                                                                    AlertDialogDefaults.containerColor
-                                                                )
-                                                            )
-                                                        )
-                                                )
-                                            }
-                                        }
-                                    }
-                                },
-                                confirmButton = {
-                                    TextButton(
-                                        onClick = {
-                                            sharedPrefs.edit { putStringSet("cycle_key_sounds", selectedSounds.toSet()) }
-                                            activeSoundsSet = selectedSounds.toSet()
-                                            showSoundsDialog = false
-                                        }
-                                    ) {
-                                        Text("Done")
-                                    }
-                                },
-                                dismissButton = {
-                                    TextButton(onClick = { showSoundsDialog = false }) {
-                                        Text("Cancel")
-                                    }
-                                }
-                            )
-                        }
-
-                        if (showModesDialog) {
-                            val selectedModes = remember {
-                                mutableStateListOf<String>().apply {
-                                    addAll(activeModesSet)
-                                }
-                            }
-                            val allModes = InputMode.entries.map { mode ->
-                                mode.preferenceKey to "${mode.displayName} Mode"
-                            }
-                            AlertDialog(
-                                onDismissRequest = { showModesDialog = false },
-                                title = { Text("Input Modes to Cycle") },
-                                text = {
-                                    Column(
-                                        modifier = Modifier.fillMaxWidth()
-                                    ) {
-                                        val toggleState = remember(selectedModes.size) {
-                                            when (selectedModes.size) {
-                                                allModes.size -> ToggleableState.On
-                                                0 -> ToggleableState.Off
-                                                else -> ToggleableState.Indeterminate
-                                            }
-                                        }
-                                        Row(
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .clickable {
-                                                    if (toggleState == ToggleableState.On) {
-                                                        selectedModes.clear()
-                                                        selectedModes.add(allModes.first().first)
-                                                    } else {
-                                                        selectedModes.clear()
-                                                        selectedModes.addAll(allModes.map { it.first })
-                                                    }
-                                                }
-                                                .padding(vertical = 6.dp, horizontal = 8.dp),
-                                            verticalAlignment = Alignment.CenterVertically
-                                        ) {
-                                            TriStateCheckbox(
-                                                state = toggleState,
-                                                onClick = {
-                                                    if (toggleState == ToggleableState.On) {
-                                                        selectedModes.clear()
-                                                        selectedModes.add(allModes.first().first)
-                                                    } else {
-                                                        selectedModes.clear()
-                                                        selectedModes.addAll(allModes.map { it.first })
-                                                    }
-                                                }
-                                            )
-                                            Spacer(modifier = Modifier.width(16.dp))
-                                            Text(
-                                                text = "Select All",
-                                                fontWeight = FontWeight.Bold,
-                                                style = MaterialTheme.typography.bodyMedium
-                                            )
-                                        }
-                                        
-                                        HorizontalDivider(
-                                            modifier = Modifier.padding(vertical = 4.dp),
-                                            color = MaterialTheme.colorScheme.outlineVariant
-                                        )
-                                        
-                                        val scrollState = rememberScrollState()
-                                        Box(
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .heightIn(max = 200.dp)
-                                        ) {
-                                            Column(
-                                                modifier = Modifier
-                                                    .fillMaxWidth()
-                                                    .verticalScroll(scrollState)
-                                            ) {
-                                                allModes.forEach { (modeKey, modeName) ->
-                                                    Row(
-                                                        modifier = Modifier
-                                                            .fillMaxWidth()
-                                                            .clickable {
-                                                                if (selectedModes.contains(modeKey)) {
-                                                                    if (selectedModes.size > 1) {
-                                                                        selectedModes.remove(modeKey)
-                                                                    }
-                                                                } else {
-                                                                    selectedModes.add(modeKey)
-                                                                }
-                                                            }
-                                                            .padding(vertical = 4.dp, horizontal = 8.dp),
-                                                        verticalAlignment = Alignment.CenterVertically
-                                                    ) {
-                                                        Checkbox(
-                                                            checked = selectedModes.contains(modeKey),
-                                                            onCheckedChange = { checked ->
-                                                                if (checked) {
-                                                                    selectedModes.add(modeKey)
-                                                                } else {
-                                                                    if (selectedModes.size > 1) {
-                                                                        selectedModes.remove(modeKey)
-                                                                    }
-                                                                }
-                                                            },
-                                                            modifier = Modifier.scale(0.85f)
-                                                        )
-                                                        Spacer(modifier = Modifier.width(8.dp))
-                                                        Text(
-                                                            text = modeName,
-                                                            style = MaterialTheme.typography.bodyMedium
-                                                        )
-                                                    }
-                                                }
-                                                Spacer(modifier = Modifier.height(16.dp))
-                                            }
-
-                                            if (scrollState.value < scrollState.maxValue) {
-                                                Box(
-                                                    modifier = Modifier
-                                                        .fillMaxWidth()
-                                                        .height(24.dp)
-                                                        .align(Alignment.BottomCenter)
-                                                        .background(
-                                                            Brush.verticalGradient(
-                                                                colors = listOf(
-                                                                    Color.Transparent,
-                                                                    AlertDialogDefaults.containerColor
-                                                                )
-                                                            )
-                                                        )
-                                                )
-                                            }
-                                        }
-                                    }
-                                },
-                                confirmButton = {
-                                    TextButton(
-                                        onClick = {
-                                            sharedPrefs.edit { putStringSet("cycle_connection_modes", selectedModes.toSet()) }
-                                            activeModesSet = selectedModes.toSet()
-                                            showModesDialog = false
-                                        }
-                                    ) {
-                                        Text("Done")
-                                    }
-                                },
-                                dismissButton = {
-                                    TextButton(onClick = { showModesDialog = false }) {
-                                        Text("Cancel")
-                                    }
-                                }
-                            )
-                        }
-
-                        if (showColorsDialog) {
-                            val selectedColors = remember {
-                                mutableStateListOf<String>().apply {
-                                    addAll(activeColorsSet)
-                                }
-                            }
-                            var customR by remember { mutableIntStateOf(sharedPrefs.getInt("custom_case_color_r", 63)) }
-                            var customG by remember { mutableIntStateOf(sharedPrefs.getInt("custom_case_color_g", 81)) }
-                            var customB by remember { mutableIntStateOf(sharedPrefs.getInt("custom_case_color_b", 181)) }
-                            var customMetallic by remember { mutableStateOf(sharedPrefs.getBoolean("custom_case_color_metallic", false)) }
-
-                            AlertDialog(
-                                onDismissRequest = { showColorsDialog = false },
-                                title = { Text("Case Colors to Cycle") },
-                                text = {
-                                    Column(
-                                        modifier = Modifier.fillMaxWidth()
-                                    ) {
-                                        val toggleState = remember(selectedColors.size) {
-                                            when (selectedColors.size) {
-                                                allCaseColors.size -> ToggleableState.On
-                                                0 -> ToggleableState.Off
-                                                else -> ToggleableState.Indeterminate
-                                            }
-                                        }
-                                        Row(
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .clickable {
-                                                    if (toggleState == ToggleableState.On) {
-                                                        selectedColors.clear()
-                                                        selectedColors.add(allCaseColors.first().name)
-                                                    } else {
-                                                        selectedColors.clear()
-                                                        selectedColors.addAll(allCaseColors.map { it.name })
-                                                    }
-                                                }
-                                                .padding(vertical = 6.dp, horizontal = 8.dp),
-                                            verticalAlignment = Alignment.CenterVertically
-                                        ) {
-                                            TriStateCheckbox(
-                                                state = toggleState,
-                                                onClick = {
-                                                    if (toggleState == ToggleableState.On) {
-                                                        selectedColors.clear()
-                                                        selectedColors.add(allCaseColors.first().name)
-                                                    } else {
-                                                        selectedColors.clear()
-                                                        selectedColors.addAll(allCaseColors.map { it.name })
-                                                    }
-                                                }
-                                            )
-                                            Spacer(modifier = Modifier.width(16.dp))
-                                            Text(
-                                                text = "Select All",
-                                                fontWeight = FontWeight.Bold,
-                                                style = MaterialTheme.typography.bodyMedium
-                                            )
-                                        }
-                                        
-                                        HorizontalDivider(
-                                            modifier = Modifier.padding(vertical = 4.dp),
-                                            color = MaterialTheme.colorScheme.outlineVariant
-                                        )
-                                        
-                                        val scrollState = rememberScrollState()
-                                        Box(
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .heightIn(max = 240.dp)
-                                        ) {
-                                            Column(
-                                                modifier = Modifier
-                                                    .fillMaxWidth()
-                                                    .verticalScroll(scrollState)
-                                            ) {
-                                                allCaseColors.forEach { colorOption ->
-                                                    Column(modifier = Modifier.fillMaxWidth()) {
-                                                        Row(
-                                                            modifier = Modifier
-                                                                .fillMaxWidth()
-                                                                .clickable {
-                                                                    if (selectedColors.contains(colorOption.name)) {
-                                                                        if (selectedColors.size > 1) {
-                                                                            selectedColors.remove(colorOption.name)
-                                                                        }
-                                                                    } else {
-                                                                        selectedColors.add(colorOption.name)
-                                                                    }
-                                                                }
-                                                                .padding(vertical = 4.dp, horizontal = 8.dp),
-                                                            verticalAlignment = Alignment.CenterVertically
-                                                        ) {
-                                                            Checkbox(
-                                                                checked = selectedColors.contains(colorOption.name),
-                                                                onCheckedChange = { checked ->
-                                                                    if (checked) {
-                                                                        selectedColors.add(colorOption.name)
-                                                                    } else {
-                                                                        if (selectedColors.size > 1) {
-                                                                            selectedColors.remove(colorOption.name)
-                                                                        }
-                                                                    }
-                                                                },
-                                                                modifier = Modifier.scale(0.85f)
-                                                            )
-                                                            Spacer(modifier = Modifier.width(8.dp))
-                                                            
-                                                            val resolvedColor = if (colorOption == CaseColor.CUSTOM) Color(customR, customG, customB) else colorOption.caseColor
-                                                            Box(
-                                                                modifier = Modifier
-                                                                    .size(12.dp)
-                                                                    .clip(CircleShape)
-                                                                    .background(resolvedColor)
-                                                                    .border(0.5.dp, MaterialTheme.colorScheme.onSurface.copy(alpha = 0.2f), CircleShape)
-                                                            )
-                                                            Spacer(modifier = Modifier.width(8.dp))
-                                                            Text(
-                                                                text = colorOption.displayName,
-                                                                style = MaterialTheme.typography.bodyMedium
-                                                            )
-                                                        }
-
-                                                        if (colorOption == CaseColor.CUSTOM && selectedColors.contains(CaseColor.CUSTOM.name)) {
-                                                            Column(
-                                                                modifier = Modifier
-                                                                    .fillMaxWidth()
-                                                                    .padding(start = 44.dp, end = 16.dp, top = 8.dp, bottom = 8.dp)
-                                                                    .background(MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f), RoundedCornerShape(8.dp))
-                                                                    .padding(8.dp),
-                                                                verticalArrangement = Arrangement.spacedBy(4.dp)
-                                                            ) {
-                                                                Text("Customize Custom Color", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
-                                                                
-                                                                Box(
-                                                                    modifier = Modifier
-                                                                        .fillMaxWidth()
-                                                                        .height(30.dp)
-                                                                        .clip(RoundedCornerShape(4.dp))
-                                                                        .background(Color(customR, customG, customB))
-                                                                )
-
-                                                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                                                    Text("R", modifier = Modifier.width(16.dp), style = MaterialTheme.typography.bodySmall)
-                                                                    Slider(
-                                                                        value = customR.toFloat(),
-                                                                        onValueChange = { customR = it.toInt() },
-                                                                        valueRange = 0f..255f,
-                                                                        modifier = Modifier.weight(1f)
-                                                                    )
-                                                                    Text(customR.toString(), modifier = Modifier.width(28.dp), style = MaterialTheme.typography.bodySmall)
-                                                                }
-
-                                                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                                                    Text("G", modifier = Modifier.width(16.dp), style = MaterialTheme.typography.bodySmall)
-                                                                    Slider(
-                                                                        value = customG.toFloat(),
-                                                                        onValueChange = { customG = it.toInt() },
-                                                                        valueRange = 0f..255f,
-                                                                        modifier = Modifier.weight(1f)
-                                                                    )
-                                                                    Text(customG.toString(), modifier = Modifier.width(28.dp), style = MaterialTheme.typography.bodySmall)
-                                                                }
-
-                                                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                                                    Text("B", modifier = Modifier.width(16.dp), style = MaterialTheme.typography.bodySmall)
-                                                                    Slider(
-                                                                        value = customB.toFloat(),
-                                                                        onValueChange = { customB = it.toInt() },
-                                                                        valueRange = 0f..255f,
-                                                                        modifier = Modifier.weight(1f)
-                                                                    )
-                                                                    Text(customB.toString(), modifier = Modifier.width(28.dp), style = MaterialTheme.typography.bodySmall)
-                                                                }
-
-                                                                Row(
-                                                                    modifier = Modifier.fillMaxWidth(),
-                                                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                                                    verticalAlignment = Alignment.CenterVertically
-                                                                ) {
-                                                                    Text("Metallic Finish", style = MaterialTheme.typography.bodySmall)
-                                                                    Switch(
-                                                                        checked = customMetallic,
-                                                                        onCheckedChange = { customMetallic = it },
-                                                                        modifier = Modifier.scale(0.8f)
-                                                                    )
-                                                                }
-                                                            }
-                                                        }
-                                                    }
-                                                }
-                                                Spacer(modifier = Modifier.height(16.dp))
-                                            }
-
-                                            if (scrollState.value < scrollState.maxValue) {
-                                                Box(
-                                                    modifier = Modifier
-                                                        .fillMaxWidth()
-                                                        .height(24.dp)
-                                                        .align(Alignment.BottomCenter)
-                                                        .background(
-                                                            Brush.verticalGradient(
-                                                                colors = listOf(
-                                                                    Color.Transparent,
-                                                                    AlertDialogDefaults.containerColor
-                                                                )
-                                                            )
-                                                        )
-                                                )
-                                            }
-                                        }
-                                    }
-                                },
-                                confirmButton = {
-                                    TextButton(
-                                        onClick = {
-                                            sharedPrefs.edit {
-                                                putStringSet("cycle_case_colors", selectedColors.toSet())
-                                                putInt("custom_case_color_r", customR)
-                                                putInt("custom_case_color_g", customG)
-                                                putInt("custom_case_color_b", customB)
-                                                putBoolean("custom_case_color_metallic", customMetallic)
-                                            }
-                                            activeColorsSet = selectedColors.toSet()
-                                            showColorsDialog = false
-                                        }
-                                    ) {
-                                        Text("Done")
-                                    }
-                                },
-                                dismissButton = {
-                                    TextButton(onClick = { showColorsDialog = false }) {
-                                        Text("Cancel")
-                                    }
-                                }
-                            )
-                        }
-
-                        Spacer(modifier = Modifier.height(16.dp))
+                        Spacer(Modifier.height(32.dp))
                     }
+                }
+
+                if (showTypingLayoutDialog) {
+                    SingleChoiceDialog(
+                        title = "Typing layout",
+                        explanation = "Bluke changes the HID key positions it sends. Select the matching input source on the host for punctuation and symbols to agree.",
+                        choices = KeyboardCharacterLayout.entries.map { it.displayName },
+                        selectedIndex = KeyboardCharacterLayout.entries.indexOf(characterLayout),
+                        onSelect = { index ->
+                            characterLayout = KeyboardCharacterLayout.entries[index]
+                            sharedPrefs.edit {
+                                putString(KEYBOARD_CHARACTER_LAYOUT_PREFERENCE, characterLayout.preferenceValue)
+                            }
+                            showTypingLayoutDialog = false
+                        },
+                        onDismiss = { showTypingLayoutDialog = false },
+                    )
+                }
+
+                if (showDpadDialog) {
+                    SingleChoiceDialog(
+                        title = "Where will you use the D-pad?",
+                        explanation = "Native games use the controller standard. Some browser games only understand four numbered buttons. You can switch any time without pairing again.",
+                        choices = listOf("Native games", "Browser games"),
+                        selectedIndex = if (dpadMode == GamepadDpadOutputMode.NATIVE_HAT) 0 else 1,
+                        onSelect = { index ->
+                            dpadMode = if (index == 0) {
+                                GamepadDpadOutputMode.NATIVE_HAT
+                            } else {
+                                GamepadDpadOutputMode.WEB_BUTTONS
+                            }
+                            sharedPrefs.edit {
+                                putString(GAMEPAD_DPAD_MODE_PREFERENCE, dpadMode.preferenceValue)
+                            }
+                            showDpadDialog = false
+                        },
+                        onDismiss = { showDpadDialog = false },
+                    )
                 }
             }
         }
     }
+}
+
+@Composable
+private fun SingleChoiceDialog(
+    title: String,
+    explanation: String,
+    choices: List<String>,
+    selectedIndex: Int,
+    onSelect: (Int) -> Unit,
+    onDismiss: () -> Unit,
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(title) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text(
+                    explanation,
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                choices.forEachIndexed { index, choice ->
+                    SettingsCardGroup(
+                        items = listOf(
+                            SettingsItemData(
+                                title = choice,
+                                action = {
+                                    RadioButton(
+                                        selected = index == selectedIndex,
+                                        onClick = { onSelect(index) },
+                                    )
+                                },
+                                onClick = { onSelect(index) },
+                            ),
+                        ),
+                    )
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+    )
 }

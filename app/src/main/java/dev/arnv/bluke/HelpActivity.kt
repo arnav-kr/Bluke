@@ -100,44 +100,57 @@ class HelpActivity : ComponentActivity() {
                         
                         StepSection(
                             icon = Icons.Default.Bluetooth, 
-                            title = "Connecting a New Device",
+                            title = "Connect a new host",
                             steps = listOf(
-                                "Scan for devices from your App.",
-                                "Tap 'Connect' on your target PC or TV.",
-                                "Watch the target device for a pairing prompt.",
-                                "Accept the prompt on BOTH devices."
+                                "Make the computer, TV, tablet, or phone visible in its Bluetooth settings.",
+                                "Scan in Bluke and tap the host name.",
+                                "Accept the matching pairing prompt on both devices.",
+                                "Wait for Bluke's status dot to turn green before sending input."
                             )
                         )
                         
                         StepSection(
                             icon = Icons.Default.BluetoothConnected, 
-                            title = "Reconnecting",
+                            title = "Repair a stale pairing",
                             steps = listOf(
-                                "Locate your device under 'Paired Devices'.",
-                                "Tap 'Connect'.",
-                                "If connection fails, unpair on both ends and retry."
+                                "Forget the host in this phone's Bluetooth settings.",
+                                "Remove Bluke or this phone from the host's Bluetooth settings.",
+                                "Toggle Bluetooth on both sides, then pair again from Bluke.",
+                                "Reinstalling Bluke alone does not clear the host's cached HID layout."
                             )
                         )
                         
                         StepSection(
                             icon = Icons.Default.Warning, 
-                            title = "Pairing Rejected",
+                            title = "Pairing was refused",
                             isWarning = true,
                             steps = listOf(
-                                "The host device actively denied the HID connection.",
-                                "Ensure your PC/TV permits Bluetooth Keyboards.",
-                                "Clear old Bluetooth bonds if problems persist."
+                                "A refusal means the host or phone rejected the request; it does not prove HID is unsupported.",
+                                "Retry once and accept every prompt on both devices.",
+                                "If it repeats, use the full repair steps above."
                             )
                         )
 
                         StepSection(
                             icon = Icons.Default.ErrorOutline, 
-                            title = "Connection Fault",
+                            title = "Controller and browser games",
                             isWarning = true,
                             steps = listOf(
-                                "Indicates a stale pairing link.",
-                                "Unpair the phone from your computer's Bluetooth settings.",
-                                "Unpair the computer from the phone."
+                                "Start with D-pad: Native games. It is the standard controller representation.",
+                                "Use D-pad: Browser games only when a web game ignores directions; testers may still work in both modes.",
+                                "For Steam, enable the controller in Steam Input and verify it in Steam's controller test or the operating system's game-controller panel.",
+                                "Bluke is a generic HID gamepad, not an Xbox XInput device. Some newer Windows games accept only XInput without a compatibility layer."
+                            )
+                        )
+
+                        StepSection(
+                            icon = Icons.Default.Warning,
+                            title = "Platform limitations",
+                            steps = listOf(
+                                "Support depends on the phone firmware exposing Android's Bluetooth HID Device role.",
+                                "Apple hosts may pair but can restrict composite keyboard, pointer, or gamepad functions; behavior varies by iOS/iPadOS release.",
+                                "Host audio routing prevention is a best-effort workaround for Linux and may be undone by the host or phone firmware.",
+                                "If Android repeatedly rejects HID registration, use Retry once. The incompatible-device screen appears only after the registration attempt ceiling."
                             )
                         )
                         

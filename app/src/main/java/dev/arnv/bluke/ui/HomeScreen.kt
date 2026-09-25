@@ -26,6 +26,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.VolumeOff
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
+import androidx.compose.material.icons.automirrored.filled.HelpOutline
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -51,6 +52,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.res.stringResource
 import dev.arnv.bluke.R
 import dev.arnv.bluke.KeyboardThemesActivity
+import dev.arnv.bluke.HelpActivity
 import androidx.compose.ui.unit.sp
 import androidx.core.content.edit
 import androidx.core.net.toUri
@@ -181,6 +183,9 @@ fun HomeScreen(
 
     var showUpdateDialog by rememberSaveable { mutableStateOf(false) }
     var descriptorRefreshRequired by rememberSaveable { mutableStateOf(false) }
+    var showGamepadGuide by rememberSaveable { mutableStateOf(false) }
+    var connectionAttempts by rememberSaveable { mutableIntStateOf(0) }
+    var showTroubleshootingNudge by rememberSaveable { mutableStateOf(false) }
 
     LaunchedEffect(sharedPrefs) {
         val currentVersionCode = dev.arnv.bluke.BuildConfig.VERSION_CODE
@@ -260,6 +265,50 @@ fun HomeScreen(
 
     // Connection helper declared at outer scope
     val isConnected = btState is BluetoothState.Connected
+
+    LaunchedEffect(isConnected) {
+        if (isConnected) {
+            connectionAttempts = 0
+            showTroubleshootingNudge = false
+        }
+    }
+
+    LaunchedEffect(btMessage, isConnected) {
+        val attemptInProgress = btMessage.contains("connecting", ignoreCase = true) ||
+            btMessage.contains("pairing", ignoreCase = true) ||
+            btMessage.contains("switching", ignoreCase = true)
+        if (!isConnected && attemptInProgress) {
+            kotlinx.coroutines.delay(12_000L)
+            showTroubleshootingNudge = true
+        }
+    }
+
+    if (showGamepadGuide) {
+        AlertDialog(
+            onDismissRequest = { showGamepadGuide = false },
+            icon = { Icon(Icons.Default.SportsEsports, contentDescription = null) },
+            title = { Text("Before using the gamepad") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text("Start with D-pad: Native games. Switch to Browser games only when a web game ignores directions.")
+                    Text("On Windows, some newer games accept only Xbox XInput controllers. Bluke is a standard Bluetooth HID gamepad, so Steam Input or another compatibility layer may be needed.")
+                    Text("If the host cached an older Bluke controller layout, forget Bluke on both devices and pair again once.")
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        sharedPrefs.edit { putBoolean("has_seen_gamepad_guide", true) }
+                        showGamepadGuide = false
+                        isKeyboardActive = true
+                    },
+                ) { Text("Open gamepad") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showGamepadGuide = false }) { Text("Not now") }
+            },
+        )
+    }
 
     // Lock Indicator State variables - single source of truth, reactive to local presses and system LED reports
     var isCapsLockActive by rememberSaveable { mutableStateOf(false) }
@@ -1085,6 +1134,17 @@ fun HomeScreen(
                                 )
                             }
 
+                            if (showTroubleshootingNudge) {
+                                item {
+                                    TroubleshootingNudgeCard(
+                                        onOpenHelp = {
+                                            context.startActivity(Intent(context, HelpActivity::class.java))
+                                        },
+                                        onDismiss = { showTroubleshootingNudge = false },
+                                    )
+                                }
+                            }
+
                             DeviceListSection(
                                 bluetoothState = btState,
                                 statusMessage = btMessage,
@@ -1099,7 +1159,11 @@ fun HomeScreen(
                                 isDiscoveredExpanded = isDiscoveredExpanded,
                                 onPairedExpandedChange = { isPairedExpanded = it },
                                 onDiscoveredExpandedChange = { isDiscoveredExpanded = it },
-                                onConnect = btManager::connectDevice,
+                                onConnect = { device ->
+                                    connectionAttempts += 1
+                                    if (connectionAttempts >= 3) showTroubleshootingNudge = true
+                                    btManager.connectDevice(device)
+                                },
                                 onDisconnect = btManager::disconnectDevice
                             )
                         }
@@ -1158,7 +1222,16 @@ fun HomeScreen(
 
                             // Dynamic Launch Option button
                             Button(
-                                onClick = { isKeyboardActive = true },
+                                onClick = {
+                                    if (
+                                        launchMode == InputMode.GAMEPAD.id &&
+                                        !sharedPrefs.getBoolean("has_seen_gamepad_guide", false)
+                                    ) {
+                                        showGamepadGuide = true
+                                    } else {
+                                        isKeyboardActive = true
+                                    }
+                                },
                                 modifier = Modifier
                                     .weight(1f)
                                     .height(64.dp)
@@ -1195,6 +1268,41 @@ fun HomeScreen(
     }
 }
 
+}
+
+@Composable
+private fun TroubleshootingNudgeCard(
+    onOpenHelp: () -> Unit,
+    onDismiss: () -> Unit,
+) {
+    Card(
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.secondaryContainer,
+        ),
+        shape = RoundedCornerShape(24.dp),
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Icon(Icons.AutoMirrored.Filled.HelpOutline, contentDescription = null)
+            Column(modifier = Modifier.weight(1f)) {
+                Text("Having trouble connecting?", style = MaterialTheme.typography.titleMedium)
+                Text(
+                    "Check both pairing prompts or follow the safe repair steps. A slow attempt does not automatically mean this phone is incompatible.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSecondaryContainer,
+                )
+            }
+            TextButton(onClick = onOpenHelp) { Text("Help") }
+            IconButton(onClick = onDismiss) {
+                Icon(Icons.Default.Close, contentDescription = "Dismiss")
+            }
+        }
+    }
 }
 
 @Composable
