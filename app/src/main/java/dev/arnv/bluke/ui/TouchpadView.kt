@@ -562,7 +562,7 @@ private fun TouchpadModifierRail(
     }
     Column(
         modifier = modifier,
-        verticalArrangement = Arrangement.spacedBy(4.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp, Alignment.CenterVertically),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         keys.forEach { (label, keyCode) ->
