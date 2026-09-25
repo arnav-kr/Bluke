@@ -6,6 +6,7 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -20,15 +21,16 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.GraphicEq
+import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LargeTopAppBar
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.RadioButton
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
@@ -42,6 +44,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.shape.RoundedCornerShape
 import dev.arnv.bluke.sound.CustomSoundPack
 import dev.arnv.bluke.sound.CustomSoundPackRepository
 import dev.arnv.bluke.sound.SoundPackImportResult
@@ -132,26 +135,30 @@ class SoundPacksActivity : ComponentActivity() {
                                 color = MaterialTheme.colorScheme.primary,
                             )
                         }
-                        HorizontalDivider()
-                        SoundPackChoice(
-                            title = "Built-in switch sounds",
-                            subtitle = "Use Bluke's bundled and synthesized switch profiles",
-                            selected = selectedId == null,
-                            onSelect = {
-                                repository.select(null)
-                                selectedId = null
-                            },
+                        Text(
+                            "Available sounds",
+                            style = MaterialTheme.typography.titleSmall,
+                            color = MaterialTheme.colorScheme.primary,
                         )
-                        packs.forEach { pack ->
-                            SoundPackChoice(
-                                title = pack.name,
-                                subtitle = "Imported Mechvibes pack",
-                                selected = selectedId == pack.id,
-                                onSelect = {
-                                    repository.select(pack.id)
-                                    selectedId = pack.id
-                                },
-                            )
+                        val choices = listOf<CustomSoundPack?>(null) + packs
+                        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                            choices.forEachIndexed { index, pack ->
+                                SoundPackChoice(
+                                    title = pack?.name ?: "Built-in switch sounds",
+                                    subtitle = if (pack == null) {
+                                        "Bluke's bundled switch profiles"
+                                    } else {
+                                        "Imported Mechvibes pack"
+                                    },
+                                    selected = selectedId == pack?.id,
+                                    first = index == 0,
+                                    last = index == choices.lastIndex,
+                                    onSelect = {
+                                        repository.select(pack?.id)
+                                        selectedId = pack?.id
+                                    },
+                                )
+                            }
                         }
                         if (packs.isEmpty()) {
                             Text(
@@ -172,32 +179,54 @@ private fun SoundPackChoice(
     title: String,
     subtitle: String,
     selected: Boolean,
+    first: Boolean,
+    last: Boolean,
     onSelect: () -> Unit,
 ) {
-    Row(
+    Surface(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable(onClick = onSelect)
-            .padding(vertical = 8.dp),
-        verticalAlignment = Alignment.CenterVertically,
+            .clickable(onClick = onSelect),
+        shape = RoundedCornerShape(
+            topStart = if (first) 28.dp else 4.dp,
+            topEnd = if (first) 28.dp else 4.dp,
+            bottomStart = if (last) 28.dp else 4.dp,
+            bottomEnd = if (last) 28.dp else 4.dp,
+        ),
+        color = if (selected) {
+            MaterialTheme.colorScheme.primaryContainer
+        } else {
+            MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+        },
     ) {
-        Icon(
-            Icons.Default.GraphicEq,
-            contentDescription = null,
-            tint = MaterialTheme.colorScheme.primary,
-        )
-        Column(
-            modifier = Modifier
-                .weight(1f)
-                .padding(horizontal = 16.dp),
+        Row(
+            modifier = Modifier.padding(horizontal = 20.dp, vertical = 16.dp),
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text(title, style = MaterialTheme.typography.titleMedium)
-            Text(
-                subtitle,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            Icon(
+                Icons.Default.GraphicEq,
+                contentDescription = null,
+                tint = if (selected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.primary,
             )
+            Column(
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(horizontal = 16.dp),
+            ) {
+                Text(title, style = MaterialTheme.typography.titleMedium)
+                Text(
+                    subtitle,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = if (selected) {
+                        MaterialTheme.colorScheme.onPrimaryContainer
+                    } else {
+                        MaterialTheme.colorScheme.onSurfaceVariant
+                    },
+                )
+            }
+            if (selected) {
+                Icon(Icons.Default.Check, contentDescription = "Selected")
+            }
         }
-        RadioButton(selected = selected, onClick = onSelect)
     }
 }

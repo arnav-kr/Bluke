@@ -5,6 +5,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.background
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -58,6 +59,7 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -66,7 +68,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import dev.arnv.bluke.data.KEYBOARD_GEOMETRY_PREFERENCE
@@ -211,6 +216,10 @@ private fun KeyboardThemeLibrary(
             )
         }
         item {
+            val selectedThemeName = (customThemes + KeyboardThemeCatalog.builtIns)
+                .firstOrNull { it.id == selectedThemeId }
+                ?.name
+                ?: "selected theme"
             FilledTonalButton(
                 onClick = onCreate,
                 modifier = Modifier.fillMaxWidth(),
@@ -223,9 +232,9 @@ private fun KeyboardThemeLibrary(
                     modifier = Modifier.weight(1f),
                     horizontalAlignment = Alignment.Start,
                 ) {
-                    Text("Create custom theme", style = MaterialTheme.typography.titleMedium)
+                    Text("Create from $selectedThemeName", style = MaterialTheme.typography.titleMedium)
                     Text(
-                        "Start from the selected theme, then edit groups or individual keys",
+                        "Makes an editable copy; the original theme stays unchanged",
                         style = MaterialTheme.typography.bodySmall,
                     )
                 }
@@ -233,25 +242,37 @@ private fun KeyboardThemeLibrary(
         }
         if (customThemes.isNotEmpty()) {
             item { ThemeSectionTitle("Your themes") }
-            items(customThemes, key = { it.id }) { theme ->
-                KeyboardThemeCard(
-                    theme = theme,
-                    selected = selectedThemeId == theme.id,
-                    onSelect = { onSelect(theme) },
-                    onCopy = { onCopy(theme) },
-                    onEdit = { onEdit(theme) },
-                    onDelete = { onDelete(theme) },
-                )
+            item {
+                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    customThemes.forEachIndexed { index, theme ->
+                        KeyboardThemeCard(
+                            theme = theme,
+                            selected = selectedThemeId == theme.id,
+                            first = index == 0,
+                            last = index == customThemes.lastIndex,
+                            onSelect = { onSelect(theme) },
+                            onCopy = { onCopy(theme) },
+                            onEdit = { onEdit(theme) },
+                            onDelete = { onDelete(theme) },
+                        )
+                    }
+                }
             }
         }
         item { ThemeSectionTitle("Built-in themes") }
-        items(KeyboardThemeCatalog.builtIns, key = { it.id }) { theme ->
-            KeyboardThemeCard(
-                theme = theme,
-                selected = selectedThemeId == theme.id,
-                onSelect = { onSelect(theme) },
-                onCopy = { onCopy(theme) },
-            )
+        item {
+            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                KeyboardThemeCatalog.builtIns.forEachIndexed { index, theme ->
+                    KeyboardThemeCard(
+                        theme = theme,
+                        selected = selectedThemeId == theme.id,
+                        first = index == 0,
+                        last = index == KeyboardThemeCatalog.builtIns.lastIndex,
+                        onSelect = { onSelect(theme) },
+                        onCopy = { onCopy(theme) },
+                    )
+                }
+            }
         }
         item { Spacer(Modifier.height(24.dp)) }
     }
@@ -271,28 +292,27 @@ private fun ThemeSectionTitle(title: String) {
 private fun KeyboardThemeCard(
     theme: KeyboardThemeDefinition,
     selected: Boolean,
+    first: Boolean,
+    last: Boolean,
     onSelect: () -> Unit,
     onCopy: () -> Unit,
     onEdit: (() -> Unit)? = null,
     onDelete: (() -> Unit)? = null,
 ) {
-    Card(
+    Surface(
         modifier = Modifier
             .fillMaxWidth()
             .clickable(onClick = onSelect),
-        shape = MaterialTheme.shapes.extraLarge,
-        colors = CardDefaults.cardColors(
-            containerColor = if (selected) {
-                MaterialTheme.colorScheme.primaryContainer
-            } else {
-                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f)
-            },
-            contentColor = if (selected) {
-                MaterialTheme.colorScheme.onPrimaryContainer
-            } else {
-                MaterialTheme.colorScheme.onSurface
-            },
+        shape = androidx.compose.foundation.shape.RoundedCornerShape(
+            topStart = if (first) 28.dp else 4.dp,
+            topEnd = if (first) 28.dp else 4.dp,
+            bottomStart = if (last) 28.dp else 4.dp,
+            bottomEnd = if (last) 28.dp else 4.dp,
         ),
+        color = if (selected) MaterialTheme.colorScheme.primaryContainer
+        else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f),
+        contentColor = if (selected) MaterialTheme.colorScheme.onPrimaryContainer
+        else MaterialTheme.colorScheme.onSurface,
     ) {
         Row(
             modifier = Modifier.padding(16.dp),
@@ -306,18 +326,6 @@ private fun KeyboardThemeCard(
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
                 )
-                Text(
-                    if (theme.editable) "Custom theme" else "Built-in theme",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = if (selected) {
-                        MaterialTheme.colorScheme.onPrimaryContainer
-                    } else {
-                        MaterialTheme.colorScheme.onSurfaceVariant
-                    },
-                )
-            }
-            if (selected) {
-                Icon(Icons.Default.Check, contentDescription = "Selected")
             }
             IconButton(onClick = onCopy) {
                 Icon(Icons.Default.ContentCopy, contentDescription = "Copy ${theme.name}")
@@ -522,13 +530,13 @@ private fun KeyboardThemeEditor(
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
 
             if (target == ThemeEditTarget.PLATE) {
-                RgbColorEditor("Keyboard background", plateArgb) { plateArgb = it }
+                VisualColorEditor("Keyboard background", plateArgb) { plateArgb = it }
             } else if (selectedStyle != null) {
-                RgbColorEditor("Key color", selectedStyle.backgroundArgb) { color ->
+                VisualColorEditor("Key color", selectedStyle.backgroundArgb) { color ->
                     updateTargetStyle { it.copy(backgroundArgb = color) }
                 }
                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-                RgbColorEditor("Key text color", selectedStyle.legendArgb) { color ->
+                VisualColorEditor("Key text color", selectedStyle.legendArgb) { color ->
                     updateTargetStyle { it.copy(legendArgb = color) }
                 }
                 Text(
@@ -605,68 +613,150 @@ private fun ThemeEditorSection(
 }
 
 @Composable
-private fun RgbColorEditor(
+private fun VisualColorEditor(
     label: String,
     color: Int,
     onColorChange: (Int) -> Unit,
 ) {
+    val initialHsv = remember(color) {
+        FloatArray(3).also { android.graphics.Color.colorToHSV(color, it) }
+    }
+    var hue by remember(color) { mutableFloatStateOf(initialHsv[0]) }
+    var saturation by remember(color) { mutableFloatStateOf(initialHsv[1]) }
+    var brightness by remember(color) { mutableFloatStateOf(initialHsv[2]) }
     var hexText by remember(color) { mutableStateOf(formatOpaqueHexColor(color)) }
-    val red = redChannel(color)
-    val green = greenChannel(color)
-    val blue = blueChannel(color)
+    var showPreciseInput by remember { mutableStateOf(false) }
 
-    Text(label, style = MaterialTheme.typography.titleSmall)
-    OutlinedTextField(
-        value = hexText,
-        onValueChange = { candidate ->
-            val normalized = candidate.uppercase().filterIndexed { index, character ->
-                character.isDigit() || character in 'A'..'F' || (index == 0 && character == '#')
-            }.let { filtered -> if (filtered.startsWith('#')) filtered.take(7) else filtered.take(6) }
-            hexText = normalized
-            parseOpaqueHexColor(normalized)?.let(onColorChange)
-        },
-        label = { Text("Hex color") },
-        singleLine = true,
-        isError = parseOpaqueHexColor(hexText) == null,
-        supportingText = if (parseOpaqueHexColor(hexText) == null) ({ Text("Use #RRGGBB") }) else null,
-        trailingIcon = {
-            Box(
-                Modifier
-                    .size(28.dp)
-                    .clip(CircleShape)
-                    .background(Color(color)),
-            )
-        },
-        modifier = Modifier.fillMaxWidth(),
-    )
-    RgbChannelSlider("R", red, Color.Red) { value -> onColorChange(opaqueRgb(value, green, blue)) }
-    RgbChannelSlider("G", green, Color.Green) { value -> onColorChange(opaqueRgb(red, value, blue)) }
-    RgbChannelSlider("B", blue, Color.Blue) { value -> onColorChange(opaqueRgb(red, green, value)) }
-}
-
-@Composable
-private fun RgbChannelSlider(
-    label: String,
-    value: Int,
-    channelColor: Color,
-    onValueChange: (Int) -> Unit,
-) {
     Row(
         modifier = Modifier.fillMaxWidth(),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        horizontalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        Text(label, modifier = Modifier.width(16.dp))
-        Slider(
-            value = value.toFloat(),
-            onValueChange = { onValueChange(it.roundToInt()) },
-            valueRange = 0f..255f,
-            colors = SliderDefaults.colors(
-                thumbColor = channelColor,
-                activeTrackColor = channelColor,
-            ),
-            modifier = Modifier.weight(1f),
+        Box(
+            Modifier
+                .size(32.dp)
+                .clip(CircleShape)
+                .background(Color(color)),
         )
-        Text(value.toString(), modifier = Modifier.width(32.dp))
+        Column(modifier = Modifier.weight(1f)) {
+            Text(label, style = MaterialTheme.typography.titleSmall)
+            Text(
+                formatOpaqueHexColor(color),
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
+
+    Canvas(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(148.dp)
+            .clip(MaterialTheme.shapes.medium)
+            .background(Color(android.graphics.Color.HSVToColor(floatArrayOf(hue, 1f, 1f))))
+            .pointerInput(hue) {
+                awaitPointerEventScope {
+                    while (true) {
+                        val change = awaitPointerEvent().changes.firstOrNull() ?: continue
+                        if (change.pressed) {
+                            saturation = (change.position.x / size.width).coerceIn(0f, 1f)
+                            brightness = (1f - (change.position.y / size.height)).coerceIn(0f, 1f)
+                            onColorChange(
+                                android.graphics.Color.HSVToColor(
+                                    floatArrayOf(hue, saturation, brightness),
+                                ),
+                            )
+                            change.consume()
+                        }
+                    }
+                }
+            },
+    ) {
+        drawRect(Brush.horizontalGradient(listOf(Color.White, Color.Transparent)))
+        drawRect(Brush.verticalGradient(listOf(Color.Transparent, Color.Black)))
+        drawCircle(
+            color = Color.White,
+            radius = 9.dp.toPx(),
+            center = androidx.compose.ui.geometry.Offset(
+                x = saturation * size.width,
+                y = (1f - brightness) * size.height,
+            ),
+            style = Stroke(width = 2.dp.toPx()),
+        )
+    }
+
+    Canvas(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(28.dp)
+            .clip(CircleShape)
+            .pointerInput(saturation, brightness) {
+                awaitPointerEventScope {
+                    while (true) {
+                        val change = awaitPointerEvent().changes.firstOrNull() ?: continue
+                        if (change.pressed) {
+                            hue = ((change.position.x / size.width).coerceIn(0f, 1f) * 360f)
+                            onColorChange(
+                                android.graphics.Color.HSVToColor(
+                                    floatArrayOf(hue, saturation, brightness),
+                                ),
+                            )
+                            change.consume()
+                        }
+                    }
+                }
+            },
+    ) {
+        drawRect(
+            Brush.horizontalGradient(
+                listOf(
+                    Color.Red,
+                    Color.Yellow,
+                    Color.Green,
+                    Color.Cyan,
+                    Color.Blue,
+                    Color.Magenta,
+                    Color.Red,
+                ),
+            ),
+        )
+        drawCircle(
+            color = Color.White,
+            radius = 8.dp.toPx(),
+            center = androidx.compose.ui.geometry.Offset(
+                x = (hue / 360f) * size.width,
+                y = size.height / 2f,
+            ),
+            style = Stroke(width = 2.dp.toPx()),
+        )
+    }
+
+    TextButton(onClick = { showPreciseInput = !showPreciseInput }) {
+        Text(if (showPreciseInput) "Hide precise value" else "Enter a precise hex value")
+    }
+    if (showPreciseInput) {
+        OutlinedTextField(
+            value = hexText,
+            onValueChange = { candidate ->
+                val normalized = candidate.uppercase().filterIndexed { index, character ->
+                    character.isDigit() || character in 'A'..'F' || (index == 0 && character == '#')
+                }.let { filtered -> if (filtered.startsWith('#')) filtered.take(7) else filtered.take(6) }
+                hexText = normalized
+                parseOpaqueHexColor(normalized)?.let(onColorChange)
+            },
+            label = { Text("Hex color") },
+            singleLine = true,
+            isError = parseOpaqueHexColor(hexText) == null,
+            supportingText = if (parseOpaqueHexColor(hexText) == null) ({ Text("Use #RRGGBB") }) else null,
+            trailingIcon = {
+                Box(
+                    Modifier
+                        .size(28.dp)
+                        .clip(CircleShape)
+                        .background(Color(color)),
+                )
+            },
+            modifier = Modifier.fillMaxWidth(),
+        )
     }
 }
