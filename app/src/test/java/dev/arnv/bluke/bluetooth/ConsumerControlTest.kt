@@ -2,6 +2,7 @@ package dev.arnv.bluke.bluetooth
 
 import dev.arnv.bluke.ui.KeyboardLayouts
 import dev.arnv.bluke.ui.consumerControlForFnKey
+import dev.arnv.bluke.ui.fnLegendForKey
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -16,6 +17,14 @@ class ConsumerControlTest {
         assertEquals(ConsumerControl.PLAY_PAUSE, consumerControlForFnKey(KeyboardLayouts.KEY_F5))
         assertEquals(ConsumerControl.SLEEP, consumerControlForFnKey(KeyboardLayouts.KEY_F12))
         assertNull(consumerControlForFnKey(KeyboardLayouts.KEY_A))
+    }
+
+    @Test
+    fun fnLegendsReplaceOnlyMappedFunctionKeys() {
+        assertEquals("Mute", fnLegendForKey(KeyboardLayouts.KEY_F1))
+        assertEquals("Play", fnLegendForKey(KeyboardLayouts.KEY_F5))
+        assertEquals("Sleep", fnLegendForKey(KeyboardLayouts.KEY_F12))
+        assertNull(fnLegendForKey(KeyboardLayouts.KEY_F9))
     }
 
     @Test

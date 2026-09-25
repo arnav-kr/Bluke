@@ -40,6 +40,8 @@ class DeveloperOptionsActivity : ComponentActivity() {
                 var mockUpdatePopup by remember { mutableStateOf(sharedPrefs.getBoolean("mock_update_popup", false)) }
                 var mockBtDisabled by remember { mutableStateOf(sharedPrefs.getBoolean("mock_bt_disabled", false)) }
                 var mockUnsupported by remember { mutableStateOf(sharedPrefs.getBoolean("mock_device_unsupported", false)) }
+                var mockGamepadGuide by remember { mutableStateOf(sharedPrefs.getBoolean("mock_gamepad_guide", false)) }
+                var mockTroubleshootingNudge by remember { mutableStateOf(sharedPrefs.getBoolean("mock_troubleshooting_nudge", false)) }
 
                 // Easter egg states
                 val catEmojis = listOf("🐱", "😹", "😼")
@@ -122,6 +124,8 @@ class DeveloperOptionsActivity : ComponentActivity() {
                                             putBoolean("mock_bt_disabled", false)
                                             putBoolean("mock_device_unsupported", false)
                                             putBoolean("mock_hid_unsupported", false)
+                                            putBoolean("mock_gamepad_guide", false)
+                                            putBoolean("mock_troubleshooting_nudge", false)
                                         }
                                         finish() // Exit screen
                                     }
@@ -154,6 +158,32 @@ class DeveloperOptionsActivity : ComponentActivity() {
                                             }
                                         )
                                     }
+                                ),
+                                SettingsItemData(
+                                    title = "Force Gamepad Guide",
+                                    subtitle = "Shows the first-use controller guidance on Home",
+                                    action = {
+                                        Switch(
+                                            checked = mockGamepadGuide,
+                                            onCheckedChange = {
+                                                mockGamepadGuide = it
+                                                sharedPrefs.edit { putBoolean("mock_gamepad_guide", it) }
+                                            },
+                                        )
+                                    },
+                                ),
+                                SettingsItemData(
+                                    title = "Force Troubleshooting Nudge",
+                                    subtitle = "Shows the contextual connection-help card on Home",
+                                    action = {
+                                        Switch(
+                                            checked = mockTroubleshootingNudge,
+                                            onCheckedChange = {
+                                                mockTroubleshootingNudge = it
+                                                sharedPrefs.edit { putBoolean("mock_troubleshooting_nudge", it) }
+                                            },
+                                        )
+                                    },
                                 ),
                                 SettingsItemData(
                                     title = "Home Screen Error State",

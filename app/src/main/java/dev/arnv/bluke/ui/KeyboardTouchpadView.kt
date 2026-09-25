@@ -47,6 +47,8 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -216,15 +218,12 @@ fun KeyboardTouchpadView(
                 }
                 Box(
                     Modifier
-                        .size(6.dp)
+                        .size(9.dp)
                         .clip(CircleShape)
-                        .background(if (isConnected) Color(0xFF39FF14) else Color(0xFFFF9800)),
-                )
-                Text(
-                    if (isConnected) "Host connected" else "Host offline",
-                    color = Color.White,
-                    fontSize = 10.sp,
-                    fontWeight = FontWeight.Bold,
+                        .background(if (isConnected) Color(0xFF39FF14) else Color(0xFFFF9800))
+                        .semantics {
+                            contentDescription = if (isConnected) "Host connected" else "Host offline"
+                        },
                 )
             }
         }

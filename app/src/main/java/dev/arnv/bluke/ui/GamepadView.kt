@@ -3,15 +3,18 @@ package dev.arnv.bluke.ui
 import android.annotation.SuppressLint
 import android.content.Context
 import android.content.SharedPreferences
+import android.content.Intent
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.withTransform
 import android.os.VibrationEffect
 import android.os.Vibrator
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
@@ -43,6 +46,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.edit
 import dev.arnv.bluke.R
+import dev.arnv.bluke.BehaviorActivity
+import dev.arnv.bluke.QuickCycleActivity
 import dev.arnv.bluke.bluetooth.BluetoothKeyboardManager
 import dev.arnv.bluke.bluetooth.GAMEPAD_DPAD_MODE_PREFERENCE
 import dev.arnv.bluke.bluetooth.GAMEPAD_GUIDE_BUTTON_INDEX
@@ -129,6 +134,7 @@ private val CONSOLES = listOf(
 // ── Main View ──
 
 @SuppressLint("MissingPermission")
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun GamepadView(
     btManager: BluetoothKeyboardManager,
@@ -522,12 +528,19 @@ fun GamepadView(
                             .height(28.dp)
                             .clip(RoundedCornerShape(6.dp))
                             .background(Color.White.copy(alpha = 0.15f))
-                            .clickable {
-                                val enabledModes = sharedPrefs.enabledInputModes().map(InputMode::id)
-                                val idx = enabledModes.indexOf(launchMode)
-                                onModeChange(enabledModes[(idx + 1) % enabledModes.size])
-                                triggerVibration(25)
-                            }
+                            .combinedClickable(
+                                onClickLabel = "Next input mode",
+                                onLongClickLabel = "Configure input mode cycle",
+                                onClick = {
+                                    val enabledModes = sharedPrefs.enabledInputModes().map(InputMode::id)
+                                    val idx = enabledModes.indexOf(launchMode)
+                                    onModeChange(enabledModes[(idx + 1) % enabledModes.size])
+                                    triggerVibration(25)
+                                },
+                                onLongClick = {
+                                    context.startActivity(Intent(context, QuickCycleActivity::class.java))
+                                },
+                            )
                             .padding(horizontal = 8.dp)
                             .testTag("gamepad_mode_cycle_btn"),
                         verticalAlignment = Alignment.CenterVertically,
@@ -540,7 +553,6 @@ fun GamepadView(
                     // Connection status
                     Box(Modifier.size(6.dp).clip(CircleShape).background(if (isConnected) Color(0xFF39FF14) else Color(0xFFFF9800)))
                     Text(deviceName, color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.SansSerif)
-                    Text(if (isConnected) "[connected]" else "[offline]", color = Color.White.copy(alpha = 0.5f), fontSize = 9.sp, fontFamily = FontFamily.SansSerif)
                 }
 
                 Row(
@@ -553,21 +565,22 @@ fun GamepadView(
                         modifier = Modifier
                             .height(28.dp)
                             .clip(RoundedCornerShape(6.dp))
-                            .background(
-                                if (dpadOutputMode == GamepadDpadOutputMode.WEB_BUTTONS) {
-                                    MaterialTheme.colorScheme.primary.copy(alpha = 0.65f)
-                                } else {
-                                    Color.White.copy(alpha = 0.15f)
-                                }
+                            .background(Color.White.copy(alpha = 0.15f))
+                            .combinedClickable(
+                                onClickLabel = "Switch D-pad behavior",
+                                onLongClickLabel = "Configure D-pad behavior",
+                                onClick = {
+                                    val newMode = dpadOutputMode.next()
+                                    dpadOutputMode = newMode
+                                    sharedPrefs.edit {
+                                        putString(GAMEPAD_DPAD_MODE_PREFERENCE, newMode.preferenceValue)
+                                    }
+                                    triggerVibration(15)
+                                },
+                                onLongClick = {
+                                    context.startActivity(Intent(context, BehaviorActivity::class.java))
+                                },
                             )
-                            .clickable {
-                                val newMode = dpadOutputMode.next()
-                                dpadOutputMode = newMode
-                                sharedPrefs.edit {
-                                    putString(GAMEPAD_DPAD_MODE_PREFERENCE, newMode.preferenceValue)
-                                }
-                                triggerVibration(15)
-                            }
                             .padding(horizontal = 8.dp)
                             .testTag("dpad_output_mode_toggle"),
                         verticalAlignment = Alignment.CenterVertically,

@@ -14,3 +14,16 @@ fun consumerControlForFnKey(keyCode: Int): ConsumerControl? = when (keyCode) {
     KeyboardLayouts.KEY_F12 -> ConsumerControl.SLEEP
     else -> null
 }
+
+fun fnLegendForKey(keyCode: Int): String? = when (consumerControlForFnKey(keyCode)) {
+    ConsumerControl.MUTE -> "Mute"
+    ConsumerControl.VOLUME_DOWN -> "Vol −"
+    ConsumerControl.VOLUME_UP -> "Vol +"
+    ConsumerControl.PREVIOUS_TRACK -> "Prev"
+    ConsumerControl.PLAY_PAUSE -> "Play"
+    ConsumerControl.NEXT_TRACK -> "Next"
+    ConsumerControl.BRIGHTNESS_DOWN -> "Dim"
+    ConsumerControl.BRIGHTNESS_UP -> "Bright"
+    ConsumerControl.SLEEP -> "Sleep"
+    null -> null
+}

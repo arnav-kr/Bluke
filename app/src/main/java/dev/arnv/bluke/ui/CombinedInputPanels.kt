@@ -113,18 +113,10 @@ internal fun CombinedKeyboardPanel(
             isCapsLockActive = isCapsLockActive,
             isNumLockActive = isNumLockActive,
             isScrollLockActive = isScrollLockActive,
+            isFnActive = isFnActive,
             keySensitivity = keySensitivity,
             onKeyPressChange = onKeyPressChange,
         )
-        if (isFnActive) {
-            Box(
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .padding(bottom = 4.dp),
-            ) {
-                FnShortcutOverlay()
-            }
-        }
     }
 }
 

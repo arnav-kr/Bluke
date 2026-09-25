@@ -90,10 +90,12 @@ fun KeyCap(
                 .border(1.dp, Color.Black.copy(alpha = 0.15f), RoundedCornerShape(innerRadius)),
             contentAlignment = Alignment.Center
         ) {
+            val keyWidthRatio = (width.value / baseUnitWidth.value).coerceAtLeast(1f)
+            val normalizedLegendLength = legend.length / keyWidthRatio
             val legendLengthScale = when {
-                legend.length >= 9 -> 0.5f
-                legend.length >= 6 -> 0.62f
-                legend.length >= 4 -> 0.78f
+                normalizedLegendLength >= 8f -> 0.62f
+                normalizedLegendLength >= 6f -> 0.74f
+                normalizedLegendLength >= 4.5f -> 0.88f
                 else -> 1f
             }
             val shiftedLengthScale = when {

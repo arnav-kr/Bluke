@@ -25,6 +25,7 @@ fun KeyboardView(
     isCapsLockActive: Boolean,
     isNumLockActive: Boolean,
     isScrollLockActive: Boolean,
+    isFnActive: Boolean = false,
     keySensitivity: Float = 6f,
     selectedStyleId: String? = null,
     onKeySelected: ((KeyLayoutInfo) -> Unit)? = null,
@@ -166,11 +167,14 @@ fun KeyboardView(
                     val isShiftActive = activePressedKeys.contains(0xE1) || activePressedKeys.contains(0xE5)
                     val isUppercase = isCapsLockActive xor isShiftActive
                     val isAlphabetic = key.legend.length == 1 && key.legend[0].isLetter()
-                    val displayLegend = if (isAlphabetic) {
+                    val baseDisplayLegend = if (isAlphabetic) {
                         if (isUppercase) key.legend.uppercase() else key.legend.lowercase()
                     } else {
                         key.legend
                     }
+                    val fnLegend = if (isFnActive) fnLegendForKey(key.keyCode) else null
+                    val displayLegend = fnLegend ?: baseDisplayLegend
+                    val displayShiftedLegend = if (fnLegend == null) key.shiftedLegend else ""
 
                     val isIndicatorActive = when (key.keyCode) {
                         0x39 -> isCapsLockActive
@@ -187,7 +191,7 @@ fun KeyboardView(
 
                     KeyCap(
                         legend = displayLegend,
-                        shiftedLegend = key.shiftedLegend,
+                        shiftedLegend = displayShiftedLegend,
                         width = keyWidth,
                         height = keyHeight,
                         isPressed = isPressed,

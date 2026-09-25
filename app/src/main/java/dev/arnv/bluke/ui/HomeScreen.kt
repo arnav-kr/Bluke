@@ -17,10 +17,8 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -53,6 +51,8 @@ import androidx.compose.ui.res.stringResource
 import dev.arnv.bluke.R
 import dev.arnv.bluke.KeyboardThemesActivity
 import dev.arnv.bluke.HelpActivity
+import dev.arnv.bluke.QuickCycleActivity
+import dev.arnv.bluke.SoundPacksActivity
 import androidx.compose.ui.unit.sp
 import androidx.core.content.edit
 import androidx.core.net.toUri
@@ -187,6 +187,15 @@ fun HomeScreen(
     var connectionAttempts by rememberSaveable { mutableIntStateOf(0) }
     var showTroubleshootingNudge by rememberSaveable { mutableStateOf(false) }
 
+    LaunchedEffect(devModeRefreshTrigger) {
+        if (sharedPrefs.getBoolean("is_developer_mode", false)) {
+            if (sharedPrefs.getBoolean("mock_gamepad_guide", false)) showGamepadGuide = true
+            if (sharedPrefs.getBoolean("mock_troubleshooting_nudge", false)) {
+                showTroubleshootingNudge = true
+            }
+        }
+    }
+
     LaunchedEffect(sharedPrefs) {
         val currentVersionCode = dev.arnv.bluke.BuildConfig.VERSION_CODE
         val savedVersionCode = sharedPrefs.getInt("last_run_version_code", 0)
@@ -285,7 +294,10 @@ fun HomeScreen(
 
     if (showGamepadGuide) {
         AlertDialog(
-            onDismissRequest = { showGamepadGuide = false },
+            onDismissRequest = {
+                showGamepadGuide = false
+                sharedPrefs.edit { putBoolean("mock_gamepad_guide", false) }
+            },
             icon = { Icon(Icons.Default.SportsEsports, contentDescription = null) },
             title = { Text("Before using the gamepad") },
             text = {
@@ -299,13 +311,17 @@ fun HomeScreen(
                 Button(
                     onClick = {
                         sharedPrefs.edit { putBoolean("has_seen_gamepad_guide", true) }
+                        sharedPrefs.edit { putBoolean("mock_gamepad_guide", false) }
                         showGamepadGuide = false
                         isKeyboardActive = true
                     },
                 ) { Text("Open gamepad") }
             },
             dismissButton = {
-                TextButton(onClick = { showGamepadGuide = false }) { Text("Not now") }
+                TextButton(onClick = {
+                    showGamepadGuide = false
+                    sharedPrefs.edit { putBoolean("mock_gamepad_guide", false) }
+                }) { Text("Not now") }
             },
         )
     }
@@ -645,17 +661,24 @@ fun HomeScreen(
                                         .height(28.dp)
                                         .clip(RoundedCornerShape(6.dp))
                                         .background(Color.White.copy(alpha = 0.15f))
-                                        .clickable {
-                                            val enabledModes = sharedPrefs.enabledInputModes().map(InputMode::id)
-                                            val currentIndexInEnabled = enabledModes.indexOf(launchMode)
-                                            val nextIndex = (currentIndexInEnabled + 1) % enabledModes.size
-                                            val nextMode = enabledModes[nextIndex]
-                                            launchMode = nextMode
-                                            sharedPrefs.edit { putInt("launch_mode", nextMode) }
-                                            if (isHapticsEnabled) {
-                                                view.performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS)
-                                            }
-                                        }
+                                        .combinedClickable(
+                                            onClickLabel = "Next input mode",
+                                            onLongClickLabel = "Configure input mode cycle",
+                                            onClick = {
+                                                val enabledModes = sharedPrefs.enabledInputModes().map(InputMode::id)
+                                                val currentIndexInEnabled = enabledModes.indexOf(launchMode)
+                                                val nextIndex = (currentIndexInEnabled + 1) % enabledModes.size
+                                                val nextMode = enabledModes[nextIndex]
+                                                launchMode = nextMode
+                                                sharedPrefs.edit { putInt("launch_mode", nextMode) }
+                                                if (isHapticsEnabled) {
+                                                    view.performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS)
+                                                }
+                                            },
+                                            onLongClick = {
+                                                context.startActivity(Intent(context, QuickCycleActivity::class.java))
+                                            },
+                                        )
                                         .padding(horizontal = 8.dp)
                                         .testTag("keyboard_mode_cycle_btn"),
                                     verticalAlignment = Alignment.CenterVertically,
@@ -693,14 +716,6 @@ fun HomeScreen(
                                     color = Color.White,
                                     fontSize = 11.sp,
                                     fontWeight = FontWeight.Bold,
-                                    fontFamily = FontFamily.SansSerif
-                                )
-                                
-                                Text(
-                                    text = if (isConnected) "[connected]" else "[offline]",
-                                    color = Color.White.copy(alpha = 0.5f), // grayscale font
-                                    fontSize = 9.sp, // reduced size
-                                    fontWeight = FontWeight.Normal,
                                     fontFamily = FontFamily.SansSerif
                                 )
                                 
@@ -869,19 +884,26 @@ fun HomeScreen(
                                         .height(28.dp)
                                         .clip(RoundedCornerShape(6.dp))
                                         .background(Color.White.copy(alpha = 0.15f))
-                                        .clickable {
-                                            val savedSet = sharedPrefs.getStringSet(CYCLE_KEYBOARD_GEOMETRIES_PREFERENCE, null)
-                                            val enabledLayouts = if (savedSet == null) {
-                                                KeyboardGeometry.entries
-                                            } else {
-                                                KeyboardGeometry.entries.filter { savedSet.contains(it.name) }
-                                            }.ifEmpty { listOf(selectedGeometry) }
-                                            val currentIndexInEnabled = enabledLayouts.indexOf(selectedGeometry)
-                                            val nextIndex = if (currentIndexInEnabled < 0) 0 else (currentIndexInEnabled + 1) % enabledLayouts.size
-                                            selectedGeometry = enabledLayouts[nextIndex]
-                                            sharedPrefs.edit { putString(KEYBOARD_GEOMETRY_PREFERENCE, selectedGeometry.name) }
-                                            soundSynth.playPress()
-                                        }
+                                        .combinedClickable(
+                                            onClickLabel = "Next keyboard layout",
+                                            onLongClickLabel = "Configure keyboard layout cycle",
+                                            onClick = {
+                                                val savedSet = sharedPrefs.getStringSet(CYCLE_KEYBOARD_GEOMETRIES_PREFERENCE, null)
+                                                val enabledLayouts = if (savedSet == null) {
+                                                    KeyboardGeometry.entries
+                                                } else {
+                                                    KeyboardGeometry.entries.filter { savedSet.contains(it.name) }
+                                                }.ifEmpty { listOf(selectedGeometry) }
+                                                val currentIndexInEnabled = enabledLayouts.indexOf(selectedGeometry)
+                                                val nextIndex = if (currentIndexInEnabled < 0) 0 else (currentIndexInEnabled + 1) % enabledLayouts.size
+                                                selectedGeometry = enabledLayouts[nextIndex]
+                                                sharedPrefs.edit { putString(KEYBOARD_GEOMETRY_PREFERENCE, selectedGeometry.name) }
+                                                soundSynth.playPress()
+                                            },
+                                            onLongClick = {
+                                                context.startActivity(Intent(context, QuickCycleActivity::class.java))
+                                            },
+                                        )
                                         .padding(horizontal = 8.dp),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
@@ -909,18 +931,25 @@ fun HomeScreen(
                                         .height(28.dp)
                                         .clip(RoundedCornerShape(6.dp))
                                         .background(Color.White.copy(alpha = 0.15f))
-                                        .clickable {
-                                            val enabledSwitches = SwitchType.entries.filter { switch ->
-                                                sharedPrefs.getStringSet("cycle_key_sounds", SwitchType.entries.map { it.name }.toSet())?.contains(switch.name) == true
-                                            }.ifEmpty { listOf(currentSwitch) }
-                                            val currentIndexInEnabled = enabledSwitches.indexOf(currentSwitch)
-                                            val nextIndex = (currentIndexInEnabled + 1) % enabledSwitches.size
-                                            val nextSwitch = enabledSwitches[nextIndex]
-                                            soundSynth.changeSwitchType(nextSwitch)
-                                            currentSwitch = nextSwitch
-                                            currentSoundProfileName = nextSwitch.displayName
-                                            soundSynth.playPress()
-                                        }
+                                        .combinedClickable(
+                                            onClickLabel = "Next key sound",
+                                            onLongClickLabel = "Manage key sounds",
+                                            onClick = {
+                                                val enabledSwitches = SwitchType.entries.filter { switch ->
+                                                    sharedPrefs.getStringSet("cycle_key_sounds", SwitchType.entries.map { it.name }.toSet())?.contains(switch.name) == true
+                                                }.ifEmpty { listOf(currentSwitch) }
+                                                val currentIndexInEnabled = enabledSwitches.indexOf(currentSwitch)
+                                                val nextIndex = (currentIndexInEnabled + 1) % enabledSwitches.size
+                                                val nextSwitch = enabledSwitches[nextIndex]
+                                                soundSynth.changeSwitchType(nextSwitch)
+                                                currentSwitch = nextSwitch
+                                                currentSoundProfileName = nextSwitch.displayName
+                                                soundSynth.playPress()
+                                            },
+                                            onLongClick = {
+                                                context.startActivity(Intent(context, SoundPacksActivity::class.java))
+                                            },
+                                        )
                                         .padding(horizontal = 8.dp),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
@@ -957,9 +986,7 @@ fun HomeScreen(
                                                 val enabledThemes = if (savedThemeIds == null) {
                                                     availableThemes
                                                 } else {
-                                                    availableThemes.filter { theme ->
-                                                        theme.editable || theme.id in savedThemeIds
-                                                    }
+                                                    availableThemes.filter { theme -> theme.id in savedThemeIds }
                                                 }.ifEmpty { listOf(selectedKeyboardTheme) }
                                                 val currentIndex = enabledThemes.indexOfFirst {
                                                     it.id == selectedKeyboardTheme.id
@@ -1043,18 +1070,10 @@ fun HomeScreen(
                                 isCapsLockActive = isCapsLockActive,
                                 isNumLockActive = isNumLockActive,
                                 isScrollLockActive = isScrollLockActive,
+                                isFnActive = isFnActive,
                                 keySensitivity = keySensitivity,
                                 onKeyPressChange = { code, press -> handleLocalKeyPress(code, press) }
                             )
-                            if (isFnActive) {
-                                Box(
-                                    modifier = Modifier
-                                        .align(Alignment.BottomCenter)
-                                        .padding(bottom = 4.dp),
-                                ) {
-                                    FnShortcutOverlay()
-                                }
-                            }
                         }
                     }
                 }
@@ -1140,7 +1159,10 @@ fun HomeScreen(
                                         onOpenHelp = {
                                             context.startActivity(Intent(context, HelpActivity::class.java))
                                         },
-                                        onDismiss = { showTroubleshootingNudge = false },
+                                        onDismiss = {
+                                            showTroubleshootingNudge = false
+                                            sharedPrefs.edit { putBoolean("mock_troubleshooting_nudge", false) }
+                                        },
                                     )
                                 }
                             }
@@ -1300,55 +1322,6 @@ private fun TroubleshootingNudgeCard(
             TextButton(onClick = onOpenHelp) { Text("Help") }
             IconButton(onClick = onDismiss) {
                 Icon(Icons.Default.Close, contentDescription = "Dismiss")
-            }
-        }
-    }
-}
-
-@Composable
-internal fun FnShortcutOverlay() {
-    Surface(
-        modifier = Modifier.fillMaxWidth(0.96f),
-        color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.96f),
-        contentColor = MaterialTheme.colorScheme.onSurface,
-        shape = RoundedCornerShape(14.dp),
-        tonalElevation = 6.dp,
-        shadowElevation = 8.dp,
-    ) {
-        Row(
-            modifier = Modifier
-                .horizontalScroll(rememberScrollState())
-                .padding(horizontal = 10.dp, vertical = 6.dp),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
-        ) {
-            Text(
-                text = "Fn",
-                style = MaterialTheme.typography.labelLarge,
-                fontWeight = FontWeight.Bold,
-            )
-            ConsumerControl.entries.forEach { control ->
-                Surface(
-                    color = MaterialTheme.colorScheme.secondaryContainer,
-                    contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
-                    shape = RoundedCornerShape(10.dp),
-                ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(4.dp),
-                    ) {
-                        Text(
-                            text = control.shortcutLabel,
-                            style = MaterialTheme.typography.labelMedium,
-                            fontWeight = FontWeight.Bold,
-                        )
-                        Text(
-                            text = control.actionLabel,
-                            style = MaterialTheme.typography.labelSmall,
-                        )
-                    }
-                }
             }
         }
     }
