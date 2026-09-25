@@ -1,6 +1,6 @@
 # Bluke Android platform audit
 
-Audit date: 2026-09-15–24 (Asia/Calcutta)
+Audit date: 2026-09-15–25 (Asia/Calcutta)
 Audited revision: `ec01041` (`main`)  
 Working branch: `refactor`
 
@@ -11,21 +11,20 @@ Working branch: `refactor`
 - **P1 fixed — process ownership:** `BlukeApplication` owns the manager for the application lifetime; teardown now closes the HID proxy/receivers and cancels executors/coroutines.
 - **P1 mitigated — hidden APIs:** the invalid `setBluetoothClass(Int)` reflection was removed. A2DP/HFP reflection remains only behind an opt-in Linux workaround that defaults off.
 - **P1 fixed — gamepad transport:** analog state is sampled by an 8 ms (125 Hz) ticker; button, D-pad, and final neutral/release edges bypass the sampler. The D-pad is now a HID Hat Switch instead of colliding button bits (Bluke issue #16).
-- **P1 fixed, application retest required — gamepad compatibility:** the supplied Bluetooth capture proves the Hat descriptor reached the host and `evtest` proves all D-pad directions arrive. Guide/Share were moved out of canonical Web positions 12–15. Native Hat remains the default; an optional Web Compatibility encoder instead emits D-pad buttons 12–15 while holding the Hat neutral. The descriptor is identical in both modes.
-- **P1 fixed — compatibility mode discoverability:** the gamepad toolbar now shows the active `D-pad: Native` / `D-pad: Web` policy and switches it immediately; the Behavior screen remains the explanatory settings surface.
-- **P1 mitigated, device validation required — unsupported firmware:** repeated synchronous HID proxy or registration rejection now opens an explicit `Device Not Compatible` screen with Retry. Callback timeouts remain inconclusive and no manufacturer/model blacklist is used.
-- **P1 fixed — unsupported-state UX:** the incompatibility screen is now exclusive: launch/mode controls are hidden and the duplicate rejection toast is suppressed. Bluetooth-off and no-hardware states use the same blocking policy; transient registration and pairing states do not.
-- **P1 fixed — misleading restart action:** normal startup, registration, pairing, and pairing refusal no longer expose `Restart HID Service`; the action is restricted to exhausted proxy-binding or app-registration failures.
-- **P1 mitigated — cached gamepad descriptor:** existing installations now receive a descriptor-revision prompt explaining the one-time requirement to forget and re-pair on both sides; fresh installs record the current revision during onboarding. Once refreshed, switching between Native Hat and Web Compatibility never changes SDP and does not require another pairing.
+- **P1 fixed, application retest required — gamepad compatibility:** the capture/`evtest` prove Hat directions arrive; Guide/Share no longer collide with Web buttons 12–15. Native Hat is default, Web Compatibility is an immediate toolbar switch, and both use one descriptor.
+- **P1 mitigated, device validation required — unsupported firmware/UX:** repeated synchronous proxy/registration rejection opens the exclusive `Device Not Compatible` screen with Retry. Timeouts remain inconclusive; transient startup/pairing/refusal never shows the misleading restart action, which is restricted to exhausted HID failures.
+- **P1 mitigated — cached composite descriptor:** revision 4 adds Consumer Control and retains corrected gamepad mappings. Existing installations get a one-time two-sided re-pair prompt; fresh installs record the revision at onboarding. Runtime Native/Web switching and Fn use do not require another re-pair.
 - **P1 fixed — layout persistence:** gesture changes are staged in memory and committed at gesture end through a single Preferences DataStore repository with one-time migration.
 - **P1 fixed — keyboard locale architecture/RTL:** physical board style is separated from character output profile; US QWERTY, French AZERTY, German QWERTZ, Dvorak, and Colemak are selectable and emit the displayed ASCII key when the host uses US QWERTY. Physical positions are retained separately for stable rendering. The keyboard surface is explicitly LTR, so Android's developer “Force RTL” option no longer mirrors it.
 - **P1 fixed — manual theme customization:** manual color mode now offers a persistent three-color palette for background, keys/surfaces, and accent/text, with validated `#RRGGBB` entry and an in-dialog preview. Presets and Dynamic Colors remain independently selectable.
 - **P1 fixed, device validation required — custom key sounds:** Mechvibes V2 multi-file and V1 single-audio-sprite ZIP packs can be safely imported. V1 audio is decoded and split once with Android platform codecs, then preloaded into the existing low-latency `SoundPool`; no decoder dependency was added. Failed/stale custom selections now recover to built-in sounds.
+- **P1 fixed, host validation required — media/Fn controls:** report ID 4 implements the USB HID Consumer page; Fn+F1–F8/F12 expose mute, volume, transport, brightness, and sleep, with an on-hold shortcut overlay. Host support for brightness/sleep remains OS-dependent.
+- **P1 fixed, device validation required — input modes:** tap-drag uses one consistent 300 ms window and guaranteed button-up. The cycle now has five distinct modes: Keyboard, Touchpad, Gamepad, Keyboard + Touchpad, and standalone gyro Mouse; gyro sensor work is lifecycle-bound and no longer coupled to Touchpad.
+- **P2 intentionally not implemented — Windows Precision Touchpad:** true PTP requires a digitizer collection, contact/capability feature reports, and Microsoft certification status data. Advertising the current relative mouse as PTP would be non-compliant; existing two-finger wheel scrolling remains generic HID mouse behavior.
 - **P1 partially fixed — UI state/performance:** Bluetooth, discovery, connection, lifecycle, and lock state are hoisted into immutable `HomeUiState`; rapidly changing gamepad button reads are isolated to child restart scopes and long-lived pointer handlers observe current callbacks. Editor/transient presentation state remains local.
 - **P2 open — Compose alignment:** Material3 `1.4.0-alpha04` still lifts runtime to `1.8.0-alpha06`; removing the override fails compilation because `ThemeConfig.kt` uses Expressive-only APIs. A BOM/toolchain upgrade was prohibited in this pass.
 - **P2 fixed — resources:** unused resources and three malformed high-density WebPs were removed; adaptive icon background is explicitly `nodpi`.
-- Baseline: `assembleDebug` passed; lint reported 2 errors and 42 warnings; 3 tests passed and zero exercised Bluetooth/HID.
-- Final: `assembleDebug`, 65 unit tests, and full `lintDebug` pass after the keyboard-theme follow-up. The suite includes 18 facade/OEM-behavior contract runs across simulated API 28/31/36 plus HID UI policy, sound-pack archive safety/parsing and stale-selection recovery, audio-sprite WAV framing, sound-preference migration, locale output mapping, keyboard layout/theme migration and per-key style precedence, color parsing/RGB/contrast logic, gamepad input/report, and compatibility-classification coverage. Debug lint reports 0 errors/21 warnings. The physical Android/OEM matrix, interactive theme-editor device check, and platform-codec decode of a real OGG pack remain open because ADB found no attached target.
+- Baseline was 2 lint errors/42 warnings, 3 tests, and zero Bluetooth/HID coverage. Current verification includes the simulated API/OEM contracts plus Consumer/Fn routing, tap policy, gyro math, input-mode migration, sound, locale, theme, gamepad, and compatibility tests; exact final counts and lint output are recorded in §7.7. Physical Android/OEM and host-interaction checks remain open because ADB found no attached target.
 - No SDK, AGP, Kotlin, Compose BOM, signing, Fastlane, or F-Droid version/config changes were made. DataStore `1.2.1` is the only new dependency.
 
 ## 2. Repository reconnaissance
@@ -86,6 +85,12 @@ app/src/main/
 │       ├── KeyboardThemes.kt
 │       ├── KeyboardView.kt
 │       ├── KeyCap.kt
+│       ├── InputMode.kt
+│       ├── KeyboardTouchpadView.kt
+│       ├── MouseControls.kt
+│       ├── MouseView.kt
+│       ├── GyroMouseController.kt
+│       ├── GyroMouseMotion.kt
 │       ├── SettingsComponents.kt
 │       ├── TouchpadView.kt
 │       └── theme/{Color,CustomThemeColors,Theme,ThemeConfig,Type}.kt
@@ -105,7 +110,7 @@ gradle/libs.versions.toml
 app/build.gradle.kts
 ```
 
-The refactor adds `BlukeApplication.kt`, `HidLifecycle.kt`, `HidRegistrationCoordinator.kt`, `LatestRequestProcessor.kt`, `GamepadReport.kt`, `GamepadInput.kt`, `LayoutRepository.kt`, `HomeViewModel.kt`, `DeviceListSection.kt`, `StatusHeaderCard.kt`, `ProfileNotSupportedScreen.kt`, `values-v31/themes.xml`, and `values-night-v31/themes.xml`.
+The refactor adds `BlukeApplication.kt`, `HidLifecycle.kt`, `HidRegistrationCoordinator.kt`, `LatestRequestProcessor.kt`, `GamepadReport.kt`, `GamepadInput.kt`, `LayoutRepository.kt`, `HomeViewModel.kt`, `DeviceListSection.kt`, `StatusHeaderCard.kt`, `ProfileNotSupportedScreen.kt`, `InputMode.kt`, `KeyboardTouchpadView.kt`, `MouseView.kt`, `MouseControls.kt`, `GyroMouseController.kt`, `GyroMouseMotion.kt`, `values-v31/themes.xml`, and `values-night-v31/themes.xml`.
 
 ### 2.2 Kotlin inventory at `main` HEAD
 
@@ -140,7 +145,7 @@ The refactor adds `BlukeApplication.kt`, `HidLifecycle.kt`, `HidRegistrationCoor
 
 After extraction, `HomeScreen.kt` is 1,026 lines; the new files are `DeviceListSection.kt` (204), `StatusHeaderCard.kt` (144), and `ProfileNotSupportedScreen.kt` (99). `HomeScreen.kt` remains critical and needs state-hoisting work.
 
-Post-refactor inventory additions/changed counts: `BlukeApplication.kt` 24 (process owner), `bluetooth/HidLifecycle.kt` 87 (state/retry/capability models), `bluetooth/HidRegistrationCoordinator.kt` 74 (facade-backed registration policy), `bluetooth/LatestRequestProcessor.kt` 26 (conflated cancellation policy), `bluetooth/GamepadReport.kt` 71 (pure HID gamepad packing and D-pad output policy), `ui/GamepadInput.kt` 39 (pure D-pad geometry), `data/LayoutRepository.kt` 65 (DataStore persistence/migration), `data/KeyboardThemeRepository.kt` 155 (custom-theme JSON persistence and upgrade migration), `ui/HomeViewModel.kt` 102 (immutable Bluetooth UI state), `KeyboardThemesActivity.kt` 581 (theme library/live editor; **refactor candidate**), `ui/KeyboardThemes.kt` 77 (theme models/catalog), `sound/AudioSpriteConverter.kt` 215 (platform-codec sprite decode and WAV slicing), `sound/SoundPreferences.kt` 27 (sound-setting migration), `sound/CustomSoundPackRepository.kt` 320 (safe pack import/selection), `sound/KeyboardSoundSynthesizer.kt` 661 (preloaded audio-bank lifecycle/playback; **refactor candidate**), `ui/KeyboardCharacterLayouts.kt` 115 (logical output profiles), `ui/KeyboardLayouts.kt` 654 (keyboard geometry/key models; **refactor candidate**), `MainActivity.kt` 85, `BehaviorActivity.kt` 1,136 (**critical**), `BluetoothKeyboardManager.kt` 1,250 (**critical**), `GamepadView.kt` 2,802 (**critical**), and `HomeScreen.kt` 1,033 (**critical**). Test additions include `sound/AudioSpriteConverterTest.kt`, `sound/SoundPreferencesTest.kt`, and `data/KeyboardThemeMigrationTest.kt` 81 (one-to-one upgrade, per-key precedence, and stable key IDs). The original `main` inventory above remains the audit baseline.
+Post-refactor inventory additions/changed counts: `BlukeApplication.kt` 24 (process owner), `bluetooth/HidLifecycle.kt` 87 (state/retry/capability models), `bluetooth/HidRegistrationCoordinator.kt` 74 (facade-backed registration policy), `bluetooth/LatestRequestProcessor.kt` 26 (conflated cancellation policy), `bluetooth/GamepadReport.kt` 71 (pure HID gamepad packing and D-pad output policy), `ui/GamepadInput.kt` 39 (pure D-pad geometry), `data/LayoutRepository.kt` 65 (DataStore persistence/migration), `data/KeyboardThemeRepository.kt` 155 (custom-theme JSON persistence and upgrade migration), `ui/HomeViewModel.kt` 102 (immutable Bluetooth UI state), `ui/InputMode.kt` 45 (five-mode registry and preference migration), `ui/KeyboardTouchpadView.kt` 215 (combined mode), `ui/MouseView.kt` 351 and `ui/MouseControls.kt` 121 (standalone gyro mouse), `ui/GyroMouseController.kt` 87 and `ui/GyroMouseMotion.kt` 82 (sensor lifecycle and pure integration), `KeyboardThemesActivity.kt` 581 (theme library/live editor; **refactor candidate**), `ui/KeyboardThemes.kt` 77 (theme models/catalog), `sound/AudioSpriteConverter.kt` 215 (platform-codec sprite decode and WAV slicing), `sound/SoundPreferences.kt` 27 (sound-setting migration), `sound/CustomSoundPackRepository.kt` 320 (safe pack import/selection), `sound/KeyboardSoundSynthesizer.kt` 661 (preloaded audio-bank lifecycle/playback; **refactor candidate**), `ui/KeyboardCharacterLayouts.kt` 115 (logical output profiles), `ui/KeyboardLayouts.kt` 654 (keyboard geometry/key models; **refactor candidate**), `MainActivity.kt` 85, `BehaviorActivity.kt` 1,134 (**critical**), `BluetoothKeyboardManager.kt` 1,280 (**critical**), `GamepadView.kt` 2,868 (**critical**), `TouchpadView.kt` 1,050 (**critical**), and `HomeScreen.kt` 1,249 (**critical**). Test additions include input-mode migration, gyro integration, tap-drag policy, sound, HID, gamepad, and keyboard-theme coverage. The original `main` inventory above remains the audit baseline.
 
 ### 2.3 Build configuration
 
@@ -189,11 +194,14 @@ flowchart TD
     HVM -->|collect manager StateFlows| BKM
     HS --> KB[KeyboardView]
     HS --> TP[TouchpadView]
+    HS --> KTP[KeyboardTouchpadView]
+    HS --> MV[MouseView]
     HS --> GP[GamepadView]
     HS --> KSS[KeyboardSoundSynthesizer / SoundPool]
     SPA[SoundPacksActivity] --> CSP[CustomSoundPackRepository]
     CSP -->|selected V2 multi-file pack| KSS
     GP --> LR[LayoutRepository / Preferences DataStore]
+    MV --> GYRO[GyroMouseController / HandlerThread]
     HS --> DLS[DeviceListSection]
     HS --> SHC[StatusHeaderCard]
     HS --> PNS[ProfileNotSupportedScreen]
@@ -217,10 +225,15 @@ flowchart TD
     CSC -->|optional preference| AUDIO[A2DP/HFP reflection workaround]
     KB --> SR[sendKey]
     TP --> MR[sendMouseReport]
+    KTP --> SR
+    KTP --> MR
+    MV --> MR
+    KB --> CC[Fn router / Consumer Control report ID 4]
     GP --> TICK[8 ms analog sampler + edge reports]
     TICK --> GR[sendGamepadReport]
     SR --> Q[single-thread reportExecutor]
     MR --> Q
+    CC --> Q
     GR --> Q
     Q --> HID[BluetoothHidDevice.sendReport]
 ```
@@ -240,6 +253,11 @@ MainActivity
     └── active mode
         ├── KeyboardView -> KeyCap
         ├── TouchpadView
+        │   └── tap/drag + two-finger scroll
+        ├── KeyboardTouchpadView -> KeyboardView + TouchGestureLayer
+        ├── MouseView
+        │   ├── GyroMouseController -> 8 ms motion aggregation
+        │   └── holdable L/M/R buttons + wheel controls
         └── GamepadView
             ├── 8 ms latest analog state sampler
             └── LayoutRepository -> Preferences DataStore
@@ -256,8 +274,9 @@ Bluetooth/presentation state now crosses one `HomeViewModel` boundary. Transient
 - `BluetoothKeyboardManager.managerScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)` runs capability binding, registration, connect/disconnect waits, retries, and opt-in audio-profile sweeps. `BlukeApplication` owns it for the process lifetime; `close()` cancels the job and both executors.
 - `HomeViewModel.viewModelScope` collects/composes manager flows; `collectAsStateWithLifecycle` presents `HomeUiState` only while the screen lifecycle is active.
 - `DeveloperLogManager.scope = CoroutineScope(Dispatchers.IO)` is unscoped, has no retained `Job`, and is never cancelled.
-- `reportExecutor` is a single foreground-priority thread. Every `sendReport()` call is submitted to it; no HID report is sent directly on the main thread.
+- `reportExecutor` is a single foreground-priority thread. Keyboard, mouse, gamepad, and Consumer Control reports are submitted to it; no HID report is sent directly on the main thread.
 - `executor` is a single background-priority scheduled executor used for HID callbacks and connection timeout tasks.
+- `GyroMouseController` owns a `HandlerThread` only while standalone Mouse mode is enabled and the Activity lifecycle is at least `STARTED`. Sensor events are remapped/integrated there, rate-gated to 8 ms, then enqueued on `reportExecutor`; pausing the lifecycle or leaving Mouse composition unregisters the sensor, releases all buttons, and quits the thread.
 - No explicit `Dispatchers.Default`, `GlobalScope`, or `runBlocking` usage exists.
 
 ## 4. Executed tooling and build health
@@ -527,6 +546,9 @@ Effect/key audit:
 | `GamepadView.kt` report ticker | `LaunchedEffect(btManager)` | Manager is keyed and cadence is now 8 ms. Snapshot state is read only by the coroutine, not during root composition. |
 | `SettingsActivity.kt:36` | `DisposableEffect(lifecycleOwner)` | Stable lifecycle key; unregisters observer symmetrically. |
 | `HomeScreen.kt` lifecycle observer | `DisposableEffect(lifecycleOwner, sharedPrefs, soundSynth)` | All captured service-like dependencies are keyed; observer unregisters symmetrically. |
+| `MouseView.kt` lifecycle observer | `DisposableEffect(lifecycleOwner)` | Stable lifecycle key; the observer is removed on disposal. |
+| `MouseView.kt` sensor gate | `LaunchedEffect(gyroController, isGyroEnabled, isForeground)` | Complete keys; starts only while enabled/foreground and stops on every false transition. |
+| `MouseView.kt` teardown | `DisposableEffect(gyroController, btManager)` | Closes the sensor thread and emits an all-buttons-up mouse report when the mode leaves composition. |
 | `Theme.kt:89` | `DisposableEffect(context)` | Context is the correct key for registered/theme-side cleanup. |
 | `GamepadView.kt` button/D-pad handlers | `pointerInput(Unit)` + `rememberUpdatedState` | Long-lived gesture coroutines retain stable state holders and invoke current callbacks; D-pad also filters its initiating pointer ID. |
 | `HomeScreen.kt` preferences | `remember(context)` | Context dependency is explicit. |
@@ -552,6 +574,7 @@ No `CoroutineCreationDuringComposition`, `ProduceStateDoesNotAssignValue`, `Unre
 14. Extract a framework-neutral Bluetooth registration facade and latest-request processor — complete; deterministic API 28/31/36 simulations pass. Physical OEM/radio validation remains required before release.
 15. Reserve raw gamepad button indices 12–15 and move auxiliary buttons to 16–18 — complete from supplied capture evidence; retest in the originally failing application remains required.
 16. Add a descriptor-stable Web Compatibility encoder for D-pad buttons 12–15 — complete with cardinal, diagonal, neutral-Hat, reserved-bit, and preference-default unit coverage; browser and native-device validation remains required.
+17. Separate the input cycle into Keyboard, Touchpad, Gamepad, Keyboard + Touchpad, and gyro Mouse — complete. Existing untouched three-mode defaults migrate to all five; deliberate custom subsets remain deliberate. Touchpad keeps tap-drag, Gamepad keeps its editor, and gyro is lifecycle-bound only to Mouse.
 
 ## 7. Changes intentionally not made
 
@@ -559,6 +582,8 @@ No `CoroutineCreationDuringComposition`, `ProduceStateDoesNotAssignValue`, `Unre
 - No public-API replacement exists for third-party A2DP/HFP disconnect. The surviving reflection is disabled by default and isolated behind the optional setting.
 - No receiver flag change: `RECEIVER_EXPORTED` may be needed for Bluetooth broadcasts sent by a privileged system package.
 - No wholesale `HomeScreen`/`GamepadView` rewrite: narrow, measurable restart-scope changes landed first; moving ~2,800 lines mechanically before device validation would make regressions harder to bisect.
+- No Touchpad layout editor: the maintainer clarified that layout editing belongs to Gamepad. The combined mode reuses the existing keyboard and touch-gesture implementations, while standalone Mouse exposes only gyro movement, buttons, scroll, and sensitivity.
+- No Windows Precision Touchpad emulation: the current descriptor is a relative HID mouse. A compliant Precision Touchpad is a separate digitizer protocol/certification project, not a safe extension of tap-drag.
 - No AGP, Kotlin, Compose BOM, SDK, target, or signing change. The only added coordinate is stable `androidx.datastore:datastore-preferences:1.2.1`.
 - No adaptive-icon qualifier suppression: moving `<adaptive-icon>` from `mipmap-anydpi-v26` made AAPT fail to resolve both manifest icons, so the one `ObsoleteSdkInt` warning is retained.
 - No lint baseline or blanket suppression; lint reporting was already enabled sufficiently for HTML/XML/text.
@@ -729,7 +754,7 @@ Therefore the audio-routing workaround, real SDP registration timing, and OEM be
 | API 36 | Same matrix plus background/foreground and repeated process recreation. | Callback times from `registerApp()` through `onAppStatusChanged` and connection state. |
 | Motorola/Tecno/LG | Repeat fresh pair, force-stop/relaunch, and Bluetooth toggle at least three times. LG V50 is specifically represented by issues #11 and #21. | Device model/build fingerprint, Android version, complete developer log; note any callback later than 8/16/24 seconds. |
 | Linux host | With `Prevent Host Audio Routing` off, record whether PipeWire/WirePlumber routes phone audio to the PC. Repeat with it on across reconnect and Bluetooth toggle. | `wpctl status`/desktop route before and after, Android log lines for all A2DP/HFP sweeps. |
-| Linux/Windows gamepad | Revision 2 passed the supplied Linux transport capture. Re-pair revision 3, then press every D-pad direction/diagonal and guide/share/touchpad; leave Gamepad while holding each class of control. | Linux `evtest` must retain `ABS_HAT0X/Y`; indices 12–15 must never emit; auxiliary inputs should follow them. Windows Game Controllers/SDL and the originally failing application remain unverified. |
+| Linux/Windows gamepad | The supplied Linux transport capture passed the gamepad mapping. Re-pair descriptor revision 4, then press every D-pad direction/diagonal and guide/share/touchpad; leave Gamepad while holding each class of control. | Linux `evtest` must retain `ABS_HAT0X/Y`; indices 12–15 must never emit in Native mode; auxiliary inputs should follow them. Windows Game Controllers/SDL and the originally failing application remain unverified. |
 
 ### 7.4 Reported UI/gamepad regression follow-up (2026-09-16)
 
@@ -784,7 +809,7 @@ The persistent label swap is a second issue: the prior fix reused raw button ind
 
 **ASSUMPTION:** The unnamed application that displayed the swap is consuming an unmapped/raw gamepad and assigning W3C labels by array position. Its own input trace was not supplied. The byte-for-byte position match makes this the leading diagnosis, but its `Gamepad.mapping`/SDL mapping status still needs to be captured.
 
-The final descriptor correction declares 19 buttons, reserves indices 12–15 for compatibility policy, moves Guide/Share/Touchpad to 16/17/18, pads the button field to 24 bits, and retains the Hat Switch. The report is 12 bytes: button bytes 0–2, Hat byte 3, and axes bytes 4–11. Descriptor revision 3 forces the existing one-time re-pair prompt. This prevents auxiliary controls from impersonating canonical D-pad positions.
+The final descriptor correction declares 19 buttons, reserves indices 12–15 for compatibility policy, moves Guide/Share/Touchpad to 16/17/18, pads the button field to 24 bits, and retains the Hat Switch. The report is 12 bytes: button bytes 0–2, Hat byte 3, and axes bytes 4–11. Current composite descriptor revision 4 forces the existing one-time re-pair prompt (revision 4 also adds Consumer Control). This prevents auxiliary controls from impersonating canonical D-pad positions.
 
 An application that ignores `ABS_HAT0X/Y` on an unknown controller can still present the D-pad as absent even though the kernel receives it. Bluke now offers two mutually exclusive encoders over the same descriptor: `Native Hat / POV` clears buttons 12–15 and emits usage `0x39`; `Web Compatibility` holds usage `0x39` at neutral and emits Up/Down/Left/Right as buttons 12–15. Diagonals set two directional buttons. The setting is persisted, observed without restarting the manager, and a mode transition enqueues neutral reports before and after the in-memory policy swap. Switching does not re-register SDP, disconnect Bluetooth, or require re-pairing. The same choice is now available in the gamepad top bar, labelled with the active mode, while the Behavior screen retains the longer explanation.
 
@@ -1023,12 +1048,67 @@ The first sandboxed build attempts failed before compilation because Gradle targ
 
 The first final-lint attempt failed before issue evaluation because a second repository-local Gradle daemon held two generated lint-registry JARs: `FileSystemException: ...lint-cache...jar: The process cannot access the file because it is being used by another process`. Stopping both Gradle homes, removing only `app/build/intermediates/lint-cache`, and rerunning no-daemon/single-worker produced the successful result above. No source or dependency change was used to hide the failure.
 
+### 7.7 Five-mode input separation (2026-09-25)
+
+The input registry now has five explicit, stable IDs in this order: Keyboard (`0`), Touchpad (`1`), Gamepad (`2`), Keyboard + Touchpad (`3`), and Mouse (`4`). Any saved set exactly equal to the legacy three-mode set is migrated to all five modes; a customized subset is preserved. Settings, the home launch control, and every in-mode cycle button read the same registry, eliminating the previous duplicated integer/string maps.
+
+Responsibilities are intentionally separate:
+
+- Touchpad retains pointer motion, two-finger wheel scrolling, and double-tap-hold drag. It contains no gyro controller and no layout editor.
+- Gamepad retains its existing component editor and DataStore-backed geometry.
+- Keyboard + Touchpad composes the existing `KeyboardView` and `TouchGestureLayer`; it does not add another descriptor, Bluetooth connection, or persistence model.
+- Mouse is gyro-only movement with explicit holdable Left/Middle/Right buttons, repeatable wheel controls, and a persisted sensitivity. Mouse button masks follow the HID convention Left=`1`, Right=`2`, Middle=`4`; holding a button while rotating the phone supports drag.
+
+`MouseView` observes the Activity lifecycle. The sensor listener exists only while Mouse is enabled and lifecycle state is at least `STARTED`; `ON_STOP`, mode exit, or composition disposal stops its `HandlerThread` and sends an all-buttons-up report. Sensor callbacks do not call the framework HID proxy directly: they enqueue through the manager's single `reportExecutor`. The pure motion integrator retains its 8 ms output gate; UI scroll repeat is deliberately slower at 80 ms.
+
+This design follows Android's requirement to unregister sensor listeners when they are not needed and its documented sensor sampling model ([Android Sensors overview](https://developer.android.com/develop/sensors-and-location/sensors/sensors_overview)). True Windows Precision Touchpad was rejected because Microsoft requires a top-level digitizer collection, contact/capability reports, and certification-status data, none of which exists in Bluke's relative mouse descriptor ([Windows Precision Touchpad collection](https://learn.microsoft.com/en-us/windows-hardware/design/component-guidelines/touchpad-windows-precision-touchpad-collection), [required HID descriptors](https://learn.microsoft.com/en-us/windows-hardware/design/component-guidelines/touchpad-required-hid-descriptors)). These sources were retrieved during the Firecrawl-backed research pass. No dependency or toolchain version changed.
+
+The initial sandboxed test invocation failed before Gradle configuration; the real output was:
+
+```text
+Exception in thread "main" java.lang.RuntimeException: Could not create parent directory for lock file C:\.gradle\wrapper\dists\gradle-9.5.1-bin\iq79hdu3mqx29lgffhp8bfmx\gradle-9.5.1-bin.zip.lck
+```
+
+The first compile then identified an unscoped scroll-repeat coroutine:
+
+```text
+MouseView.kt:424:38 'fun launch(...)' is deprecated. 'launch' can not be called without the corresponding coroutine scope.
+> Task :app:compileDebugKotlin FAILED
+BUILD FAILED in 41s
+```
+
+The repeater was moved into structured `coroutineScope`; no suppression was added. Final evidence:
+
+```text
+> .\gradlew.bat testDebugUnitTest --stacktrace
+> Task :app:testDebugUnitTest
+BUILD SUCCESSFUL in 2m 18s
+30 actionable tasks: 6 executed, 24 up-to-date
+
+JUnit XML: files=23 tests=77 failures=0 errors=0 skipped=0
+
+> .\gradlew.bat assembleDebug --warning-mode all --stacktrace
+> Task :app:assembleDebug
+BUILD SUCCESSFUL in 31s
+38 actionable tasks: 5 executed, 33 up-to-date
+
+> .\gradlew.bat lintDebug --no-daemon --no-parallel --max-workers=1 --warning-mode all --stacktrace
+> Task :app:lintReportDebug
+Wrote HTML report to file:///C:/Users/DELL/Documents/Bluke/app/build/reports/lint-results-debug.html
+> Task :app:lintDebug
+BUILD SUCCESSFUL in 2m 57s
+29 actionable tasks: 9 executed, 20 up-to-date
+
+lint-results-debug.xml: issues=21 errors=0 warnings=21
+AndroidGradlePluginVersion=1 GradleDependency=10 NewerVersionAvailable=8 ObsoleteSdkInt=1 OldTargetApi=1
+```
+
 ## 8. Open questions for the maintainer
 
 1. On which API 28, 31, and 36 devices did the physical matrix pass or fail, and can the resulting developer logs/build fingerprints be attached?
 2. Does `Prevent Host Audio Routing` keep audio on the phone across initial connect, reconnect, and a Bluetooth off/on cycle on the affected Linux host?
 3. Do any Motorola, Tecno, or LG runs deliver `onAppStatusChanged(true)` after the active retry ceiling; if so, what is the measured callback delay?
-4. After the one-time revision-3 re-pair, does Dynamine in Brave accept all four directions and diagonals in Web Compatibility mode, and does the raw tester still report an empty mapping?
+4. After the one-time revision-4 re-pair, does Dynamine in Brave accept all four directions and diagonals in Web Compatibility mode, and does the raw tester still report an empty mapping?
 5. Can the same Windows pairing switch back to Native Hat mode and immediately expose a POV Hat in Windows Game Controllers/SDL without removing the device?
 6. Do macOS, iOS/iPadOS, Android TV, and the available Samsung TV expose both mutually exclusive encodings correctly, and which exact OS/model combinations reject the generic HID gamepad collection?
 7. After device validation, should the next refactor mechanically split `GamepadView.kt`, `TouchpadView.kt`, and `BehaviorActivity.kt`, or keep that separate from this compatibility branch?
@@ -1037,3 +1117,5 @@ The first final-lint attempt failed before issue evaluation because a second rep
 10. On an RTL-language device with developer “Force RTL” both off and on, does the keyboard remain physically LTR while the settings and navigation chrome still localize correctly?
 11. On a small phone and a tablet, are the wrapped customizer controls and 180 dp preview comfortable for reliable individual-key selection, and does tap-to-cycle / hold-to-customize remain discoverable in the landscape keyboard toolbar?
 12. Should a future release add licensed font-family packs after glyph-coverage and key-fit rules are specified, or keep customization limited to legend color and scale?
+13. On a physical phone, does standalone Mouse stop moving immediately on app background/mode exit, and do Left/Middle/Right drag plus both wheel directions behave correctly on Windows, Linux, macOS, and Android TV?
+14. On the smallest supported landscape display and at maximum font scale, is Keyboard + Touchpad still usable without obscuring key legends or reducing the touch surface below a practical size?
