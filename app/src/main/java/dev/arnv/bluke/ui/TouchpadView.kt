@@ -481,7 +481,7 @@ fun TouchpadView(
             ) {
                 if (modifierPosition == TouchpadModifierPosition.LEFT) {
                     TouchpadModifierRail(
-                        modifier = Modifier.width(60.dp).fillMaxHeight(),
+                        modifier = Modifier.width(72.dp).fillMaxHeight(),
                         rightHandKeys = false,
                         theme = keyboardTheme,
                         btManager = btManager,
@@ -535,7 +535,7 @@ fun TouchpadView(
 
                 if (modifierPosition == TouchpadModifierPosition.RIGHT) {
                     TouchpadModifierRail(
-                        modifier = Modifier.width(60.dp).fillMaxHeight(),
+                        modifier = Modifier.width(72.dp).fillMaxHeight(),
                         rightHandKeys = true,
                         theme = keyboardTheme,
                         btManager = btManager,
@@ -562,7 +562,7 @@ private fun TouchpadModifierRail(
     }
     Column(
         modifier = modifier,
-        verticalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(4.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         keys.forEach { (label, keyCode) ->
@@ -594,13 +594,13 @@ private fun MechanicalModifierKey(
     KeyCap(
         legend = label,
         shiftedLegend = "",
-        width = 56.dp,
-        height = 56.dp,
+        width = 68.dp,
+        height = 68.dp,
         isPressed = isPressed,
         keyBgColor = Color(style.backgroundArgb),
         legendColor = Color(style.legendArgb),
         legendScale = style.legendScale,
-        baseUnitWidth = 56.dp,
+        baseUnitWidth = 68.dp,
         modifier = Modifier.pointerInput(keyCode) {
             detectTapGestures(
                 onPress = {
