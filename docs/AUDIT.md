@@ -19,12 +19,13 @@ Working branch: `refactor`
 - **P1 fixed — manual theme customization:** manual color mode now offers a persistent three-color palette for background, keys/surfaces, and accent/text, with validated `#RRGGBB` entry and an in-dialog preview. Presets and Dynamic Colors remain independently selectable.
 - **P1 fixed, device validation required — custom key sounds:** Mechvibes V2 multi-file and V1 single-audio-sprite ZIP packs can be safely imported. V1 audio is decoded and split once with Android platform codecs, then preloaded into the existing low-latency `SoundPool`; no decoder dependency was added. Failed/stale custom selections now recover to built-in sounds.
 - **P1 fixed, host validation required — media/Fn controls:** report ID 4 implements the USB HID Consumer page; Fn+F1–F8/F12 expose mute, volume, transport, brightness, and sleep, with an on-hold shortcut overlay. Host support for brightness/sleep remains OS-dependent.
-- **P1 fixed, device validation required — input modes:** tap-drag uses one consistent 300 ms window and guaranteed button-up. The cycle now has five distinct modes: Keyboard, Touchpad, Gamepad, Keyboard + Touchpad, and standalone gyro Mouse; gyro sensor work is lifecycle-bound and no longer coupled to Touchpad.
+- **P1 fixed, device validation required — input modes:** tap-drag uses one consistent 300 ms window and guaranteed button-up. The five modes are Keyboard, Touchpad, Gamepad, Keyboard + Touchpad, and Media + Presentation. The combined layout now has a persisted, bounded split resize plus swap/reset controls; the disliked gyro Mouse implementation was removed.
+- **P1 fixed, host validation required — remote media UX:** Media + Presentation provides explicit Consumer Control and slideshow buttons. Phone volume-key forwarding is opt-in, defaults off, and is active only while that mode is visible and the Activity is started. The Fn guide is now a compact, bottom-aligned horizontal strip that leaves the function row usable.
 - **P2 intentionally not implemented — Windows Precision Touchpad:** true PTP requires a digitizer collection, contact/capability feature reports, and Microsoft certification status data. Advertising the current relative mouse as PTP would be non-compliant; existing two-finger wheel scrolling remains generic HID mouse behavior.
 - **P1 partially fixed — UI state/performance:** Bluetooth, discovery, connection, lifecycle, and lock state are hoisted into immutable `HomeUiState`; rapidly changing gamepad button reads are isolated to child restart scopes and long-lived pointer handlers observe current callbacks. Editor/transient presentation state remains local.
 - **P2 open — Compose alignment:** Material3 `1.4.0-alpha04` still lifts runtime to `1.8.0-alpha06`; removing the override fails compilation because `ThemeConfig.kt` uses Expressive-only APIs. A BOM/toolchain upgrade was prohibited in this pass.
 - **P2 fixed — resources:** unused resources and three malformed high-density WebPs were removed; adaptive icon background is explicitly `nodpi`.
-- Baseline was 2 lint errors/42 warnings, 3 tests, and zero Bluetooth/HID coverage. Current verification includes the simulated API/OEM contracts plus Consumer/Fn routing, tap policy, gyro math, input-mode migration, sound, locale, theme, gamepad, and compatibility tests; exact final counts and lint output are recorded in §7.7. Physical Android/OEM and host-interaction checks remain open because ADB found no attached target.
+- Baseline was 2 lint errors/42 warnings, 3 tests, and zero Bluetooth/HID coverage. Current verification includes simulated API/OEM contracts plus Consumer/Fn routing, tap policy, combined-layout bounds, input-mode migration, sound, locale, theme, gamepad, and compatibility tests; the final suite is 78 tests with zero failures. Physical Android/OEM and host-interaction checks remain open because ADB found no attached target.
 - No SDK, AGP, Kotlin, Compose BOM, signing, Fastlane, or F-Droid version/config changes were made. DataStore `1.2.1` is the only new dependency.
 
 ## 2. Repository reconnaissance
@@ -87,10 +88,9 @@ app/src/main/
 │       ├── KeyCap.kt
 │       ├── InputMode.kt
 │       ├── KeyboardTouchpadView.kt
-│       ├── MouseControls.kt
-│       ├── MouseView.kt
-│       ├── GyroMouseController.kt
-│       ├── GyroMouseMotion.kt
+│       ├── CombinedInputPanels.kt
+│       ├── MediaPresentationView.kt
+│       ├── RemoteControlButtons.kt
 │       ├── SettingsComponents.kt
 │       ├── TouchpadView.kt
 │       └── theme/{Color,CustomThemeColors,Theme,ThemeConfig,Type}.kt
@@ -110,7 +110,7 @@ gradle/libs.versions.toml
 app/build.gradle.kts
 ```
 
-The refactor adds `BlukeApplication.kt`, `HidLifecycle.kt`, `HidRegistrationCoordinator.kt`, `LatestRequestProcessor.kt`, `GamepadReport.kt`, `GamepadInput.kt`, `LayoutRepository.kt`, `HomeViewModel.kt`, `DeviceListSection.kt`, `StatusHeaderCard.kt`, `ProfileNotSupportedScreen.kt`, `InputMode.kt`, `KeyboardTouchpadView.kt`, `MouseView.kt`, `MouseControls.kt`, `GyroMouseController.kt`, `GyroMouseMotion.kt`, `values-v31/themes.xml`, and `values-night-v31/themes.xml`.
+The refactor adds `BlukeApplication.kt`, `HidLifecycle.kt`, `HidRegistrationCoordinator.kt`, `LatestRequestProcessor.kt`, `GamepadReport.kt`, `GamepadInput.kt`, `LayoutRepository.kt`, `HomeViewModel.kt`, `DeviceListSection.kt`, `StatusHeaderCard.kt`, `ProfileNotSupportedScreen.kt`, `InputMode.kt`, `KeyboardTouchpadView.kt`, `CombinedInputPanels.kt`, `MediaPresentationView.kt`, `RemoteControlButtons.kt`, `values-v31/themes.xml`, and `values-night-v31/themes.xml`.
 
 ### 2.2 Kotlin inventory at `main` HEAD
 
@@ -145,7 +145,7 @@ The refactor adds `BlukeApplication.kt`, `HidLifecycle.kt`, `HidRegistrationCoor
 
 After extraction, `HomeScreen.kt` is 1,026 lines; the new files are `DeviceListSection.kt` (204), `StatusHeaderCard.kt` (144), and `ProfileNotSupportedScreen.kt` (99). `HomeScreen.kt` remains critical and needs state-hoisting work.
 
-Post-refactor inventory additions/changed counts: `BlukeApplication.kt` 24 (process owner), `bluetooth/HidLifecycle.kt` 87 (state/retry/capability models), `bluetooth/HidRegistrationCoordinator.kt` 74 (facade-backed registration policy), `bluetooth/LatestRequestProcessor.kt` 26 (conflated cancellation policy), `bluetooth/GamepadReport.kt` 71 (pure HID gamepad packing and D-pad output policy), `ui/GamepadInput.kt` 39 (pure D-pad geometry), `data/LayoutRepository.kt` 65 (DataStore persistence/migration), `data/KeyboardThemeRepository.kt` 155 (custom-theme JSON persistence and upgrade migration), `ui/HomeViewModel.kt` 102 (immutable Bluetooth UI state), `ui/InputMode.kt` 45 (five-mode registry and preference migration), `ui/KeyboardTouchpadView.kt` 215 (combined mode), `ui/MouseView.kt` 351 and `ui/MouseControls.kt` 121 (standalone gyro mouse), `ui/GyroMouseController.kt` 87 and `ui/GyroMouseMotion.kt` 82 (sensor lifecycle and pure integration), `KeyboardThemesActivity.kt` 581 (theme library/live editor; **refactor candidate**), `ui/KeyboardThemes.kt` 77 (theme models/catalog), `sound/AudioSpriteConverter.kt` 215 (platform-codec sprite decode and WAV slicing), `sound/SoundPreferences.kt` 27 (sound-setting migration), `sound/CustomSoundPackRepository.kt` 320 (safe pack import/selection), `sound/KeyboardSoundSynthesizer.kt` 661 (preloaded audio-bank lifecycle/playback; **refactor candidate**), `ui/KeyboardCharacterLayouts.kt` 115 (logical output profiles), `ui/KeyboardLayouts.kt` 654 (keyboard geometry/key models; **refactor candidate**), `MainActivity.kt` 85, `BehaviorActivity.kt` 1,134 (**critical**), `BluetoothKeyboardManager.kt` 1,280 (**critical**), `GamepadView.kt` 2,868 (**critical**), `TouchpadView.kt` 1,050 (**critical**), and `HomeScreen.kt` 1,249 (**critical**). Test additions include input-mode migration, gyro integration, tap-drag policy, sound, HID, gamepad, and keyboard-theme coverage. The original `main` inventory above remains the audit baseline.
+Post-refactor inventory additions/changed counts: `BlukeApplication.kt` 24 (process owner), `bluetooth/HidLifecycle.kt` 87 (state/retry/capability models), `bluetooth/HidRegistrationCoordinator.kt` 74 (facade-backed registration policy), `bluetooth/LatestRequestProcessor.kt` 26 (conflated cancellation policy), `bluetooth/GamepadReport.kt` 71 (pure HID gamepad packing and D-pad output policy), `ui/GamepadInput.kt` 39 (pure D-pad geometry), `data/LayoutRepository.kt` 65 (DataStore persistence/migration), `data/KeyboardThemeRepository.kt` 155 (custom-theme JSON persistence and upgrade migration), `ui/HomeViewModel.kt` 102 (immutable Bluetooth UI state), `ui/InputMode.kt` 48 (five-mode registry and preference migration), `ui/KeyboardTouchpadView.kt` 304 and `ui/CombinedInputPanels.kt` 182 (combined mode and persisted split editor), `ui/MediaPresentationView.kt` 375 and `ui/RemoteControlButtons.kt` 133 (media/presentation controls and lifecycle-scoped hardware-volume option), `KeyboardThemesActivity.kt` 581 (theme library/live editor; **refactor candidate**), `ui/KeyboardThemes.kt` 77 (theme models/catalog), `sound/AudioSpriteConverter.kt` 215 (platform-codec sprite decode and WAV slicing), `sound/SoundPreferences.kt` 27 (sound-setting migration), `sound/CustomSoundPackRepository.kt` 320 (safe pack import/selection), `sound/KeyboardSoundSynthesizer.kt` 661 (preloaded audio-bank lifecycle/playback; **refactor candidate**), `ui/KeyboardCharacterLayouts.kt` 115 (logical output profiles), `ui/KeyboardLayouts.kt` 654 (keyboard geometry/key models; **refactor candidate**), `MainActivity.kt` 124, `BehaviorActivity.kt` 1,134 (**critical**), `BluetoothKeyboardManager.kt` 1,280 (**critical**), `GamepadView.kt` 2,868 (**critical**), `TouchpadView.kt` 1,050 (**critical**), and `HomeScreen.kt` 1,247 (**critical**). Test additions include input-mode migration, combined-layout bounds, tap-drag policy, media-key routing, sound, HID, gamepad, and keyboard-theme coverage. The original `main` inventory above remains the audit baseline.
 
 ### 2.3 Build configuration
 
@@ -195,13 +195,15 @@ flowchart TD
     HS --> KB[KeyboardView]
     HS --> TP[TouchpadView]
     HS --> KTP[KeyboardTouchpadView]
-    HS --> MV[MouseView]
+    HS --> MP[MediaPresentationView]
     HS --> GP[GamepadView]
     HS --> KSS[KeyboardSoundSynthesizer / SoundPool]
     SPA[SoundPacksActivity] --> CSP[CustomSoundPackRepository]
     CSP -->|selected V2 multi-file pack| KSS
     GP --> LR[LayoutRepository / Preferences DataStore]
-    MV --> GYRO[GyroMouseController / HandlerThread]
+    KTP --> LR
+    MP --> CC[Consumer Control + keyboard reports]
+    MA -->|opt-in foreground volume keys| MP
     HS --> DLS[DeviceListSection]
     HS --> SHC[StatusHeaderCard]
     HS --> PNS[ProfileNotSupportedScreen]
@@ -255,9 +257,11 @@ MainActivity
         ├── TouchpadView
         │   └── tap/drag + two-finger scroll
         ├── KeyboardTouchpadView -> KeyboardView + TouchGestureLayer
-        ├── MouseView
-        │   ├── GyroMouseController -> 8 ms motion aggregation
-        │   └── holdable L/M/R buttons + wheel controls
+        │   └── persisted split resize, swap, and reset
+        ├── MediaPresentationView
+        │   ├── Consumer Control media buttons
+        │   ├── keyboard presentation shortcuts
+        │   └── optional lifecycle-scoped phone volume keys
         └── GamepadView
             ├── 8 ms latest analog state sampler
             └── LayoutRepository -> Preferences DataStore
@@ -266,7 +270,7 @@ SettingsActivity -> separate Activity screens (Behavior, LookAndFeel, DarkTheme,
 About, Help, Licenses, DeveloperOptions, DeveloperLogs); persistence is SharedPreferences.
 ```
 
-Bluetooth/presentation state now crosses one `HomeViewModel` boundary. Transient mode/editor state still lives in composable `remember`/`rememberSaveable`; general settings remain in SharedPreferences, while gamepad geometry is migrated to DataStore.
+Bluetooth/presentation state now crosses one `HomeViewModel` boundary. Transient mode/editor state still lives in composable `remember`/`rememberSaveable`; general settings remain in SharedPreferences, while gamepad geometry and the combined-mode split/order are persisted through DataStore.
 
 ### Threading inventory
 
@@ -276,7 +280,7 @@ Bluetooth/presentation state now crosses one `HomeViewModel` boundary. Transient
 - `DeveloperLogManager.scope = CoroutineScope(Dispatchers.IO)` is unscoped, has no retained `Job`, and is never cancelled.
 - `reportExecutor` is a single foreground-priority thread. Keyboard, mouse, gamepad, and Consumer Control reports are submitted to it; no HID report is sent directly on the main thread.
 - `executor` is a single background-priority scheduled executor used for HID callbacks and connection timeout tasks.
-- `GyroMouseController` owns a `HandlerThread` only while standalone Mouse mode is enabled and the Activity lifecycle is at least `STARTED`. Sensor events are remapped/integrated there, rate-gated to 8 ms, then enqueued on `reportExecutor`; pausing the lifecycle or leaving Mouse composition unregisters the sensor, releases all buttons, and quits the thread.
+- Android dispatches `MainActivity.onKeyDown`/`onKeyUp` on the main thread. When the Media + Presentation opt-in is active, those callbacks enqueue Consumer Control reports through `reportExecutor`; the framework HID proxy is not called on the UI thread.
 - No explicit `Dispatchers.Default`, `GlobalScope`, or `runBlocking` usage exists.
 
 ## 4. Executed tooling and build health
@@ -546,9 +550,9 @@ Effect/key audit:
 | `GamepadView.kt` report ticker | `LaunchedEffect(btManager)` | Manager is keyed and cadence is now 8 ms. Snapshot state is read only by the coroutine, not during root composition. |
 | `SettingsActivity.kt:36` | `DisposableEffect(lifecycleOwner)` | Stable lifecycle key; unregisters observer symmetrically. |
 | `HomeScreen.kt` lifecycle observer | `DisposableEffect(lifecycleOwner, sharedPrefs, soundSynth)` | All captured service-like dependencies are keyed; observer unregisters symmetrically. |
-| `MouseView.kt` lifecycle observer | `DisposableEffect(lifecycleOwner)` | Stable lifecycle key; the observer is removed on disposal. |
-| `MouseView.kt` sensor gate | `LaunchedEffect(gyroController, isGyroEnabled, isForeground)` | Complete keys; starts only while enabled/foreground and stops on every false transition. |
-| `MouseView.kt` teardown | `DisposableEffect(gyroController, btManager)` | Closes the sensor thread and emits an all-buttons-up mouse report when the mode leaves composition. |
+| `MediaPresentationView.kt` hardware-volume bridge | `DisposableEffect(lifecycleOwner, activity, hardwareVolumeEnabled, btManager)` | Complete service/lifecycle keys; installs the Activity handler only while enabled and `STARTED`, removes it on stop/disposal, and emits a Consumer Control release. |
+| `KeyboardTouchpadView.kt` persisted layout | `LaunchedEffect(layoutRepository)` | Stable repository key; loads the saved split/order once for that repository instance. |
+| `CombinedInputPanels.kt` resize drag | `pointerInput(Unit)` + `rememberUpdatedState` | Long-lived gesture scope invokes current callbacks; recomposition during drag does not cancel the active pointer sequence. |
 | `Theme.kt:89` | `DisposableEffect(context)` | Context is the correct key for registered/theme-side cleanup. |
 | `GamepadView.kt` button/D-pad handlers | `pointerInput(Unit)` + `rememberUpdatedState` | Long-lived gesture coroutines retain stable state holders and invoke current callbacks; D-pad also filters its initiating pointer ID. |
 | `HomeScreen.kt` preferences | `remember(context)` | Context dependency is explicit. |
@@ -574,7 +578,8 @@ No `CoroutineCreationDuringComposition`, `ProduceStateDoesNotAssignValue`, `Unre
 14. Extract a framework-neutral Bluetooth registration facade and latest-request processor — complete; deterministic API 28/31/36 simulations pass. Physical OEM/radio validation remains required before release.
 15. Reserve raw gamepad button indices 12–15 and move auxiliary buttons to 16–18 — complete from supplied capture evidence; retest in the originally failing application remains required.
 16. Add a descriptor-stable Web Compatibility encoder for D-pad buttons 12–15 — complete with cardinal, diagonal, neutral-Hat, reserved-bit, and preference-default unit coverage; browser and native-device validation remains required.
-17. Separate the input cycle into Keyboard, Touchpad, Gamepad, Keyboard + Touchpad, and gyro Mouse — complete. Existing untouched three-mode defaults migrate to all five; deliberate custom subsets remain deliberate. Touchpad keeps tap-drag, Gamepad keeps its editor, and gyro is lifecycle-bound only to Mouse.
+17. Separate the input cycle into Keyboard, Touchpad, Gamepad, Keyboard + Touchpad, and Media + Presentation — complete. Existing untouched three-mode defaults migrate to all five; deliberate custom subsets remain deliberate. The removed `mouse` preference migrates to Media + Presentation.
+18. Add persisted resize/swap/reset controls to Keyboard + Touchpad, replace the gyro mode with explicit media/presentation controls, and move the Fn guide away from the function row — complete; physical host and small-display validation remains.
 
 ## 7. Changes intentionally not made
 
@@ -582,7 +587,8 @@ No `CoroutineCreationDuringComposition`, `ProduceStateDoesNotAssignValue`, `Unre
 - No public-API replacement exists for third-party A2DP/HFP disconnect. The surviving reflection is disabled by default and isolated behind the optional setting.
 - No receiver flag change: `RECEIVER_EXPORTED` may be needed for Bluetooth broadcasts sent by a privileged system package.
 - No wholesale `HomeScreen`/`GamepadView` rewrite: narrow, measurable restart-scope changes landed first; moving ~2,800 lines mechanically before device validation would make regressions harder to bisect.
-- No Touchpad layout editor: the maintainer clarified that layout editing belongs to Gamepad. The combined mode reuses the existing keyboard and touch-gesture implementations, while standalone Mouse exposes only gyro movement, buttons, scroll, and sensitivity.
+- No standalone Touchpad layout editor: the maintainer clarified that full component editing belongs to Gamepad. The combined mode adds only the requested split resize, panel swap, and reset around the existing keyboard and touch-gesture implementations.
+- No gyro Mouse mode: it was removed at the maintainer's request. Media + Presentation occupies the fifth stable mode ID, and stale `mouse` preferences migrate without leaving an unreachable selection.
 - No Windows Precision Touchpad emulation: the current descriptor is a relative HID mouse. A compliant Precision Touchpad is a separate digitizer protocol/certification project, not a safe extension of tap-drag.
 - No AGP, Kotlin, Compose BOM, SDK, target, or signing change. The only added coordinate is stable `androidx.datastore:datastore-preferences:1.2.1`.
 - No adaptive-icon qualifier suppression: moving `<adaptive-icon>` from `mipmap-anydpi-v26` made AAPT fail to resolve both manifest icons, so the one `ObsoleteSdkInt` warning is retained.
@@ -1048,59 +1054,56 @@ The first sandboxed build attempts failed before compilation because Gradle targ
 
 The first final-lint attempt failed before issue evaluation because a second repository-local Gradle daemon held two generated lint-registry JARs: `FileSystemException: ...lint-cache...jar: The process cannot access the file because it is being used by another process`. Stopping both Gradle homes, removing only `app/build/intermediates/lint-cache`, and rerunning no-daemon/single-worker produced the successful result above. No source or dependency change was used to hide the failure.
 
-### 7.7 Five-mode input separation (2026-09-25)
+### 7.7 Five-mode input separation and remote-control follow-up (2026-09-25)
 
-The input registry now has five explicit, stable IDs in this order: Keyboard (`0`), Touchpad (`1`), Gamepad (`2`), Keyboard + Touchpad (`3`), and Mouse (`4`). Any saved set exactly equal to the legacy three-mode set is migrated to all five modes; a customized subset is preserved. Settings, the home launch control, and every in-mode cycle button read the same registry, eliminating the previous duplicated integer/string maps.
+The input registry keeps five explicit, stable IDs in this order: Keyboard (`0`), Touchpad (`1`), Gamepad (`2`), Keyboard + Touchpad (`3`), and Media + Presentation (`4`). Any saved set exactly equal to the legacy three-mode set migrates to all five; a deliberate custom subset is preserved. The short-lived `mouse` preference value maps to Media + Presentation, so an existing development install cannot retain an unreachable selection after upgrade.
 
 Responsibilities are intentionally separate:
 
-- Touchpad retains pointer motion, two-finger wheel scrolling, and double-tap-hold drag. It contains no gyro controller and no layout editor.
+- Touchpad retains pointer motion, two-finger wheel scrolling, and double-tap-hold drag. It has no gyro controller and no component editor.
 - Gamepad retains its existing component editor and DataStore-backed geometry.
-- Keyboard + Touchpad composes the existing `KeyboardView` and `TouchGestureLayer`; it does not add another descriptor, Bluetooth connection, or persistence model.
-- Mouse is gyro-only movement with explicit holdable Left/Middle/Right buttons, repeatable wheel controls, and a persisted sensitivity. Mouse button masks follow the HID convention Left=`1`, Right=`2`, Middle=`4`; holding a button while rotating the phone supports drag.
+- Keyboard + Touchpad composes the existing `KeyboardView` and `TouchGestureLayer`. Its editor changes only the bounded touchpad/keyboard split, panel order, and reset state; resize stays in memory while dragging and persists through `LayoutRepository` on drag end.
+- Media + Presentation exposes explicit Mute, Volume Down/Up, Previous, Play/Pause, Next, Page Up/Down, Home/End, F5, Escape, and `B` controls. Media commands use the existing Consumer Control report and presentation commands use keyboard reports, so no descriptor revision or re-pair is introduced.
 
-`MouseView` observes the Activity lifecycle. The sensor listener exists only while Mouse is enabled and lifecycle state is at least `STARTED`; `ON_STOP`, mode exit, or composition disposal stops its `HandlerThread` and sends an all-buttons-up report. Sensor callbacks do not call the framework HID proxy directly: they enqueue through the manager's single `reportExecutor`. The pure motion integrator retains its 8 ms output gate; UI scroll repeat is deliberately slower at 80 ms.
+Phone volume-key forwarding is deliberately optional and defaults off. While enabled, `MediaPresentationView` installs a handler only while its Activity lifecycle is at least `STARTED`; leaving the mode, stopping the Activity, disabling the option, or disposing composition removes the handler and sends a Consumer Control release. Repeated Android key-down callbacks are consumed without repeatedly sending a press; key-up sends the release. Android's public `Activity.onKeyDown`/`onKeyUp` callbacks are used rather than the AndroidX-restricted `ComponentActivity.dispatchKeyEvent` override. This matches the documented foreground-window event model while avoiding a global Accessibility service or background interception ([Android `KeyEvent`](https://developer.android.com/reference/android/view/KeyEvent), [Android `Activity`](https://developer.android.com/reference/android/app/Activity)). These official sources were retrieved during the Firecrawl-backed research pass.
 
-This design follows Android's requirement to unregister sensor listeners when they are not needed and its documented sensor sampling model ([Android Sensors overview](https://developer.android.com/develop/sensors-and-location/sensors/sensors_overview)). True Windows Precision Touchpad was rejected because Microsoft requires a top-level digitizer collection, contact/capability reports, and certification-status data, none of which exists in Bluke's relative mouse descriptor ([Windows Precision Touchpad collection](https://learn.microsoft.com/en-us/windows-hardware/design/component-guidelines/touchpad-windows-precision-touchpad-collection), [required HID descriptors](https://learn.microsoft.com/en-us/windows-hardware/design/component-guidelines/touchpad-required-hid-descriptors)). These sources were retrieved during the Firecrawl-backed research pass. No dependency or toolchain version changed.
+The Fn guide no longer occupies the function-row area. It is a compact, bottom-aligned, horizontally scrollable strip, so F1–F12 remain visible and pressable while the modifier is held. True Windows Precision Touchpad remains rejected because Microsoft requires a top-level digitizer collection, contact/capability reports, and certification-status data, none of which exists in Bluke's relative mouse descriptor ([Windows Precision Touchpad collection](https://learn.microsoft.com/en-us/windows-hardware/design/component-guidelines/touchpad-windows-precision-touchpad-collection), [required HID descriptors](https://learn.microsoft.com/en-us/windows-hardware/design/component-guidelines/touchpad-required-hid-descriptors)). No dependency or toolchain version changed.
 
-The initial sandboxed test invocation failed before Gradle configuration; the real output was:
-
-```text
-Exception in thread "main" java.lang.RuntimeException: Could not create parent directory for lock file C:\.gradle\wrapper\dists\gradle-9.5.1-bin\iq79hdu3mqx29lgffhp8bfmx\gradle-9.5.1-bin.zip.lck
-```
-
-The first compile then identified an unscoped scroll-repeat coroutine:
+The first combined-layout compile exposed one obsolete import; real output:
 
 ```text
-MouseView.kt:424:38 'fun launch(...)' is deprecated. 'launch' can not be called without the corresponding coroutine scope.
+CombinedInputPanels.kt:25:42 Unresolved reference 'consume'.
 > Task :app:compileDebugKotlin FAILED
-BUILD FAILED in 41s
 ```
 
-The repeater was moved into structured `coroutineScope`; no suppression was added. Final evidence:
+`PointerInputChange.consume()` is a member in the resolved Compose version, so only the obsolete import was removed. The first media-mode lint run then rejected the initial AndroidX dispatch override:
+
+```text
+MainActivity.kt:87: Error: ComponentActivity.dispatchKeyEvent can only be called from within the same library group prefix [RestrictedApi]
+Lint found 5 errors and 21 warnings.
+BUILD FAILED in 3m 2s
+```
+
+The implementation moved to the public Activity `onKeyDown`/`onKeyUp` callbacks; no suppression was added. Final evidence:
 
 ```text
 > .\gradlew.bat testDebugUnitTest --stacktrace
 > Task :app:testDebugUnitTest
-BUILD SUCCESSFUL in 2m 18s
-30 actionable tasks: 6 executed, 24 up-to-date
+BUILD SUCCESSFUL in 2m 21s
 
-JUnit XML: files=23 tests=77 failures=0 errors=0 skipped=0
-
-> .\gradlew.bat assembleDebug --warning-mode all --stacktrace
-> Task :app:assembleDebug
-BUILD SUCCESSFUL in 31s
-38 actionable tasks: 5 executed, 33 up-to-date
+JUnit XML: files=24 tests=78 failures=0 errors=0 skipped=0
 
 > .\gradlew.bat lintDebug --no-daemon --no-parallel --max-workers=1 --warning-mode all --stacktrace
 > Task :app:lintReportDebug
 Wrote HTML report to file:///C:/Users/DELL/Documents/Bluke/app/build/reports/lint-results-debug.html
 > Task :app:lintDebug
-BUILD SUCCESSFUL in 2m 57s
-29 actionable tasks: 9 executed, 20 up-to-date
+BUILD SUCCESSFUL in 4m 27s
+29 actionable tasks: 10 executed, 19 up-to-date
 
 lint-results-debug.xml: issues=21 errors=0 warnings=21
 AndroidGradlePluginVersion=1 GradleDependency=10 NewerVersionAvailable=8 ObsoleteSdkInt=1 OldTargetApi=1
+
+Post-commit assembleDebug: 550a32c BUILD SUCCESSFUL in 25s; 0ec9a2f BUILD SUCCESSFUL in 2s; 52ba3ca BUILD SUCCESSFUL in 2s.
 ```
 
 ## 8. Open questions for the maintainer
@@ -1117,5 +1120,6 @@ AndroidGradlePluginVersion=1 GradleDependency=10 NewerVersionAvailable=8 Obsolet
 10. On an RTL-language device with developer “Force RTL” both off and on, does the keyboard remain physically LTR while the settings and navigation chrome still localize correctly?
 11. On a small phone and a tablet, are the wrapped customizer controls and 180 dp preview comfortable for reliable individual-key selection, and does tap-to-cycle / hold-to-customize remain discoverable in the landscape keyboard toolbar?
 12. Should a future release add licensed font-family packs after glyph-coverage and key-fit rules are specified, or keep customization limited to legend color and scale?
-13. On a physical phone, does standalone Mouse stop moving immediately on app background/mode exit, and do Left/Middle/Right drag plus both wheel directions behave correctly on Windows, Linux, macOS, and Android TV?
-14. On the smallest supported landscape display and at maximum font scale, is Keyboard + Touchpad still usable without obscuring key legends or reducing the touch surface below a practical size?
+13. On a physical phone, do the opt-in volume buttons control only the connected host while Media + Presentation is visible, return immediately to local Android volume after leaving it, and always release after interrupted presses?
+14. On the smallest supported landscape display and at maximum font scale, is Keyboard + Touchpad still usable across the 25–60% resize range without obscuring key legends or reducing either surface below a practical size?
+15. Which presentation hosts should define the compatibility target for F5, `B`, Home/End, and Page Up/Down: PowerPoint, Google Slides, LibreOffice Impress, Keynote, or all four?
