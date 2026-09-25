@@ -669,7 +669,6 @@ fun TouchGestureLayer(
     val pointerDownInfo = remember { mutableMapOf<PointerId, Pair<Long, Offset>>() }
     var maxPointersInTap by remember { mutableIntStateOf(0) }
     var lastTapReleaseTime by remember { mutableLongStateOf(0L) }
-    var lastTapReleasePosition by remember { mutableStateOf<Offset?>(null) }
     var isDoubleTapDragging by remember { mutableStateOf(false) }
     var hasMovedDuringDrag by remember { mutableStateOf(false) }
 
@@ -706,7 +705,6 @@ fun TouchGestureLayer(
             .fillMaxSize()
             .pointerInput(sensitivity, scrollSensitivity, buttonMode, showNumpadLed) {
                 val tapSlopPx = TouchpadGesturePolicy.TAP_SLOP_DP.dp.toPx()
-                val doubleTapSlopPx = TouchpadGesturePolicy.DOUBLE_TAP_SLOP_DP.dp.toPx()
                 awaitPointerEventScope {
                     while (true) {
                         val event = awaitPointerEvent()
@@ -736,16 +734,8 @@ fun TouchGestureLayer(
                                 // Check for double tap drag gesture start
                                 val nowUptime = change.uptimeMillis
                                 val lastRelease = lastTapReleaseTime
-                                val lastPos = lastTapReleasePosition
-                                if (pointerDownInfo.size == 1 && lastPos != null) {
-                                    val dx = change.position.x - lastPos.x
-                                    val dy = change.position.y - lastPos.y
-                                    val distSq = dx * dx + dy * dy
-                                    if (TouchpadGesturePolicy.isSecondTap(
-                                            elapsedSinceReleaseMillis = nowUptime - lastRelease,
-                                            distanceSquaredPx = distSq,
-                                            doubleTapSlopPx = doubleTapSlopPx,
-                                        )) {
+                                if (pointerDownInfo.size == 1 && lastRelease != 0L) {
+                                    if (TouchpadGesturePolicy.isSecondTap(nowUptime - lastRelease)) {
                                         isDoubleTapDragging = true
                                         hasMovedDuringDrag = false
                                         activeMouseButton = 1
@@ -877,7 +867,6 @@ fun TouchGestureLayer(
                                     triggerVibration(if (hasMovedDuringDrag) 15 else 20)
                                     hasMovedDuringDrag = false
                                     lastTapReleaseTime = 0L
-                                    lastTapReleasePosition = null
                                 } else if (downInfo != null) {
                                     val height = size.height
                                     val touchYStart = downInfo.second.y
@@ -908,7 +897,6 @@ fun TouchGestureLayer(
                                                     btManager.sendMouseReport(1, 0, 0, 0)
                                                     btManager.sendMouseReport(0, 0, 0, 0)
                                                     lastTapReleaseTime = change.uptimeMillis
-                                                    lastTapReleasePosition = change.position
                                                 } else {
                                                     // Multi-finger click (Right/Middle click): send immediately
                                                     btManager.sendMouseReport(clickButton.toByte(), 0, 0, 0)

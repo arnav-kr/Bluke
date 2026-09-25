@@ -25,7 +25,7 @@ Working branch: `refactor`
 - **P1 partially fixed — UI state/performance:** Bluetooth, discovery, connection, lifecycle, and lock state are hoisted into immutable `HomeUiState`; rapidly changing gamepad button reads are isolated to child restart scopes and long-lived pointer handlers observe current callbacks. Editor/transient presentation state remains local.
 - **P2 open — Compose alignment:** Material3 `1.4.0-alpha04` still lifts runtime to `1.8.0-alpha06`; removing the override fails compilation because `ThemeConfig.kt` uses Expressive-only APIs. A BOM/toolchain upgrade was prohibited in this pass.
 - **P2 fixed — resources:** unused resources and three malformed high-density WebPs were removed; adaptive icon background is explicitly `nodpi`.
-- Baseline was 2 lint errors/42 warnings, 3 tests, and zero Bluetooth/HID coverage. Current verification includes simulated API/OEM contracts plus Consumer/Fn routing, tap policy, combined-layout bounds, input-mode migration, sound, locale, theme, gamepad, and compatibility tests; the final suite is 78 tests with zero failures. Physical Android/OEM and host-interaction checks remain open because ADB found no attached target.
+- Baseline was 2 lint errors/42 warnings, 3 tests, and zero Bluetooth/HID coverage. Current verification includes simulated API/OEM contracts plus Consumer/Fn routing, tap policy, combined-layout bounds, input-mode migration, sound, locale, theme, gamepad, and compatibility tests; the final suite is 79 tests with zero failures. Physical Android/OEM and host-interaction checks remain open because ADB found no attached target.
 - No SDK, AGP, Kotlin, Compose BOM, signing, Fastlane, or F-Droid version/config changes were made. DataStore `1.2.1` is the only new dependency.
 
 ## 2. Repository reconnaissance
@@ -1106,6 +1106,26 @@ AndroidGradlePluginVersion=1 GradleDependency=10 NewerVersionAvailable=8 Obsolet
 Post-commit assembleDebug: 550a32c BUILD SUCCESSFUL in 25s; 0ec9a2f BUILD SUCCESSFUL in 2s; 52ba3ca BUILD SUCCESSFUL in 2s.
 ```
 
+### 7.8 Relative-touchpad drag follow-up (2026-09-25)
+
+Physical feedback reported that ordinary pointer movement/clicks worked but host icon dragging did not. The recognizer required the second finger contact to land within 48 dp of the first contact. That is appropriate for direct-touch content, but Bluke is an indirect relative touchpad: contact coordinates are not host-screen coordinates and landing elsewhere does not move the host pointer. The 300 ms release-to-next-down requirement remains, matching Compose's documented definition of `doubleTapTimeoutMillis` ([Compose `ViewConfiguration`](https://developer.android.com/reference/kotlin/androidx/compose/ui/platform/ViewConfiguration)). The irrelevant spatial gate and stored release position were removed; button-down, held movement reports, button-up, tap behavior, and descriptor bytes are unchanged.
+
+ASSUMPTION: the spatial rejection is the cause observed on the physical device. The added regression failed before the fix and passed afterward, but only a device/host retest can confirm the complete gesture path.
+
+```text
+TouchpadGesturePolicyTest > secondTapOnRelativeTouchpadDoesNotDependOnFingerLandingPosition FAILED
+3 tests completed, 1 failed
+> Task :app:testDebugUnitTest FAILED
+
+> .\gradlew.bat testDebugUnitTest --no-daemon --stacktrace
+BUILD SUCCESSFUL in 1m 16s
+JUnit XML: files=24 tests=79 failures=0 errors=0 skipped=0
+
+> .\gradlew.bat lintDebug --no-daemon --no-parallel --max-workers=1 --warning-mode all --stacktrace
+BUILD SUCCESSFUL in 3m 40s
+Lint XML: issues=21 errors=0 warnings=21
+```
+
 ## 8. Open questions for the maintainer
 
 1. On which API 28, 31, and 36 devices did the physical matrix pass or fail, and can the resulting developer logs/build fingerprints be attached?
@@ -1123,3 +1143,4 @@ Post-commit assembleDebug: 550a32c BUILD SUCCESSFUL in 25s; 0ec9a2f BUILD SUCCES
 13. On a physical phone, do the opt-in volume buttons control only the connected host while Media + Presentation is visible, return immediately to local Android volume after leaving it, and always release after interrupted presses?
 14. On the smallest supported landscape display and at maximum font scale, is Keyboard + Touchpad still usable across the 25–60% resize range without obscuring key legends or reducing either surface below a practical size?
 15. Which presentation hosts should define the compatibility target for F5, `B`, Home/End, and Page Up/Down: PowerPoint, Google Slides, LibreOffice Impress, Keynote, or all four?
+16. After this relative-touchpad fix, does tap once, then touch again within 300 ms and keep the second contact down while moving reliably drag icons on both Windows and Linux?
