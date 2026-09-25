@@ -1,0 +1,21 @@
+package dev.arnv.bluke.ui
+
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
+import org.junit.Test
+
+class TouchpadGesturePolicyTest {
+    @Test
+    fun tapAllowsNormalFingerMotionButRejectsLongPressOrDrag() {
+        assertTrue(TouchpadGesturePolicy.isTap(120, distanceSquaredPx = 100f, tapSlopPx = 12f))
+        assertFalse(TouchpadGesturePolicy.isTap(250, distanceSquaredPx = 0f, tapSlopPx = 12f))
+        assertFalse(TouchpadGesturePolicy.isTap(120, distanceSquaredPx = 145f, tapSlopPx = 12f))
+    }
+
+    @Test
+    fun secondTapUsesTheSameThreeHundredMillisecondWindowThatUiPromises() {
+        assertTrue(TouchpadGesturePolicy.isSecondTap(300, distanceSquaredPx = 2_304f, doubleTapSlopPx = 48f))
+        assertFalse(TouchpadGesturePolicy.isSecondTap(301, distanceSquaredPx = 0f, doubleTapSlopPx = 48f))
+        assertFalse(TouchpadGesturePolicy.isSecondTap(100, distanceSquaredPx = 2_305f, doubleTapSlopPx = 48f))
+    }
+}
