@@ -44,7 +44,6 @@ import androidx.compose.ui.res.painterResource
 import androidx.core.content.edit
 import dev.arnv.bluke.R
 import kotlinx.coroutines.launch
-import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.math.roundToInt
 
 enum class TrackpadButtonMode(val displayName: String) {
@@ -81,40 +80,6 @@ fun TouchpadView(
     var scrollSensitivity by remember {
         mutableFloatStateOf(sharedPrefs.getFloat("touchpad_scroll_sensitivity", 1.0f))
     }
-    var isGyroEnabled by remember {
-        mutableStateOf(sharedPrefs.getBoolean("gyro_mouse_enabled", false))
-    }
-    val touchInputActive = remember { AtomicBoolean(false) }
-    val gyroController = remember(context, btManager) {
-        GyroMouseController(context) { delta ->
-            if (!touchInputActive.get()) {
-                btManager.sendMouseReport(0, delta.x.toByte(), delta.y.toByte(), 0)
-            }
-        }
-    }
-
-    SideEffect {
-        gyroController.sensitivity = sensitivity
-    }
-    LaunchedEffect(gyroController, isGyroEnabled) {
-        if (isGyroEnabled) {
-            if (!gyroController.start()) {
-                isGyroEnabled = false
-                sharedPrefs.edit { putBoolean("gyro_mouse_enabled", false) }
-                android.widget.Toast.makeText(
-                    context,
-                    "Gyroscope is not available on this device",
-                    android.widget.Toast.LENGTH_SHORT,
-                ).show()
-            }
-        } else {
-            gyroController.stop()
-        }
-    }
-    DisposableEffect(gyroController) {
-        onDispose { gyroController.close() }
-    }
-
     // Haptic buzz function using Android's Vibrator
     @Suppress("DEPRECATION")
     val triggerVibration = { milliseconds: Long ->
@@ -202,15 +167,7 @@ fun TouchpadView(
                             .clip(RoundedCornerShape(6.dp))
                             .background(Color.White.copy(alpha = 0.15f))
                             .clickable {
-                                val enabledModes = listOf(0, 1, 2).filter { mode ->
-                                    val modeStr = when (mode) {
-                                        0 -> "keyboard"
-                                        1 -> "touchpad"
-                                        2 -> "gamepad"
-                                        else -> "keyboard"
-                                    }
-                                    sharedPrefs.getStringSet("cycle_connection_modes", setOf("keyboard", "touchpad", "gamepad"))?.contains(modeStr) == true
-                                }.ifEmpty { listOf(0) }
+                                val enabledModes = sharedPrefs.enabledInputModes().map(InputMode::id)
                                 val currentIndexInEnabled = enabledModes.indexOf(launchMode)
                                 val nextIndex = (currentIndexInEnabled + 1) % enabledModes.size
                                 val nextMode = enabledModes[nextIndex]
@@ -445,39 +402,6 @@ fun TouchpadView(
                         modifier = Modifier
                             .size(28.dp)
                             .clip(RoundedCornerShape(6.dp))
-                            .background(
-                                if (isGyroEnabled) Color(0xFF2E7D32)
-                                else Color.White.copy(alpha = 0.15f)
-                            )
-                            .clickable {
-                                if (!gyroController.isAvailable) {
-                                    android.widget.Toast.makeText(
-                                        context,
-                                        "Gyroscope is not available on this device",
-                                        android.widget.Toast.LENGTH_SHORT,
-                                    ).show()
-                                } else {
-                                    isGyroEnabled = !isGyroEnabled
-                                    sharedPrefs.edit { putBoolean("gyro_mouse_enabled", isGyroEnabled) }
-                                    triggerVibration(20)
-                                }
-                            }
-                            .testTag("gyro_mouse_toggle"),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.ScreenRotation,
-                            contentDescription = if (isGyroEnabled) "Disable gyroscope mouse" else "Enable gyroscope mouse",
-                            tint = Color.White,
-                            modifier = Modifier.size(13.dp),
-                        )
-                    }
-
-                    // Vibration Toggle
-                    Box(
-                        modifier = Modifier
-                            .size(28.dp)
-                            .clip(RoundedCornerShape(6.dp))
                             .background(Color.White.copy(alpha = 0.15f))
                             .clickable {
                                 val active = !isVibrationEnabled
@@ -540,7 +464,6 @@ fun TouchpadView(
                         buttonMode = buttonMode,
                         triggerVibration = triggerVibration,
                         showNumpadLed = showNumpadLed,
-                        onPointerActivityChange = touchInputActive::set,
                     )
 
                     // Asus-Style backlit LED number keyboard overlay (absolutely drawn over the trackpad background area)
@@ -729,7 +652,6 @@ fun TouchGestureLayer(
     buttonMode: TrackpadButtonMode,
     triggerVibration: (Long) -> Unit,
     showNumpadLed: Boolean,
-    onPointerActivityChange: (Boolean) -> Unit = {},
 ) {
     // Tracking points and states for reliable swipe gesture translation
     var lastActivePointerId by remember { mutableStateOf<PointerId?>(null) }
@@ -759,12 +681,10 @@ fun TouchGestureLayer(
     var activeTouchPoints by remember { mutableStateOf<List<Offset>>(emptyList()) }
     var touchCount by remember { mutableIntStateOf(0) }
     var activeMouseButton by remember { mutableStateOf<Byte>(0) }
-    val currentPointerActivityCallback by rememberUpdatedState(onPointerActivityChange)
 
     DisposableEffect(btManager) {
         onDispose {
             // Pointer cancellation (mode change, rotation, backgrounding) must never strand a host button down.
-            currentPointerActivityCallback(false)
             btManager.sendMouseReport(0, 0, 0, 0)
         }
     }
@@ -787,7 +707,6 @@ fun TouchGestureLayer(
             .pointerInput(sensitivity, scrollSensitivity, buttonMode, showNumpadLed) {
                 val tapSlopPx = TouchpadGesturePolicy.TAP_SLOP_DP.dp.toPx()
                 val doubleTapSlopPx = TouchpadGesturePolicy.DOUBLE_TAP_SLOP_DP.dp.toPx()
-                var reportedPointerActivity = false
                 awaitPointerEventScope {
                     while (true) {
                         val event = awaitPointerEvent()
@@ -796,10 +715,6 @@ fun TouchGestureLayer(
                         if (showNumpadLed) {
                             isTouchActive = false
                             touchCount = 0
-                            if (reportedPointerActivity) {
-                                reportedPointerActivity = false
-                                currentPointerActivityCallback(false)
-                            }
                             continue
                         }
 
@@ -809,12 +724,6 @@ fun TouchGestureLayer(
                         touchCount = downCount
                         isTouchActive = downCount > 0
                         activeTouchPoints = pressedChanges.map { it.position }
-                        val pointerActivity = downCount > 0
-                        if (pointerActivity != reportedPointerActivity) {
-                            reportedPointerActivity = pointerActivity
-                            currentPointerActivityCallback(pointerActivity)
-                        }
-
                         if (downCount > maxPointersInTap) {
                             maxPointersInTap = downCount
                         }
