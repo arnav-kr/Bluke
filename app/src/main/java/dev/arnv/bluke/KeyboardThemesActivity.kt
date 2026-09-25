@@ -23,7 +23,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
@@ -37,8 +36,6 @@ import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FilterChip
@@ -51,7 +48,6 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
-import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -86,12 +82,8 @@ import dev.arnv.bluke.ui.KeyboardThemeCatalog
 import dev.arnv.bluke.ui.KeyboardThemeDefinition
 import dev.arnv.bluke.ui.KeyboardView
 import dev.arnv.bluke.ui.theme.MyApplicationTheme
-import dev.arnv.bluke.ui.theme.blueChannel
 import dev.arnv.bluke.ui.theme.formatOpaqueHexColor
-import dev.arnv.bluke.ui.theme.greenChannel
-import dev.arnv.bluke.ui.theme.opaqueRgb
 import dev.arnv.bluke.ui.theme.parseOpaqueHexColor
-import dev.arnv.bluke.ui.theme.redChannel
 import java.util.UUID
 import kotlin.math.roundToInt
 
