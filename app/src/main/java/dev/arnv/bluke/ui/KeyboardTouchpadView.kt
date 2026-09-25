@@ -4,7 +4,6 @@ import android.content.SharedPreferences
 import android.os.VibrationEffect
 import android.os.Vibrator
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -23,24 +22,44 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Done
 import androidx.compose.material.icons.filled.Keyboard
+import androidx.compose.material.icons.filled.RestartAlt
+import androidx.compose.material.icons.filled.SwapHoriz
+import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.arnv.bluke.bluetooth.BluetoothKeyboardManager
+import dev.arnv.bluke.data.LayoutRepository
+import kotlinx.coroutines.launch
+
+internal const val COMBINED_TOUCHPAD_FRACTION_KEY = "combined_touchpad_fraction"
+internal const val COMBINED_TOUCHPAD_FIRST_KEY = "combined_touchpad_first"
+internal const val DEFAULT_COMBINED_TOUCHPAD_FRACTION = 0.38f
+
+internal fun normalizeCombinedTouchpadFraction(value: Float): Float = value.coerceIn(0.25f, 0.60f)
 
 @Composable
 fun KeyboardTouchpadView(
@@ -63,6 +82,8 @@ fun KeyboardTouchpadView(
     onKeyPressChange: (Int, Boolean) -> Unit,
 ) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val layoutRepository = remember(context) { LayoutRepository(context) }
     val sensitivity = remember(sharedPrefs) { sharedPrefs.getFloat("touchpad_sensitivity", 1.5f) }
     val scrollSensitivity = remember(sharedPrefs) {
         sharedPrefs.getFloat("touchpad_scroll_sensitivity", 1f)
@@ -75,6 +96,29 @@ fun KeyboardTouchpadView(
                     ?.vibrate(VibrationEffect.createOneShot(duration, VibrationEffect.DEFAULT_AMPLITUDE))
             }
         }
+    }
+    var isEditingLayout by rememberSaveable { mutableStateOf(false) }
+    var touchpadFraction by remember { mutableFloatStateOf(DEFAULT_COMBINED_TOUCHPAD_FRACTION) }
+    var touchpadFirst by remember { mutableStateOf(true) }
+    var contentWidthPx by remember { mutableIntStateOf(1) }
+
+    fun persistLayout() {
+        scope.launch {
+            layoutRepository.save(
+                mapOf(
+                    COMBINED_TOUCHPAD_FRACTION_KEY to touchpadFraction,
+                    COMBINED_TOUCHPAD_FIRST_KEY to if (touchpadFirst) 1f else 0f,
+                )
+            )
+        }
+    }
+
+    LaunchedEffect(layoutRepository) {
+        val saved = layoutRepository.load("combined")
+        touchpadFraction = normalizeCombinedTouchpadFraction(
+            saved[COMBINED_TOUCHPAD_FRACTION_KEY] ?: DEFAULT_COMBINED_TOUCHPAD_FRACTION
+        )
+        touchpadFirst = saved[COMBINED_TOUCHPAD_FIRST_KEY] != 0f
     }
 
     Column(
@@ -133,6 +177,43 @@ fun KeyboardTouchpadView(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(6.dp),
             ) {
+                if (isEditingLayout) {
+                    CombinedToolbarIcon(
+                        icon = Icons.Default.SwapHoriz,
+                        contentDescription = "Swap keyboard and touchpad",
+                        testTag = "combined_layout_swap",
+                        onClick = {
+                            touchpadFirst = !touchpadFirst
+                            persistLayout()
+                        },
+                    )
+                    CombinedToolbarIcon(
+                        icon = Icons.Default.RestartAlt,
+                        contentDescription = "Reset combined layout",
+                        testTag = "combined_layout_reset",
+                        onClick = {
+                            touchpadFraction = DEFAULT_COMBINED_TOUCHPAD_FRACTION
+                            touchpadFirst = true
+                            persistLayout()
+                        },
+                    )
+                    CombinedToolbarIcon(
+                        icon = Icons.Default.Done,
+                        contentDescription = "Finish editing combined layout",
+                        testTag = "combined_layout_done",
+                        onClick = {
+                            isEditingLayout = false
+                            persistLayout()
+                        },
+                    )
+                } else {
+                    CombinedToolbarIcon(
+                        icon = Icons.Default.Tune,
+                        contentDescription = "Resize or rearrange keyboard and touchpad",
+                        testTag = "combined_layout_edit",
+                        onClick = { isEditingLayout = true },
+                    )
+                }
                 Box(
                     Modifier
                         .size(6.dp)
@@ -151,44 +232,29 @@ fun KeyboardTouchpadView(
         Row(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(8.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                .padding(8.dp)
+                .onSizeChanged { contentWidthPx = it.width },
+            verticalAlignment = Alignment.CenterVertically,
         ) {
-            Box(
-                modifier = Modifier
-                    .weight(0.38f)
-                    .fillMaxHeight()
-                    .shadow(4.dp, RoundedCornerShape(14.dp))
-                    .clip(RoundedCornerShape(14.dp))
-                    .background(Color(0xFF1E1E1E))
-                    .border(1.dp, Color.White.copy(alpha = 0.15f), RoundedCornerShape(14.dp))
-                    .testTag("combined_touch_surface"),
-            ) {
-                TouchGestureLayer(
+            if (touchpadFirst) {
+                CombinedTouchpadPanel(
+                    modifier = Modifier.weight(touchpadFraction),
                     btManager = btManager,
                     sensitivity = sensitivity,
                     scrollSensitivity = scrollSensitivity,
-                    buttonMode = TrackpadButtonMode.CLICKPAD,
                     triggerVibration = triggerVibration,
-                    showNumpadLed = false,
                 )
-                Text(
-                    text = "Touchpad",
-                    color = Color.White.copy(alpha = 0.35f),
-                    style = MaterialTheme.typography.labelMedium,
-                    modifier = Modifier
-                        .align(Alignment.TopCenter)
-                        .padding(top = 8.dp),
+                CombinedResizeHandle(
+                    isEditing = isEditingLayout,
+                    onDrag = { dragAmount ->
+                        touchpadFraction = normalizeCombinedTouchpadFraction(
+                            touchpadFraction + dragAmount / contentWidthPx
+                        )
+                    },
+                    onDragEnd = ::persistLayout,
                 )
-            }
-
-            Box(
-                modifier = Modifier
-                    .weight(0.62f)
-                    .fillMaxHeight(),
-                contentAlignment = Alignment.Center,
-            ) {
-                KeyboardView(
+                CombinedKeyboardPanel(
+                    modifier = Modifier.weight(1f - touchpadFraction),
                     geometry = geometry,
                     theme = theme,
                     characterLayout = characterLayout,
@@ -199,16 +265,39 @@ fun KeyboardTouchpadView(
                     isScrollLockActive = isScrollLockActive,
                     keySensitivity = keySensitivity,
                     onKeyPressChange = onKeyPressChange,
+                    isFnActive = isFnActive,
                 )
-                if (isFnActive) {
-                    Box(
-                        modifier = Modifier
-                            .align(Alignment.TopCenter)
-                            .padding(top = 8.dp),
-                    ) {
-                        FnShortcutOverlay()
-                    }
-                }
+            } else {
+                CombinedKeyboardPanel(
+                    modifier = Modifier.weight(1f - touchpadFraction),
+                    geometry = geometry,
+                    theme = theme,
+                    characterLayout = characterLayout,
+                    activePressedKeys = activePressedKeys,
+                    isConnected = isConnected,
+                    isCapsLockActive = isCapsLockActive,
+                    isNumLockActive = isNumLockActive,
+                    isScrollLockActive = isScrollLockActive,
+                    keySensitivity = keySensitivity,
+                    onKeyPressChange = onKeyPressChange,
+                    isFnActive = isFnActive,
+                )
+                CombinedResizeHandle(
+                    isEditing = isEditingLayout,
+                    onDrag = { dragAmount ->
+                        touchpadFraction = normalizeCombinedTouchpadFraction(
+                            touchpadFraction - dragAmount / contentWidthPx
+                        )
+                    },
+                    onDragEnd = ::persistLayout,
+                )
+                CombinedTouchpadPanel(
+                    modifier = Modifier.weight(touchpadFraction),
+                    btManager = btManager,
+                    sensitivity = sensitivity,
+                    scrollSensitivity = scrollSensitivity,
+                    triggerVibration = triggerVibration,
+                )
             }
         }
     }
