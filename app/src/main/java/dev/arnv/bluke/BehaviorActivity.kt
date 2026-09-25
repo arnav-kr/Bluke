@@ -24,9 +24,7 @@ import dev.arnv.bluke.ui.SettingsItemData
 import dev.arnv.bluke.ui.theme.MyApplicationTheme
 import dev.arnv.bluke.ui.KeyboardGeometry
 import dev.arnv.bluke.ui.KeyboardCharacterLayout
-import dev.arnv.bluke.ui.InputMode
 import dev.arnv.bluke.ui.KEYBOARD_CHARACTER_LAYOUT_PREFERENCE
-import dev.arnv.bluke.ui.enabledInputModes
 import dev.arnv.bluke.sound.SwitchType
 import dev.arnv.bluke.ui.CaseColor
 import dev.arnv.bluke.data.CYCLE_KEYBOARD_GEOMETRIES_PREFERENCE
@@ -339,17 +337,20 @@ class BehaviorActivity : ComponentActivity() {
                                 .joinToString(", ") { it.displayName }
                         }
 
+                        val connectionModesDisplayMap = mapOf(
+                            "keyboard" to "Keyboard",
+                            "touchpad" to "Touchpad",
+                            "gamepad" to "Gamepad"
+                        )
                         var activeModesSet by remember {
-                            mutableStateOf<Set<String>>(
-                                sharedPrefs.enabledInputModes().mapTo(linkedSetOf(), InputMode::preferenceKey)
-                            )
+                            mutableStateOf(sharedPrefs.getStringSet("cycle_connection_modes", setOf("keyboard", "touchpad", "gamepad")) ?: emptySet())
                         }
-                        val modesDescription = if (activeModesSet.size == InputMode.entries.size) {
+                        val modesDescription = if (activeModesSet.size == 3) {
                             "All input modes active in cycle"
                         } else {
-                            InputMode.entries
-                                .filter { activeModesSet.contains(it.preferenceKey) }
-                                .map { it.displayName }
+                            listOf("keyboard", "touchpad", "gamepad")
+                                .filter { activeModesSet.contains(it) }
+                                .mapNotNull { connectionModesDisplayMap[it] }
                                 .joinToString(", ")
                         }
 
@@ -742,9 +743,11 @@ class BehaviorActivity : ComponentActivity() {
                                     addAll(activeModesSet)
                                 }
                             }
-                            val allModes = InputMode.entries.map { mode ->
-                                mode.preferenceKey to "${mode.displayName} Mode"
-                            }
+                            val allModes = listOf(
+                                "keyboard" to "Keyboard Mode",
+                                "touchpad" to "Touchpad Mode",
+                                "gamepad" to "Gamepad Mode"
+                            )
                             AlertDialog(
                                 onDismissRequest = { showModesDialog = false },
                                 title = { Text("Input Modes to Cycle") },

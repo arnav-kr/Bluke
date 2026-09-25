@@ -523,7 +523,10 @@ fun GamepadView(
                             .clip(RoundedCornerShape(6.dp))
                             .background(Color.White.copy(alpha = 0.15f))
                             .clickable {
-                                val enabledModes = sharedPrefs.enabledInputModes().map(InputMode::id)
+                                val enabledModes = listOf(0, 1, 2).filter { mode ->
+                                    val modeStr = when (mode) { 0 -> "keyboard"; 1 -> "touchpad"; 2 -> "gamepad"; else -> "keyboard" }
+                                    sharedPrefs.getStringSet("cycle_connection_modes", setOf("keyboard", "touchpad", "gamepad"))?.contains(modeStr) == true
+                                }.ifEmpty { listOf(0) }
                                 val idx = enabledModes.indexOf(launchMode)
                                 onModeChange(enabledModes[(idx + 1) % enabledModes.size])
                                 triggerVibration(25)
@@ -1139,6 +1142,7 @@ fun GamepadView(
     }
 }
 }
+
 // ── Sub-Components ──
 
 @Composable
@@ -2745,6 +2749,122 @@ private fun GamepadDpad(
                     close()
                 }
                 drawPath(pathR, arrowColor(8))
+            }
+        }
+    }
+}
+
+@Composable
+private fun EditableComponentWrapper(
+    isEditMode: Boolean,
+    offsetX: Float,
+    offsetY: Float,
+    scale: Float,
+    onOffsetChange: (Float, Float) -> Unit,
+    onScaleChange: (Float) -> Unit,
+    onTransformEnd: () -> Unit,
+    content: @Composable () -> Unit
+) {
+    val density = LocalDensity.current.density
+    
+    val currentOffsetX by rememberUpdatedState(offsetX)
+    val currentOffsetY by rememberUpdatedState(offsetY)
+    val currentScale by rememberUpdatedState(scale)
+    val currentOnOffsetChange by rememberUpdatedState(onOffsetChange)
+    val currentOnScaleChange by rememberUpdatedState(onScaleChange)
+    val currentOnTransformEnd by rememberUpdatedState(onTransformEnd)
+    
+    var layoutTopInWindowPx by remember { mutableFloatStateOf(0f) }
+    
+    Box(
+        modifier = Modifier
+            .onGloballyPositioned { coordinates ->
+                layoutTopInWindowPx = coordinates.positionInWindow().y
+            }
+            .offset {
+                val layoutTopInWindow = layoutTopInWindowPx / density
+                val constrainedOffsetY = if (layoutTopInWindow > 0) {
+                    val minY = 38f + 4f - layoutTopInWindow
+                    currentOffsetY.coerceAtLeast(minY)
+                } else {
+                    currentOffsetY
+                }
+                IntOffset((currentOffsetX * density).roundToInt(), (constrainedOffsetY * density).roundToInt())
+            }
+            .graphicsLayer {
+                scaleX = currentScale
+                scaleY = currentScale
+            },
+        contentAlignment = Alignment.Center
+    ) {
+        content()
+        
+        if (isEditMode) {
+            // 1. Overlay container with border that intercepts gestures for moving and pinch zoom
+            Box(
+                modifier = Modifier
+                    .matchParentSize()
+                    .graphicsLayer {
+                        scaleX = 1.08f
+                        scaleY = 1.08f
+                    }
+                    .border(
+                        width = 1.2.dp,
+                        color = MaterialTheme.colorScheme.primary.copy(alpha = 0.8f),
+                        shape = RoundedCornerShape(8.dp)
+                    )
+                    .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.08f), shape = RoundedCornerShape(8.dp))
+                    .pointerInput(isEditMode) {
+                        awaitEachGesture {
+                            awaitFirstDown(requireUnconsumed = false)
+                            var event: PointerEvent
+                            do {
+                                event = awaitPointerEvent()
+                                val pan = event.calculatePan()
+                                val zoom = event.calculateZoom()
+                            // 1. Update scale via pinch zoom
+                            val newScale = (currentScale * zoom).coerceIn(0.6f, 1.8f)
+                            currentOnScaleChange(newScale)
+                            
+                            // 2. Update offset with scale factor correction and topbar constraint
+                            val minY = 38f + 4f - layoutTopInWindowPx / density
+                            val newX = currentOffsetX + (pan.x * currentScale) / density
+                            val newY = (currentOffsetY + (pan.y * currentScale) / density).coerceAtLeast(minY)
+                            currentOnOffsetChange(newX, newY)
+                                event.changes.forEach { it.consume() }
+                            } while (event.changes.any { it.pressed })
+                            currentOnTransformEnd()
+                        }
+                    }
+            )
+            
+            // 2. Drag resize handle in bottom-right corner (Alternative scaling option)
+            Box(
+                modifier = Modifier
+                    .align(Alignment.BottomEnd)
+                    .offset(x = 6.dp, y = 6.dp)
+                    .size(22.dp)
+                    .clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.primary)
+                    .pointerInput(Unit) {
+                        detectDragGestures(
+                            onDragEnd = currentOnTransformEnd,
+                            onDragCancel = currentOnTransformEnd,
+                            onDrag = { change, dragAmount ->
+                                change.consume()
+                                val deltaScale = (dragAmount.x + dragAmount.y) / 150f
+                                currentOnScaleChange((currentScale + deltaScale).coerceIn(0.6f, 1.8f))
+                            },
+                        )
+                    },
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    imageVector = Icons.Default.OpenInFull,
+                    contentDescription = "Resize",
+                    tint = Color.White,
+                    modifier = Modifier.size(11.dp)
+                )
             }
         }
     }

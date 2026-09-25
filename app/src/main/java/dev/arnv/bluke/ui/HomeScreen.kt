@@ -139,7 +139,15 @@ fun HomeScreen(
                     sharedPrefs.getString(KEYBOARD_GEOMETRY_PREFERENCE, null)
                 )
                 selectedKeyboardTheme = keyboardThemeRepository.selectedTheme()
-                val enabledModes = sharedPrefs.enabledInputModes().map(InputMode::id)
+                val enabledModes = listOf(0, 1, 2).filter { mode ->
+                    val modeStr = when (mode) {
+                        0 -> "keyboard"
+                        1 -> "touchpad"
+                        2 -> "gamepad"
+                        else -> "keyboard"
+                    }
+                    sharedPrefs.getStringSet("cycle_connection_modes", setOf("keyboard", "touchpad", "gamepad"))?.contains(modeStr) == true
+                }.ifEmpty { listOf(0) }
                 val savedLaunchMode = sharedPrefs.getInt("launch_mode", 0)
                 launchMode = if (enabledModes.contains(savedLaunchMode)) savedLaunchMode else enabledModes.first()
                 devModeRefreshTrigger++
@@ -453,7 +461,7 @@ fun HomeScreen(
             }
 
             when (launchMode) {
-                1, 2, 3 -> {
+                1, 2 -> {
                     val darkScheme = darkColorScheme(
                         primary = MaterialTheme.colorScheme.primary,
                         background = Color(0xFF141218),
@@ -494,30 +502,6 @@ fun HomeScreen(
                                     },
                                     sharedPrefs = sharedPrefs,
                                     caseBrush = caseBrush
-                                )
-                            }
-                            3 -> {
-                                KeyboardTouchpadView(
-                                    btManager = btManager,
-                                    onClose = { isKeyboardActive = false },
-                                    launchMode = launchMode,
-                                    onModeChange = { newMode ->
-                                        launchMode = newMode
-                                        sharedPrefs.edit { putInt("launch_mode", newMode) }
-                                    },
-                                    sharedPrefs = sharedPrefs,
-                                    caseBrush = caseBrush,
-                                    geometry = selectedGeometry,
-                                    theme = selectedKeyboardTheme,
-                                    characterLayout = characterLayout,
-                                    activePressedKeys = activePressedKeys,
-                                    isConnected = isConnected,
-                                    isCapsLockActive = isCapsLockActive,
-                                    isNumLockActive = isNumLockActive,
-                                    isScrollLockActive = isScrollLockActive,
-                                    keySensitivity = keySensitivity,
-                                    isFnActive = isFnActive,
-                                    onKeyPressChange = { code, press -> handleLocalKeyPress(code, press) },
                                 )
                             }
                         }
@@ -581,7 +565,15 @@ fun HomeScreen(
                                         .clip(RoundedCornerShape(6.dp))
                                         .background(Color.White.copy(alpha = 0.15f))
                                         .clickable {
-                                            val enabledModes = sharedPrefs.enabledInputModes().map(InputMode::id)
+                                            val enabledModes = listOf(0, 1, 2).filter { mode ->
+                                                val modeStr = when (mode) {
+                                                    0 -> "keyboard"
+                                                    1 -> "touchpad"
+                                                    2 -> "gamepad"
+                                                    else -> "keyboard"
+                                                }
+                                                sharedPrefs.getStringSet("cycle_connection_modes", setOf("keyboard", "touchpad", "gamepad"))?.contains(modeStr) == true
+                                            }.ifEmpty { listOf(0) }
                                             val currentIndexInEnabled = enabledModes.indexOf(launchMode)
                                             val nextIndex = (currentIndexInEnabled + 1) % enabledModes.size
                                             val nextMode = enabledModes[nextIndex]
@@ -1110,7 +1102,15 @@ fun HomeScreen(
                             // Circular Mode Toggle Indicator Button
                             IconButton(
                                 onClick = {
-                                    val enabledModes = sharedPrefs.enabledInputModes().map(InputMode::id)
+                                    val enabledModes = listOf(0, 1, 2).filter { mode ->
+                                        val modeStr = when (mode) {
+                                            0 -> "keyboard"
+                                            1 -> "touchpad"
+                                            2 -> "gamepad"
+                                            else -> "keyboard"
+                                        }
+                                        sharedPrefs.getStringSet("cycle_connection_modes", setOf("keyboard", "touchpad", "gamepad"))?.contains(modeStr) == true
+                                    }.ifEmpty { listOf(0) }
                                     val currentIndex = enabledModes.indexOf(launchMode).coerceAtLeast(0)
                                     val nextMode = enabledModes[(currentIndex + 1) % enabledModes.size]
                                     launchMode = nextMode
@@ -1128,7 +1128,6 @@ fun HomeScreen(
                                 val modeIcon = when (launchMode) {
                                     1 -> Icons.Default.Mouse
                                     2 -> Icons.Default.SportsEsports
-                                    3 -> Icons.Default.Keyboard
                                     else -> Icons.Default.Keyboard
                                 }
                                 Icon(
@@ -1154,7 +1153,6 @@ fun HomeScreen(
                                 val launchText = when (launchMode) {
                                     1 -> "Launch Touchpad"
                                     2 -> "Launch Gamepad"
-                                    3 -> "Launch Keyboard + Touchpad"
                                     else -> "Launch Keyboard"
                                 }
                                 Icon(
@@ -1181,7 +1179,7 @@ fun HomeScreen(
 
 @Composable
 @OptIn(ExperimentalLayoutApi::class)
-internal fun FnShortcutOverlay() {
+private fun FnShortcutOverlay() {
     Surface(
         color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.96f),
         contentColor = MaterialTheme.colorScheme.onSurface,
