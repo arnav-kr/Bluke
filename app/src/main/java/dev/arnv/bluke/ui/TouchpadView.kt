@@ -40,6 +40,7 @@ import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import dev.arnv.bluke.bluetooth.BluetoothKeyboardManager
+import dev.arnv.bluke.data.LayoutRepository
 import androidx.compose.ui.res.painterResource
 import androidx.core.content.edit
 import dev.arnv.bluke.R
@@ -68,10 +69,22 @@ fun TouchpadView(
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    val layoutRepository = remember(context) { LayoutRepository(context) }
+    val pendingLayoutValues = remember { mutableMapOf<String, Float>() }
     
     // Preferences & Config States
-    var buttonMode by remember { mutableStateOf(TrackpadButtonMode.CLICKPAD) }
+    var buttonMode by remember {
+        mutableStateOf(
+            runCatching {
+                TrackpadButtonMode.valueOf(
+                    sharedPrefs.getString("touchpad_button_mode", TrackpadButtonMode.CLICKPAD.name)
+                        ?: TrackpadButtonMode.CLICKPAD.name
+                )
+            }.getOrDefault(TrackpadButtonMode.CLICKPAD)
+        )
+    }
     var showNumpadLed by rememberSaveable { mutableStateOf(false) }
+    var isEditMode by rememberSaveable { mutableStateOf(false) }
     var isVibrationEnabled by remember {
         mutableStateOf(sharedPrefs.getBoolean("touchpad_vibration_enabled", true))
     }
@@ -83,6 +96,43 @@ fun TouchpadView(
     }
     var isGyroEnabled by remember {
         mutableStateOf(sharedPrefs.getBoolean("gyro_mouse_enabled", false))
+    }
+    var surfaceOffsetX by remember { mutableFloatStateOf(0f) }
+    var surfaceOffsetY by remember { mutableFloatStateOf(0f) }
+    var surfaceScale by remember { mutableFloatStateOf(1f) }
+    var buttonsOffsetX by remember { mutableFloatStateOf(0f) }
+    var buttonsOffsetY by remember { mutableFloatStateOf(0f) }
+    var buttonsScale by remember { mutableFloatStateOf(1f) }
+
+    LaunchedEffect(layoutRepository) {
+        val values = layoutRepository.load("touchpad")
+        surfaceOffsetX = values["touchpad_surface_x"] ?: 0f
+        surfaceOffsetY = values["touchpad_surface_y"] ?: 0f
+        surfaceScale = values["touchpad_surface_scale"] ?: 1f
+        buttonsOffsetX = values["touchpad_buttons_x"] ?: 0f
+        buttonsOffsetY = values["touchpad_buttons_y"] ?: 0f
+        buttonsScale = values["touchpad_buttons_scale"] ?: 1f
+    }
+
+    val saveLayoutValue: (String, Float) -> Unit = { key, value ->
+        pendingLayoutValues[key] = value
+    }
+    val commitLayoutValues: () -> Unit = {
+        val values = pendingLayoutValues.toMap()
+        pendingLayoutValues.clear()
+        scope.launch { layoutRepository.save(values) }
+    }
+    val isLayoutModified = surfaceOffsetX != 0f || surfaceOffsetY != 0f || surfaceScale != 1f ||
+        buttonsOffsetX != 0f || buttonsOffsetY != 0f || buttonsScale != 1f
+    val resetLayout: () -> Unit = {
+        surfaceOffsetX = 0f
+        surfaceOffsetY = 0f
+        surfaceScale = 1f
+        buttonsOffsetX = 0f
+        buttonsOffsetY = 0f
+        buttonsScale = 1f
+        pendingLayoutValues.clear()
+        scope.launch { layoutRepository.clear("touchpad") }
     }
     val touchInputActive = remember { AtomicBoolean(false) }
     val gyroController = remember(context, btManager) {
@@ -96,8 +146,8 @@ fun TouchpadView(
     SideEffect {
         gyroController.sensitivity = sensitivity
     }
-    LaunchedEffect(gyroController, isGyroEnabled) {
-        if (isGyroEnabled) {
+    LaunchedEffect(gyroController, isGyroEnabled, isEditMode) {
+        if (isGyroEnabled && !isEditMode) {
             if (!gyroController.start()) {
                 isGyroEnabled = false
                 sharedPrefs.edit { putBoolean("gyro_mouse_enabled", false) }
@@ -307,6 +357,7 @@ fun TouchpadView(
                                 val values = TrackpadButtonMode.entries
                                 val nextMode = values[(buttonMode.ordinal + 1) % values.size]
                                 buttonMode = nextMode
+                                sharedPrefs.edit { putString("touchpad_button_mode", nextMode.name) }
                                 triggerVibration(15)
                             }
                             .padding(horizontal = 8.dp),
@@ -432,7 +483,52 @@ fun TouchpadView(
                         )
                     }
 
-                    // Vibration Toggle
+                    if (isEditMode && isLayoutModified) {
+                        Box(
+                            modifier = Modifier
+                                .size(28.dp)
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(Color(0xFFEF5350).copy(alpha = 0.35f))
+                                .clickable {
+                                    resetLayout()
+                                    triggerVibration(20)
+                                }
+                                .testTag("reset_touchpad_layout"),
+                            contentAlignment = Alignment.Center,
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Refresh,
+                                contentDescription = "Reset touchpad layout",
+                                tint = Color.White,
+                                modifier = Modifier.size(13.dp),
+                            )
+                        }
+                    }
+
+                    Box(
+                        modifier = Modifier
+                            .size(28.dp)
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(
+                                if (isEditMode) MaterialTheme.colorScheme.primary.copy(alpha = 0.65f)
+                                else Color.White.copy(alpha = 0.15f)
+                            )
+                            .clickable {
+                                isEditMode = !isEditMode
+                                triggerVibration(20)
+                            }
+                            .testTag("edit_touchpad_layout"),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Icon(
+                            imageVector = if (isEditMode) Icons.Default.Check else Icons.Default.Edit,
+                            contentDescription = if (isEditMode) "Finish editing" else "Edit touchpad layout",
+                            tint = Color.White,
+                            modifier = Modifier.size(13.dp),
+                        )
+                    }
+
+                    // Gyroscope mouse toggle
                     Box(
                         modifier = Modifier
                             .size(28.dp)
@@ -508,49 +604,154 @@ fun TouchpadView(
                     .fillMaxWidth()
                     .padding(horizontal = 24.dp, vertical = 12.dp)
             ) {
-                // Glass panel plate backing container with high-end polished styling
-                Box(
+                val hasSeparateButtons = buttonMode != TrackpadButtonMode.CLICKPAD
+                EditableComponentWrapper(
                     modifier = Modifier
-                        .fillMaxSize()
-                        .shadow(
-                            elevation = 4.dp,
-                            shape = RoundedCornerShape(10.dp),
-                            spotColor = Color.Black.copy(alpha = 0.5f),
-                            ambientColor = Color.Black
-                        )
-                        .clip(RoundedCornerShape(10.dp))
-                        .background(Color(0xFF1E1E1E))
-                        .border(1.5.dp, Color.White.copy(alpha = 0.15f), RoundedCornerShape(10.dp))
-                        .testTag("glass_touch_surface")
+                        .align(Alignment.TopCenter)
+                        .fillMaxWidth()
+                        .fillMaxHeight(if (hasSeparateButtons) 0.78f else 1f),
+                    isEditMode = isEditMode,
+                    offsetX = surfaceOffsetX,
+                    offsetY = surfaceOffsetY,
+                    scale = surfaceScale,
+                    onOffsetChange = { x, y ->
+                        surfaceOffsetX = x
+                        surfaceOffsetY = y
+                        saveLayoutValue("touchpad_surface_x", x)
+                        saveLayoutValue("touchpad_surface_y", y)
+                    },
+                    onScaleChange = { scale ->
+                        surfaceScale = scale
+                        saveLayoutValue("touchpad_surface_scale", scale)
+                    },
+                    onTransformEnd = commitLayoutValues,
                 ) {
-                    
-                    // Gesture and move touch capture layer
-                    TouchGestureLayer(
-                        btManager = btManager,
-                        sensitivity = sensitivity,
-                        scrollSensitivity = scrollSensitivity,
-                        buttonMode = buttonMode,
-                        triggerVibration = triggerVibration,
-                        showNumpadLed = showNumpadLed,
-                        onPointerActivityChange = touchInputActive::set,
-                    )
-
-                    // Asus-Style backlit LED number keyboard overlay (absolutely drawn over the trackpad background area)
-                    androidx.compose.animation.AnimatedVisibility(
-                        visible = showNumpadLed,
-                        enter = fadeIn(),
-                        exit = fadeOut()
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .shadow(
+                                elevation = 4.dp,
+                                shape = RoundedCornerShape(10.dp),
+                                spotColor = Color.Black.copy(alpha = 0.5f),
+                                ambientColor = Color.Black,
+                            )
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(Color(0xFF1E1E1E))
+                            .border(1.5.dp, Color.White.copy(alpha = 0.15f), RoundedCornerShape(10.dp))
+                            .testTag("glass_touch_surface"),
                     ) {
+                        TouchGestureLayer(
+                            btManager = btManager,
+                            sensitivity = sensitivity,
+                            scrollSensitivity = scrollSensitivity,
+                            buttonMode = buttonMode,
+                            triggerVibration = triggerVibration,
+                            showNumpadLed = showNumpadLed,
+                            integratedButtons = !hasSeparateButtons,
+                            onPointerActivityChange = touchInputActive::set,
+                        )
+
+                        androidx.compose.animation.AnimatedVisibility(
+                            visible = showNumpadLed,
+                            enter = fadeIn(),
+                            exit = fadeOut(),
+                        ) {
                             Box(
                                 modifier = Modifier
-                                    .fillMaxWidth()
-                                    .fillMaxHeight(if (buttonMode != TrackpadButtonMode.CLICKPAD) 0.82f else 1f)
-                                    .padding(12.dp)
+                                    .fillMaxSize()
+                                    .padding(12.dp),
                             ) {
                                 NumpadLedGrid(onKeyPress = simulateKeyPress)
                             }
+                        }
                     }
                 }
+
+                if (hasSeparateButtons) {
+                    EditableComponentWrapper(
+                        modifier = Modifier
+                            .align(Alignment.BottomCenter)
+                            .fillMaxWidth()
+                            .fillMaxHeight(0.18f),
+                        isEditMode = isEditMode,
+                        offsetX = buttonsOffsetX,
+                        offsetY = buttonsOffsetY,
+                        scale = buttonsScale,
+                        onOffsetChange = { x, y ->
+                            buttonsOffsetX = x
+                            buttonsOffsetY = y
+                            saveLayoutValue("touchpad_buttons_x", x)
+                            saveLayoutValue("touchpad_buttons_y", y)
+                        },
+                        onScaleChange = { scale ->
+                            buttonsScale = scale
+                            saveLayoutValue("touchpad_buttons_scale", scale)
+                        },
+                        onTransformEnd = commitLayoutValues,
+                    ) {
+                        MouseButtonBar(
+                            btManager = btManager,
+                            buttonMode = buttonMode,
+                            triggerVibration = triggerVibration,
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun MouseButtonBar(
+    btManager: BluetoothKeyboardManager,
+    buttonMode: TrackpadButtonMode,
+    triggerVibration: (Long) -> Unit,
+) {
+    val buttons = when (buttonMode) {
+        TrackpadButtonMode.TWO_BUTTONS -> listOf(1 to "Left", 2 to "Right")
+        TrackpadButtonMode.THREE_BUTTONS -> listOf(1 to "Left", 4 to "Middle", 2 to "Right")
+        TrackpadButtonMode.CLICKPAD -> emptyList()
+    }
+    Row(
+        modifier = Modifier
+            .fillMaxSize()
+            .shadow(4.dp, RoundedCornerShape(10.dp))
+            .clip(RoundedCornerShape(10.dp))
+            .background(Color(0xFF1E1E1E))
+            .border(1.5.dp, Color.White.copy(alpha = 0.15f), RoundedCornerShape(10.dp))
+            .testTag("mouse_button_bar"),
+    ) {
+        buttons.forEachIndexed { index, (mask, label) ->
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxHeight()
+                    .pointerInput(mask) {
+                        detectTapGestures(
+                            onPress = {
+                                triggerVibration(20)
+                                btManager.sendMouseReport(mask.toByte(), 0, 0, 0)
+                                tryAwaitRelease()
+                                btManager.sendMouseReport(0, 0, 0, 0)
+                            },
+                        )
+                    },
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    text = label,
+                    color = Color.White.copy(alpha = 0.5f),
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.Bold,
+                )
+            }
+            if (index < buttons.lastIndex) {
+                Box(
+                    modifier = Modifier
+                        .width(1.dp)
+                        .fillMaxHeight()
+                        .background(Color.White.copy(alpha = 0.15f)),
+                )
             }
         }
     }
@@ -721,6 +922,7 @@ fun TouchGestureLayer(
     buttonMode: TrackpadButtonMode,
     triggerVibration: (Long) -> Unit,
     showNumpadLed: Boolean,
+    integratedButtons: Boolean = true,
     onPointerActivityChange: (Boolean) -> Unit = {},
 ) {
     // Tracking points and states for reliable swipe gesture translation
@@ -776,7 +978,7 @@ fun TouchGestureLayer(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .pointerInput(sensitivity, scrollSensitivity, buttonMode, showNumpadLed) {
+            .pointerInput(sensitivity, scrollSensitivity, buttonMode, showNumpadLed, integratedButtons) {
                 val tapSlopPx = TouchpadGesturePolicy.TAP_SLOP_DP.dp.toPx()
                 val doubleTapSlopPx = TouchpadGesturePolicy.DOUBLE_TAP_SLOP_DP.dp.toPx()
                 var reportedPointerActivity = false
@@ -882,7 +1084,7 @@ fun TouchGestureLayer(
                                 val height = size.height
                                 val width = size.width
 
-                                if (touchYVal > height * 0.82f) {
+                                if (integratedButtons && touchYVal > height * 0.82f) {
                                     triggerVibration(25)
                                     val btnMask = when (buttonMode) {
                                         TrackpadButtonMode.TWO_BUTTONS -> {
@@ -964,7 +1166,7 @@ fun TouchGestureLayer(
                                 } else if (downInfo != null) {
                                     val height = size.height
                                     val touchYStart = downInfo.second.y
-                                    if (touchYStart > height * 0.82f) {
+                                    if (integratedButtons && touchYStart > height * 0.82f) {
                                         // Started in button partition, release button
                                         activeMouseButton = 0
                                         btManager.sendMouseReport(0, 0, 0, 0)
@@ -1015,7 +1217,7 @@ fun TouchGestureLayer(
         Box(
             modifier = Modifier.fillMaxSize()
         ) {
-            if (buttonMode != TrackpadButtonMode.CLICKPAD) {
+            if (integratedButtons && buttonMode != TrackpadButtonMode.CLICKPAD) {
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()

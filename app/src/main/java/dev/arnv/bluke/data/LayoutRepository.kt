@@ -48,7 +48,7 @@ class LayoutRepository(context: Context) {
 
         val legacyValues = appContext.getSharedPreferences("app_prefs", Context.MODE_PRIVATE).all
             .filter { (key, value) ->
-                CONSOLE_PREFIXES.any(key::startsWith) && value is Float
+                LAYOUT_PREFIXES.any(key::startsWith) && value is Float
             }
         dataStore.edit { preferences ->
             legacyValues.forEach { (name, value) ->
@@ -60,6 +60,6 @@ class LayoutRepository(context: Context) {
 
     private companion object {
         val MIGRATION_COMPLETE = booleanPreferencesKey("legacy_layout_migrated")
-        val CONSOLE_PREFIXES = listOf("xbox_series_", "playstation_5_")
+        val LAYOUT_PREFIXES = listOf("xbox_series_", "playstation_5_", "touchpad_")
     }
 }
