@@ -18,7 +18,7 @@ Source reviewed: `Bluke Improvements.pdf` (13 pages). The document is treated as
 | IMP-02 | 1 | Reuse update notices for required actions | Keep the version-aware update dialog and give descriptor refresh its own explicit action copy. |
 | IMP-03 | 1 | Add novice-friendly FAQ/troubleshooting | Expand Help into connection, pairing repair, Steam/controller setup, browser/native D-pad behavior, and known limitations. |
 | IMP-04 | 1 | Add a one-time controller guide | Show an opt-out first-launch guide before opening Gamepad mode; Help remains the permanent entry point. |
-| IMP-05 | 1 | Context-aware troubleshooting nudges | Offer Help after repeated failed connection actions or a sustained unsuccessful attempt, without claiming a device is unsupported. |
+| IMP-05 | 1 | Context-aware troubleshooting nudges | Offer Help after three connection actions, a 12-second unsuccessful attempt, or four connection-state transitions within two minutes, without claiming a device is unsupported. |
 | IMP-06 | 2 | Material Expressive custom key sounds | Present sound packs as one connected list with a distinct selected state and a clear import action. |
 | IMP-07 | 3 | Material Expressive keyboard theme library | Use connected theme rows, section context instead of redundant labels, selected-container feedback, and distinct Create/Copy/Edit actions. |
 | IMP-08 | 4 | Remove D-pad jargon | Rename the choices to Native games and Browser games, with plain-language guidance. |
@@ -27,7 +27,7 @@ Source reviewed: `Bluke Improvements.pdf` (13 pages). The document is treated as
 | IMP-11 | 7 | Redesign quick-cycle configuration | Move cycle membership to a dedicated screen with connected sections for layouts, sounds, modes, themes, and case colors. Custom themes remain eligible. |
 | IMP-12 | 8 | Gate developer-only features | Keep developer controls unavailable when Developer Mode is off and clear active mock state when it is disabled. |
 | IMP-13 | 9 | Redesign keyboard theme editor | Use focused Material cards, concise copy, live preview, group/key targeting, and sticky save intent. |
-| IMP-14 | 9 | Replace RGB/hex-first editing | Add a visual hue/saturation/value picker; keep hex as an optional precise input. |
+| IMP-14 | 9 | Replace RGB/hex-first editing | Add a shared visual hue/saturation/value picker for keyboard themes and custom case colors; keep hex as an optional precise input. |
 | IMP-15 | 10 | Standardize keyboard legends | Base legend size on available key-top width instead of shrinking named modifier keys by character count alone. |
 | IMP-16 | 10 | Fn should transform F-key legends | Replace F1-F12 legends in place while Fn is held; remove the overlay that obscured the keyboard. |
 | IMP-17 | 10 | Standardize toolbar tap/hold | Tap cycles; long-press opens the relevant configuration for layout, sound, theme, D-pad behavior, mode, and case color where applicable. |

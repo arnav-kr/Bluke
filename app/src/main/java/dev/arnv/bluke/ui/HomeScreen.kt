@@ -9,6 +9,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.compose.rememberLauncherForActivityResult
 import android.content.pm.ActivityInfo
 import android.os.Build
+import android.os.SystemClock
 import android.view.View
 import androidx.compose.animation.*
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -186,6 +187,8 @@ fun HomeScreen(
     var showGamepadGuide by rememberSaveable { mutableStateOf(false) }
     var connectionAttempts by rememberSaveable { mutableIntStateOf(0) }
     var showTroubleshootingNudge by rememberSaveable { mutableStateOf(false) }
+    var previousConnectionState by remember { mutableStateOf<Boolean?>(null) }
+    var connectionTransitions by remember { mutableStateOf(emptyList<Long>()) }
 
     LaunchedEffect(devModeRefreshTrigger) {
         if (sharedPrefs.getBoolean("is_developer_mode", false)) {
@@ -276,9 +279,24 @@ fun HomeScreen(
     val isConnected = btState is BluetoothState.Connected
 
     LaunchedEffect(isConnected) {
+        val previousState = previousConnectionState
+        if (previousState != null && previousState != isConnected) {
+            val now = SystemClock.elapsedRealtime()
+            connectionTransitions = (connectionTransitions + now).filter {
+                now - it <= CONNECTION_HELP_CHURN_WINDOW_MILLIS
+            }
+            if (
+                shouldOfferConnectionHelp(
+                    transitionTimestamps = connectionTransitions,
+                    nowMillis = now,
+                )
+            ) {
+                showTroubleshootingNudge = true
+            }
+        }
+        previousConnectionState = isConnected
         if (isConnected) {
             connectionAttempts = 0
-            showTroubleshootingNudge = false
         }
     }
 
@@ -287,8 +305,10 @@ fun HomeScreen(
             btMessage.contains("pairing", ignoreCase = true) ||
             btMessage.contains("switching", ignoreCase = true)
         if (!isConnected && attemptInProgress) {
-            kotlinx.coroutines.delay(12_000L)
-            showTroubleshootingNudge = true
+            kotlinx.coroutines.delay(CONNECTION_HELP_STALL_MILLIS)
+            if (shouldOfferConnectionHelp(stalledForMillis = CONNECTION_HELP_STALL_MILLIS)) {
+                showTroubleshootingNudge = true
+            }
         }
     }
 
@@ -1183,7 +1203,9 @@ fun HomeScreen(
                                 onDiscoveredExpandedChange = { isDiscoveredExpanded = it },
                                 onConnect = { device ->
                                     connectionAttempts += 1
-                                    if (connectionAttempts >= 3) showTroubleshootingNudge = true
+                                    if (shouldOfferConnectionHelp(connectionAttempts = connectionAttempts)) {
+                                        showTroubleshootingNudge = true
+                                    }
                                     btManager.connectDevice(device)
                                 },
                                 onDisconnect = btManager::disconnectDevice
