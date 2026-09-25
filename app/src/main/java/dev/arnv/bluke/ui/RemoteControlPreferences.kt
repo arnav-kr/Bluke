@@ -7,14 +7,14 @@ enum class TouchpadModifierPosition(val preferenceValue: String, val displayName
     OFF("off", "Modifiers off"),
     LEFT("left", "Modifiers left"),
     RIGHT("right", "Modifiers right"),
-    BOTH("both", "Modifiers both"),
     ;
 
     fun next(): TouchpadModifierPosition = entries[(ordinal + 1) % entries.size]
 
     companion object {
         fun fromPreference(value: String?): TouchpadModifierPosition =
-            entries.firstOrNull { it.preferenceValue == value } ?: OFF
+            if (value == "both") LEFT
+            else entries.firstOrNull { it.preferenceValue == value } ?: OFF
     }
 }
 

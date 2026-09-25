@@ -471,16 +471,29 @@ fun TouchpadView(
             }
 
             // 2. Large Glass-like Centered Touchpad Surface
-            Box(
+            Row(
                 modifier = Modifier
                     .weight(1f)
                     .fillMaxWidth()
-                    .padding(horizontal = 24.dp, vertical = 12.dp)
+                    .padding(horizontal = 24.dp, vertical = 12.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                verticalAlignment = Alignment.CenterVertically,
             ) {
+                if (modifierPosition == TouchpadModifierPosition.LEFT) {
+                    TouchpadModifierRail(
+                        modifier = Modifier.width(60.dp).fillMaxHeight(),
+                        rightHandKeys = false,
+                        theme = keyboardTheme,
+                        btManager = btManager,
+                        triggerVibration = triggerVibration,
+                    )
+                }
+
                 // Glass panel plate backing container with high-end polished styling
                 Box(
                     modifier = Modifier
-                        .fillMaxSize()
+                        .weight(1f)
+                        .fillMaxHeight()
                         .shadow(
                             elevation = 4.dp,
                             shape = RoundedCornerShape(10.dp),
@@ -503,25 +516,6 @@ fun TouchpadView(
                         showNumpadLed = showNumpadLed,
                     )
 
-                    if (modifierPosition == TouchpadModifierPosition.LEFT || modifierPosition == TouchpadModifierPosition.BOTH) {
-                        TouchpadModifierStrip(
-                            side = Modifier.align(Alignment.TopStart),
-                            rightHandKeys = false,
-                            theme = keyboardTheme,
-                            btManager = btManager,
-                            triggerVibration = triggerVibration,
-                        )
-                    }
-                    if (modifierPosition == TouchpadModifierPosition.RIGHT || modifierPosition == TouchpadModifierPosition.BOTH) {
-                        TouchpadModifierStrip(
-                            side = Modifier.align(Alignment.TopEnd),
-                            rightHandKeys = true,
-                            theme = keyboardTheme,
-                            btManager = btManager,
-                            triggerVibration = triggerVibration,
-                        )
-                    }
-
                     // Asus-Style backlit LED number keyboard overlay (absolutely drawn over the trackpad background area)
                     androidx.compose.animation.AnimatedVisibility(
                         visible = showNumpadLed,
@@ -538,14 +532,24 @@ fun TouchpadView(
                             }
                     }
                 }
+
+                if (modifierPosition == TouchpadModifierPosition.RIGHT) {
+                    TouchpadModifierRail(
+                        modifier = Modifier.width(60.dp).fillMaxHeight(),
+                        rightHandKeys = true,
+                        theme = keyboardTheme,
+                        btManager = btManager,
+                        triggerVibration = triggerVibration,
+                    )
+                }
             }
         }
     }
 }
 
 @Composable
-private fun TouchpadModifierStrip(
-    side: Modifier,
+private fun TouchpadModifierRail(
+    modifier: Modifier,
     rightHandKeys: Boolean,
     theme: KeyboardThemeDefinition,
     btManager: BluetoothKeyboardManager,
@@ -556,9 +560,10 @@ private fun TouchpadModifierStrip(
     } else {
         listOf("Ctrl" to 0xE0, "Shift" to 0xE1, "Alt" to 0xE2, "Meta" to 0xE3)
     }
-    Row(
-        modifier = side.padding(12.dp),
-        horizontalArrangement = Arrangement.spacedBy(3.dp),
+    Column(
+        modifier = modifier,
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         keys.forEach { (label, keyCode) ->
             MechanicalModifierKey(
@@ -589,13 +594,13 @@ private fun MechanicalModifierKey(
     KeyCap(
         legend = label,
         shiftedLegend = "",
-        width = 50.dp,
-        height = 38.dp,
+        width = 56.dp,
+        height = 56.dp,
         isPressed = isPressed,
         keyBgColor = Color(style.backgroundArgb),
         legendColor = Color(style.legendArgb),
         legendScale = style.legendScale,
-        baseUnitWidth = 46.dp,
+        baseUnitWidth = 56.dp,
         modifier = Modifier.pointerInput(keyCode) {
             detectTapGestures(
                 onPress = {

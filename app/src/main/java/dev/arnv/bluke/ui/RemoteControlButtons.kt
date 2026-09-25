@@ -7,13 +7,16 @@ import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -44,11 +47,13 @@ internal fun ConsumerButton(
     control: ConsumerControl,
     btManager: BluetoothKeyboardManager,
     modifier: Modifier,
+    fillHeight: Boolean = false,
 ) {
     RemoteHoldButton(
         label = label,
         icon = icon,
         modifier = modifier,
+        fillHeight = fillHeight,
         onPressedChange = { pressed -> btManager.sendConsumerControl(if (pressed) control else null) },
     )
 }
@@ -59,11 +64,13 @@ internal fun KeyboardButton(
     keyCode: Int,
     btManager: BluetoothKeyboardManager,
     modifier: Modifier,
+    fillHeight: Boolean = false,
 ) {
     RemoteHoldButton(
         label = label,
         icon = null,
         modifier = modifier,
+        fillHeight = fillHeight,
         onPressedChange = { pressed -> btManager.sendKey(keyCode, pressed) },
     )
 }
@@ -73,14 +80,20 @@ internal fun RemoteHoldButton(
     label: String,
     icon: ImageVector?,
     modifier: Modifier,
+    fillHeight: Boolean = false,
+    showLabel: Boolean = true,
+    containerColor: Color? = null,
+    contentColor: Color? = null,
     onPressedChange: (Boolean) -> Unit,
 ) {
     val currentPressHandler by rememberUpdatedState(onPressedChange)
+    val resolvedContainerColor = containerColor ?: MaterialTheme.colorScheme.secondaryContainer
+    val resolvedContentColor = contentColor ?: MaterialTheme.colorScheme.onSecondaryContainer
     Column(
         modifier = modifier
-            .height(62.dp)
+            .then(if (fillHeight) Modifier.fillMaxHeight() else Modifier.height(62.dp))
             .clip(RoundedCornerShape(16.dp))
-            .background(MaterialTheme.colorScheme.secondaryContainer)
+            .background(resolvedContainerColor)
             .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(16.dp))
             .semantics {
                 contentDescription = label
@@ -106,14 +119,69 @@ internal fun RemoteHoldButton(
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        if (icon != null) Icon(icon, null, modifier = Modifier.size(20.dp))
-        Text(
-            label,
-            style = MaterialTheme.typography.labelMedium,
-            fontWeight = FontWeight.SemiBold,
-            maxLines = 1,
-            overflow = TextOverflow.Ellipsis,
-        )
+        if (icon != null) Icon(icon, null, tint = resolvedContentColor, modifier = Modifier.size(20.dp))
+        if (showLabel) {
+            Text(
+                label,
+                style = MaterialTheme.typography.labelMedium,
+                fontWeight = FontWeight.SemiBold,
+                color = resolvedContentColor,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+    }
+}
+
+@Composable
+internal fun RemoteIconHoldButton(
+    label: String,
+    icon: ImageVector,
+    modifier: Modifier = Modifier,
+    emphasized: Boolean = false,
+    containerColor: Color? = null,
+    contentColor: Color? = null,
+    onPressedChange: (Boolean) -> Unit,
+) {
+    val currentPressHandler by rememberUpdatedState(onPressedChange)
+    val resolvedContainerColor = containerColor ?: if (emphasized) {
+        MaterialTheme.colorScheme.primary
+    } else {
+        MaterialTheme.colorScheme.surfaceContainerHighest
+    }
+    val resolvedContentColor = contentColor ?: if (emphasized) {
+        MaterialTheme.colorScheme.onPrimary
+    } else {
+        MaterialTheme.colorScheme.onSurfaceVariant
+    }
+    Box(
+        modifier = modifier
+            .clip(CircleShape)
+            .background(resolvedContainerColor)
+            .semantics {
+                contentDescription = label
+                role = Role.Button
+                onClick {
+                    currentPressHandler(true)
+                    currentPressHandler(false)
+                    true
+                }
+            }
+            .pointerInput(Unit) {
+                detectTapGestures(
+                    onPress = {
+                        currentPressHandler(true)
+                        try {
+                            tryAwaitRelease()
+                        } finally {
+                            currentPressHandler(false)
+                        }
+                    },
+                )
+            },
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(icon, contentDescription = null, tint = resolvedContentColor, modifier = Modifier.size(24.dp))
     }
 }
 
