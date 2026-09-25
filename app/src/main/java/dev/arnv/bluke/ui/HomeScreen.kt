@@ -521,7 +521,7 @@ fun HomeScreen(
                                 )
                             }
                             4 -> {
-                                MouseView(
+                                MediaPresentationView(
                                     btManager = btManager,
                                     onClose = { isKeyboardActive = false },
                                     launchMode = launchMode,
@@ -1143,7 +1143,7 @@ fun HomeScreen(
                                     1 -> Icons.Default.Mouse
                                     2 -> Icons.Default.SportsEsports
                                     3 -> Icons.Default.Keyboard
-                                    4 -> Icons.Default.ScreenRotation
+                                    4 -> Icons.Default.Slideshow
                                     else -> Icons.Default.Keyboard
                                 }
                                 Icon(
@@ -1170,7 +1170,7 @@ fun HomeScreen(
                                     1 -> "Launch Touchpad"
                                     2 -> "Launch Gamepad"
                                     3 -> "Launch Keyboard + Touchpad"
-                                    4 -> "Launch Mouse"
+                                    4 -> "Launch Media + Presentation"
                                     else -> "Launch Keyboard"
                                 }
                                 Icon(

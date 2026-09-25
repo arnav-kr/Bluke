@@ -2,6 +2,7 @@ package dev.arnv.bluke
 
 import android.os.Build
 import android.os.Bundle
+import android.view.KeyEvent
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -13,9 +14,14 @@ import dev.arnv.bluke.data.migrateKeyboardCustomizationPreferences
 import dev.arnv.bluke.ui.theme.MyApplicationTheme
 import dev.arnv.bluke.ui.HomeScreen
 
-class MainActivity : ComponentActivity() {
+interface RemoteVolumeKeyHost {
+    fun setRemoteVolumeKeyHandler(handler: ((keyCode: Int, isPressed: Boolean) -> Unit)?)
+}
+
+class MainActivity : ComponentActivity(), RemoteVolumeKeyHost {
     private lateinit var btManager: BluetoothKeyboardManager
     private lateinit var soundSynth: KeyboardSoundSynthesizer
+    private var remoteVolumeKeyHandler: ((keyCode: Int, isPressed: Boolean) -> Unit)? = null
 
     private val permissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
@@ -78,7 +84,38 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean {
+        val handler = remoteVolumeKeyHandler
+        val isVolumeKey = keyCode == KeyEvent.KEYCODE_VOLUME_UP ||
+            keyCode == KeyEvent.KEYCODE_VOLUME_DOWN
+        if (handler != null && isVolumeKey) {
+            if (event.repeatCount == 0) {
+                handler(keyCode, true)
+            }
+            return true
+        }
+        return super.onKeyDown(keyCode, event)
+    }
+
+    override fun onKeyUp(keyCode: Int, event: KeyEvent): Boolean {
+        val handler = remoteVolumeKeyHandler
+        val isVolumeKey = keyCode == KeyEvent.KEYCODE_VOLUME_UP ||
+            keyCode == KeyEvent.KEYCODE_VOLUME_DOWN
+        if (handler != null && isVolumeKey) {
+            handler(keyCode, false)
+            return true
+        }
+        return super.onKeyUp(keyCode, event)
+    }
+
+    override fun setRemoteVolumeKeyHandler(
+        handler: ((keyCode: Int, isPressed: Boolean) -> Unit)?,
+    ) {
+        remoteVolumeKeyHandler = handler
+    }
+
     override fun onDestroy() {
+        remoteVolumeKeyHandler = null
         super.onDestroy()
         if (::soundSynth.isInitialized) {
             soundSynth.release()

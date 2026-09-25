@@ -14,7 +14,7 @@ enum class InputMode(
     TOUCHPAD(1, "touchpad", "Touchpad"),
     GAMEPAD(2, "gamepad", "Gamepad"),
     KEYBOARD_TOUCHPAD(3, "keyboard_touchpad", "Keyboard + Touchpad"),
-    MOUSE(4, "mouse", "Mouse"),
+    MEDIA_PRESENTATION(4, "media_presentation", "Media + Presentation"),
     ;
 
     companion object {
@@ -23,12 +23,15 @@ enum class InputMode(
 }
 
 private val legacyDefaultModeKeys = setOf("keyboard", "touchpad", "gamepad")
+private const val REMOVED_MOUSE_MODE_KEY = "mouse"
 val defaultInputModeKeys: Set<String> = InputMode.entries.mapTo(linkedSetOf()) { it.preferenceKey }
 
 fun normalizeInputModeKeys(savedKeys: Set<String>?): Set<String> {
     val normalized = when {
         savedKeys == null || savedKeys == legacyDefaultModeKeys -> defaultInputModeKeys
-        else -> savedKeys.filterTo(linkedSetOf()) { key ->
+        else -> savedKeys.mapTo(linkedSetOf()) { key ->
+            if (key == REMOVED_MOUSE_MODE_KEY) InputMode.MEDIA_PRESENTATION.preferenceKey else key
+        }.filterTo(linkedSetOf()) { key ->
             InputMode.entries.any { it.preferenceKey == key }
         }
     }

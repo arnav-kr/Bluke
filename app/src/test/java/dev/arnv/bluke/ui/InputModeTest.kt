@@ -11,7 +11,7 @@ class InputModeTest {
 
         assertEquals(defaultInputModeKeys, normalized)
         assertTrue(normalized.contains(InputMode.KEYBOARD_TOUCHPAD.preferenceKey))
-        assertTrue(normalized.contains(InputMode.MOUSE.preferenceKey))
+        assertTrue(normalized.contains(InputMode.MEDIA_PRESENTATION.preferenceKey))
     }
 
     @Test
@@ -25,5 +25,13 @@ class InputModeTest {
     @Test
     fun invalidOrEmptySelectionFallsBackToKeyboard() {
         assertEquals(setOf("keyboard"), normalizeInputModeKeys(setOf("future_mode")))
+    }
+
+    @Test
+    fun removedMouseModeMigratesToMediaPresentation() {
+        assertEquals(
+            setOf("keyboard", "media_presentation"),
+            normalizeInputModeKeys(setOf("keyboard", "mouse")),
+        )
     }
 }
