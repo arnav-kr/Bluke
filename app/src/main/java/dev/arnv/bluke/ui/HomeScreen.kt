@@ -17,8 +17,10 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -998,8 +1000,8 @@ fun HomeScreen(
                             if (isFnActive) {
                                 Box(
                                     modifier = Modifier
-                                        .align(Alignment.TopCenter)
-                                        .padding(top = 8.dp),
+                                        .align(Alignment.BottomCenter)
+                                        .padding(bottom = 4.dp),
                                 ) {
                                     FnShortcutOverlay()
                                 }
@@ -1196,51 +1198,47 @@ fun HomeScreen(
 }
 
 @Composable
-@OptIn(ExperimentalLayoutApi::class)
 internal fun FnShortcutOverlay() {
     Surface(
+        modifier = Modifier.fillMaxWidth(0.96f),
         color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.96f),
         contentColor = MaterialTheme.colorScheme.onSurface,
-        shape = RoundedCornerShape(20.dp),
+        shape = RoundedCornerShape(14.dp),
         tonalElevation = 6.dp,
         shadowElevation = 8.dp,
     ) {
-        Column(
-            modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.spacedBy(8.dp),
+        Row(
+            modifier = Modifier
+                .horizontalScroll(rememberScrollState())
+                .padding(horizontal = 10.dp, vertical = 6.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             Text(
-                text = "Fn shortcuts",
-                style = MaterialTheme.typography.titleSmall,
+                text = "Fn",
+                style = MaterialTheme.typography.labelLarge,
                 fontWeight = FontWeight.Bold,
             )
-            FlowRow(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalArrangement = Arrangement.spacedBy(6.dp),
-                maxItemsInEachRow = 5,
-            ) {
-                ConsumerControl.entries.forEach { control ->
-                    Surface(
-                        color = MaterialTheme.colorScheme.secondaryContainer,
-                        contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
-                        shape = RoundedCornerShape(12.dp),
+            ConsumerControl.entries.forEach { control ->
+                Surface(
+                    color = MaterialTheme.colorScheme.secondaryContainer,
+                    contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+                    shape = RoundedCornerShape(10.dp),
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
                     ) {
-                        Row(
-                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(6.dp),
-                        ) {
-                            Text(
-                                text = control.shortcutLabel,
-                                style = MaterialTheme.typography.labelLarge,
-                                fontWeight = FontWeight.Bold,
-                            )
-                            Text(
-                                text = control.actionLabel,
-                                style = MaterialTheme.typography.labelMedium,
-                            )
-                        }
+                        Text(
+                            text = control.shortcutLabel,
+                            style = MaterialTheme.typography.labelMedium,
+                            fontWeight = FontWeight.Bold,
+                        )
+                        Text(
+                            text = control.actionLabel,
+                            style = MaterialTheme.typography.labelSmall,
+                        )
                     }
                 }
             }
