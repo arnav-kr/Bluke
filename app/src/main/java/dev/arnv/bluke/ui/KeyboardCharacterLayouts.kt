@@ -7,9 +7,9 @@ enum class KeyboardCharacterLayout(
     val displayName: String,
     val hostLayoutName: String,
 ) {
-    US_QWERTY("us_qwerty", "US QWERTY", "English (US)"),
-    FRENCH_AZERTY("fr_azerty", "French AZERTY", "French"),
-    GERMAN_QWERTZ("de_qwertz", "German QWERTZ", "German"),
+    US_QWERTY("us_qwerty", "QWERTY", "English (US)"),
+    FRENCH_AZERTY("fr_azerty", "AZERTY", "French"),
+    GERMAN_QWERTZ("de_qwertz", "QWERTZ", "German"),
     DVORAK("dvorak", "Dvorak", "Dvorak"),
     COLEMAK("colemak", "Colemak", "Colemak");
 

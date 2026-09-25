@@ -16,9 +16,10 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.BluetoothConnected
 import androidx.compose.material.icons.filled.Gamepad
+import androidx.compose.material.icons.filled.FilterAltOff
+import androidx.compose.material.icons.filled.Fingerprint
 import androidx.compose.material.icons.filled.Keyboard
 import androidx.compose.material.icons.filled.MusicNote
-import androidx.compose.material.icons.filled.PhoneAndroid
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material.icons.filled.Warning
@@ -191,7 +192,7 @@ class BehaviorActivity : ComponentActivity() {
                                 SettingsItemData(
                                     title = "Hide unlikely hosts",
                                     subtitle = "Filter scan results that do not appear able to accept keyboard input",
-                                    icon = { Icon(Icons.Default.PhoneAndroid, null, tint = MaterialTheme.colorScheme.primary) },
+                                    icon = { Icon(Icons.Default.FilterAltOff, null, tint = MaterialTheme.colorScheme.primary) },
                                     action = {
                                         Switch(hideUnsupportedDevices, { value ->
                                             hideUnsupportedDevices = value
@@ -202,7 +203,7 @@ class BehaviorActivity : ComponentActivity() {
                                 SettingsItemData(
                                     title = "Show device addresses",
                                     subtitle = "Useful when similarly named Bluetooth devices are nearby",
-                                    icon = { Icon(Icons.Default.PhoneAndroid, null, tint = MaterialTheme.colorScheme.primary) },
+                                    icon = { Icon(Icons.Default.Fingerprint, null, tint = MaterialTheme.colorScheme.primary) },
                                     action = {
                                         Switch(showMacAddress, { value ->
                                             showMacAddress = value
