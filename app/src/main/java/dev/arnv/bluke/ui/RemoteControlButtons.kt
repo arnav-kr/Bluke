@@ -27,6 +27,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.semantics.Role
@@ -37,6 +38,7 @@ import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.Dp
 import dev.arnv.bluke.bluetooth.BluetoothKeyboardManager
 import dev.arnv.bluke.bluetooth.ConsumerControl
 
@@ -82,6 +84,9 @@ internal fun RemoteHoldButton(
     modifier: Modifier,
     fillHeight: Boolean = false,
     showLabel: Boolean = true,
+    contentRotation: Float = 0f,
+    cornerRadius: Dp = 16.dp,
+    showBorder: Boolean = true,
     containerColor: Color? = null,
     contentColor: Color? = null,
     onPressedChange: (Boolean) -> Unit,
@@ -92,9 +97,19 @@ internal fun RemoteHoldButton(
     Column(
         modifier = modifier
             .then(if (fillHeight) Modifier.fillMaxHeight() else Modifier.height(62.dp))
-            .clip(RoundedCornerShape(16.dp))
+            .clip(RoundedCornerShape(cornerRadius))
             .background(resolvedContainerColor)
-            .border(1.dp, MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(16.dp))
+            .then(
+                if (showBorder) {
+                    Modifier.border(
+                        1.dp,
+                        MaterialTheme.colorScheme.outlineVariant,
+                        RoundedCornerShape(cornerRadius),
+                    )
+                } else {
+                    Modifier
+                },
+            )
             .semantics {
                 contentDescription = label
                 role = Role.Button
@@ -119,10 +134,20 @@ internal fun RemoteHoldButton(
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        if (icon != null) Icon(icon, null, tint = resolvedContentColor, modifier = Modifier.size(20.dp))
+        if (icon != null) {
+            Icon(
+                icon,
+                null,
+                tint = resolvedContentColor,
+                modifier = Modifier
+                    .size(20.dp)
+                    .graphicsLayer { rotationZ = contentRotation },
+            )
+        }
         if (showLabel) {
             Text(
                 label,
+                modifier = Modifier.graphicsLayer { rotationZ = contentRotation },
                 style = MaterialTheme.typography.labelMedium,
                 fontWeight = FontWeight.SemiBold,
                 color = resolvedContentColor,

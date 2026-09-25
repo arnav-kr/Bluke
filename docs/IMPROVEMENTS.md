@@ -36,7 +36,7 @@ Source reviewed: `Bluke Improvements.pdf` (13 pages). The document is treated as
 | IMP-20 | 12 | Style touchpad modifiers like keys | Add a mechanical-key modifier strip using the active keyboard theme. |
 | IMP-21 | 12 | Modifier strip position control | Cycle Off, Left, and Right from the touchpad toolbar and persist the choice. The retired duplicate-bank Both value migrates to Left. |
 | IMP-22 | 12 | Add slower pointer/scroll speeds | Extend both cycles with 0.25x and 0.5x while preserving existing user values. |
-| IMP-23 | 13 | Cohesive adaptive media/presentation remote | Use one responsive surface with playback, slides, and touchpad; adapt to available width and move phone-volume-button control to Settings, disabled by default. |
+| IMP-23 | 13 | Cohesive adaptive Multimedia remote | Use one responsive surface with playback, slides, and touchpad; adapt to the phone's physical posture and move phone-volume-button control to Settings, disabled by default. |
 
 ## Verification targets
 
@@ -54,7 +54,7 @@ Source reviewed: `Bluke Improvements.pdf` (13 pages). The document is treated as
 
 | ID | Feedback | Resolution |
 |---|---|---|
-| UX-01 | Media/Presentation felt dense and divided into artificial sections | Rebuilt it around one dominant touchpad, a dedicated previous/next rail, one media transport dock, and an in-place secondary presentation-tools dock. |
+| UX-01 | The former Media + Presentation mode felt dense and divided into artificial sections | Renamed it Multimedia and rebuilt it as a borderless control deck matching the supplied landscape and upright references, with posture-aware control rotation and an upright edge toolbar. |
 | UX-02 | Touchpad modifiers obscured the gesture surface and Both duplicated every key | Moved one full-height bank of square modifier keys into a dedicated left or right rail; enabling it reduces the touchpad width instead of drawing over it. |
 | UX-03 | Sound-pack hit target ignored the rounded card shape | Use Material's clickable `Surface` so clipping, ripple, and interaction shape share the same rounded outline. |
 | UX-04 | Import loader looked malformed and the action lacked hierarchy | Moved import to an extended FAB with a bounded 20 dp progress indicator and Snackbar result feedback. |
@@ -62,3 +62,4 @@ Source reviewed: `Bluke Improvements.pdf` (13 pages). The document is treated as
 | UX-06 | Typing layout choices repeated country names | Shortened visible choices to QWERTY, AZERTY, QWERTZ, Dvorak, and Colemak while retaining host-layout metadata internally. |
 | UX-07 | Host filtering and device address used the same icon | Assigned distinct filter-off and fingerprint icons. |
 | UX-08 | The non-metallic Black case appeared as a gray-black gradient | Render non-metallic case colors as their exact solid color; reserve gradients for metallic finishes. |
+| UX-09 | Upright controls and pointer surface had mismatched widths and off-center margins | Give the control and pointer decks equal width, center the complete upright composition, and distribute the added width across buttons and gaps. |

@@ -14,7 +14,7 @@ enum class InputMode(
     TOUCHPAD(1, "touchpad", "Touchpad"),
     GAMEPAD(2, "gamepad", "Gamepad"),
     KEYBOARD_TOUCHPAD(3, "keyboard_touchpad", "Keyboard + Touchpad"),
-    MEDIA_PRESENTATION(4, "media_presentation", "Media + Presentation"),
+    MEDIA_PRESENTATION(4, "media_presentation", "Multimedia"),
     ;
 
     companion object {

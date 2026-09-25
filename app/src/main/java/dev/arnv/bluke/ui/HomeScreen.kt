@@ -613,7 +613,6 @@ fun HomeScreen(
                                         sharedPrefs.edit { putInt("launch_mode", newMode) }
                                     },
                                     sharedPrefs = sharedPrefs,
-                                    caseBrush = caseBrush,
                                     isConnected = isConnected,
                                 )
                             }
@@ -1282,7 +1281,7 @@ fun HomeScreen(
                                     1 -> "Launch Touchpad"
                                     2 -> "Launch Gamepad"
                                     3 -> "Launch Keyboard + Touchpad"
-                                    4 -> "Launch Media + Presentation"
+                                    4 -> "Launch Multimedia"
                                     else -> "Launch Keyboard"
                                 }
                                 Icon(

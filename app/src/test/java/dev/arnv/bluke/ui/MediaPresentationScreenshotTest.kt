@@ -3,9 +3,7 @@ package dev.arnv.bluke.ui
 import android.content.Context
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.test.junit4.createComposeRule
-import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onRoot
-import androidx.compose.ui.test.performClick
 import androidx.test.core.app.ApplicationProvider
 import com.github.takahirom.roborazzi.captureRoboImage
 import dev.arnv.bluke.bluetooth.BluetoothKeyboardManager
@@ -34,8 +32,8 @@ class MediaPresentationScreenshotTest {
     }
 
     @Test
-    fun mediaPresentationUsesOnePrimaryControlSurface() {
-        val preferences = context.getSharedPreferences("media-presentation-screenshot", Context.MODE_PRIVATE)
+    fun multimediaMatchesLandscapeControlLayout() {
+        val preferences = context.getSharedPreferences("multimedia-landscape-screenshot", Context.MODE_PRIVATE)
         composeTestRule.setContent {
             MyApplicationTheme {
                 MediaPresentationView(
@@ -44,19 +42,36 @@ class MediaPresentationScreenshotTest {
                     launchMode = InputMode.MEDIA_PRESENTATION.id,
                     onModeChange = {},
                     sharedPrefs = preferences,
-                    caseBrush = SolidColor(CaseColor.BLACK.caseColor),
-                    isConnected = true,
+                    isConnected = false,
+                    postureOverride = MultimediaPosture.LANDSCAPE,
                 )
             }
         }
 
         composeTestRule.onRoot().captureRoboImage(
-            filePath = "src/test/screenshots/media-presentation.png",
+            filePath = "src/test/screenshots/multimedia-landscape.png",
         )
+    }
 
-        composeTestRule.onNodeWithContentDescription("Show presentation tools").performClick()
+    @Test
+    fun multimediaMatchesUprightControlLayout() {
+        val preferences = context.getSharedPreferences("multimedia-upright-screenshot", Context.MODE_PRIVATE)
+        composeTestRule.setContent {
+            MyApplicationTheme {
+                MediaPresentationView(
+                    btManager = manager,
+                    onClose = {},
+                    launchMode = InputMode.MEDIA_PRESENTATION.id,
+                    onModeChange = {},
+                    sharedPrefs = preferences,
+                    isConnected = false,
+                    postureOverride = MultimediaPosture.PORTRAIT_HELD,
+                )
+            }
+        }
+
         composeTestRule.onRoot().captureRoboImage(
-            filePath = "src/test/screenshots/media-presentation-tools.png",
+            filePath = "src/test/screenshots/multimedia-upright.png",
         )
     }
 
