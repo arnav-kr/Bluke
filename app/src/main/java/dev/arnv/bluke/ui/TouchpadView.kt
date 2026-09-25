@@ -3,6 +3,7 @@ package dev.arnv.bluke.ui
 import android.annotation.SuppressLint
 import android.content.Context
 import android.content.SharedPreferences
+import android.content.Intent
 import android.os.VibrationEffect
 import android.os.Vibrator
 import androidx.compose.animation.*
@@ -11,8 +12,10 @@ import androidx.compose.animation.core.tween
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.Spring
 import androidx.compose.foundation.background
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
@@ -43,6 +46,8 @@ import dev.arnv.bluke.bluetooth.BluetoothKeyboardManager
 import androidx.compose.ui.res.painterResource
 import androidx.core.content.edit
 import dev.arnv.bluke.R
+import dev.arnv.bluke.QuickCycleActivity
+import dev.arnv.bluke.data.KeyboardThemeRepository
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 
@@ -53,7 +58,7 @@ enum class TrackpadButtonMode(val displayName: String) {
 }
 
 @SuppressLint("MissingPermission")
-@OptIn(ExperimentalComposeUiApi::class)
+@OptIn(ExperimentalComposeUiApi::class, ExperimentalFoundationApi::class)
 @Composable
 fun TouchpadView(
     btManager: BluetoothKeyboardManager,
@@ -80,6 +85,14 @@ fun TouchpadView(
     var scrollSensitivity by remember {
         mutableFloatStateOf(sharedPrefs.getFloat("touchpad_scroll_sensitivity", 1.0f))
     }
+    var modifierPosition by remember {
+        mutableStateOf(
+            TouchpadModifierPosition.fromPreference(
+                sharedPrefs.getString(TOUCHPAD_MODIFIER_POSITION_PREFERENCE, null),
+            ),
+        )
+    }
+    val keyboardTheme = remember(context) { KeyboardThemeRepository(context).selectedTheme() }
     // Haptic buzz function using Android's Vibrator
     @Suppress("DEPRECATION")
     val triggerVibration = { milliseconds: Long ->
@@ -166,14 +179,21 @@ fun TouchpadView(
                             .height(28.dp)
                             .clip(RoundedCornerShape(6.dp))
                             .background(Color.White.copy(alpha = 0.15f))
-                            .clickable {
-                                val enabledModes = sharedPrefs.enabledInputModes().map(InputMode::id)
-                                val currentIndexInEnabled = enabledModes.indexOf(launchMode)
-                                val nextIndex = (currentIndexInEnabled + 1) % enabledModes.size
-                                val nextMode = enabledModes[nextIndex]
-                                onModeChange(nextMode)
-                                triggerVibration(25)
-                            }
+                            .combinedClickable(
+                                onClickLabel = "Next input mode",
+                                onLongClickLabel = "Configure input mode cycle",
+                                onClick = {
+                                    val enabledModes = sharedPrefs.enabledInputModes().map(InputMode::id)
+                                    val currentIndexInEnabled = enabledModes.indexOf(launchMode)
+                                    val nextIndex = (currentIndexInEnabled + 1) % enabledModes.size
+                                    val nextMode = enabledModes[nextIndex]
+                                    onModeChange(nextMode)
+                                    triggerVibration(25)
+                                },
+                                onLongClick = {
+                                    context.startActivity(Intent(context, QuickCycleActivity::class.java))
+                                },
+                            )
                             .padding(horizontal = 8.dp)
                             .testTag("touchpad_mode_cycle_btn"),
                         verticalAlignment = Alignment.CenterVertically,
@@ -211,13 +231,6 @@ fun TouchpadView(
                         fontWeight = FontWeight.Bold,
                         fontFamily = FontFamily.SansSerif
                     )
-                    Text(
-                        text = if (isConnected) "[connected]" else "[offline]",
-                        color = Color.White.copy(alpha = 0.5f),
-                        fontSize = 9.sp,
-                        fontWeight = FontWeight.Normal,
-                        fontFamily = FontFamily.SansSerif
-                    )
                 }
 
                 // Right side configurations: Trackpad Button layout, Numpad LED toggle, Case Color, Sensitivity, Vibration haptics
@@ -225,6 +238,35 @@ fun TouchpadView(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
+                    Row(
+                        modifier = Modifier
+                            .height(28.dp)
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(Color.White.copy(alpha = 0.15f))
+                            .clickable {
+                                modifierPosition = modifierPosition.next()
+                                sharedPrefs.edit {
+                                    putString(
+                                        TOUCHPAD_MODIFIER_POSITION_PREFERENCE,
+                                        modifierPosition.preferenceValue,
+                                    )
+                                }
+                                triggerVibration(15)
+                            }
+                            .padding(horizontal = 8.dp)
+                            .testTag("touchpad_modifier_position"),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
+                        Icon(Icons.Default.Keyboard, "Modifier key position", tint = Color.White, modifier = Modifier.size(12.dp))
+                        Text(
+                            modifierPosition.displayName,
+                            color = Color.White,
+                            fontSize = 9.sp,
+                            fontWeight = FontWeight.Bold,
+                        )
+                    }
+
                     Row(
                         modifier = Modifier
                             .height(28.dp)
@@ -299,13 +341,7 @@ fun TouchpadView(
                             .clip(RoundedCornerShape(6.dp))
                             .background(Color.White.copy(alpha = 0.15f))
                             .clickable {
-                                var currentSens = sensitivity
-                                currentSens = when {
-                                    currentSens <= 1.0f -> 1.5f
-                                    currentSens <= 1.5f -> 2.0f
-                                    currentSens <= 2.0f -> 2.5f
-                                    else -> 1.0f
-                                }
+                                val currentSens = nextTouchpadSpeed(sensitivity)
                                 sensitivity = currentSens
                                 sharedPrefs.edit { putFloat("touchpad_sensitivity", currentSens) }
                                 triggerVibration(15)
@@ -335,13 +371,7 @@ fun TouchpadView(
                             .clip(RoundedCornerShape(6.dp))
                             .background(Color.White.copy(alpha = 0.15f))
                             .clickable {
-                                var currentScroll = scrollSensitivity
-                                currentScroll = when {
-                                    currentScroll <= 1.0f -> 1.5f
-                                    currentScroll <= 1.5f -> 2.0f
-                                    currentScroll <= 2.0f -> 2.5f
-                                    else -> 1.0f
-                                }
+                                val currentScroll = nextTouchpadSpeed(scrollSensitivity)
                                 scrollSensitivity = currentScroll
                                 sharedPrefs.edit { putFloat("touchpad_scroll_sensitivity", currentScroll) }
                                 triggerVibration(15)
@@ -370,14 +400,21 @@ fun TouchpadView(
                             .height(28.dp)
                             .clip(RoundedCornerShape(6.dp))
                             .background(Color.White.copy(alpha = 0.15f))
-                            .clickable {
-                                val enabledColors = CaseColor.entries.filter { color ->
-                                    sharedPrefs.getStringSet("cycle_case_colors", CaseColor.entries.map { it.name }.toSet())?.contains(color.name) == true
-                                }.ifEmpty { listOf(selectedCaseColor) }
-                                val currentIndexInEnabled = enabledColors.indexOf(selectedCaseColor)
-                                val nextIndex = (currentIndexInEnabled + 1) % enabledColors.size
-                                onCaseColorChange(enabledColors[nextIndex])
-                            }
+                            .combinedClickable(
+                                onClickLabel = "Next case color",
+                                onLongClickLabel = "Configure case color cycle",
+                                onClick = {
+                                    val enabledColors = CaseColor.entries.filter { color ->
+                                        sharedPrefs.getStringSet("cycle_case_colors", CaseColor.entries.map { it.name }.toSet())?.contains(color.name) == true
+                                    }.ifEmpty { listOf(selectedCaseColor) }
+                                    val currentIndexInEnabled = enabledColors.indexOf(selectedCaseColor)
+                                    val nextIndex = (currentIndexInEnabled + 1) % enabledColors.size
+                                    onCaseColorChange(enabledColors[nextIndex])
+                                },
+                                onLongClick = {
+                                    context.startActivity(Intent(context, QuickCycleActivity::class.java))
+                                },
+                            )
                             .padding(horizontal = 8.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
@@ -466,6 +503,25 @@ fun TouchpadView(
                         showNumpadLed = showNumpadLed,
                     )
 
+                    if (modifierPosition == TouchpadModifierPosition.LEFT || modifierPosition == TouchpadModifierPosition.BOTH) {
+                        TouchpadModifierStrip(
+                            side = Modifier.align(Alignment.TopStart),
+                            rightHandKeys = false,
+                            theme = keyboardTheme,
+                            btManager = btManager,
+                            triggerVibration = triggerVibration,
+                        )
+                    }
+                    if (modifierPosition == TouchpadModifierPosition.RIGHT || modifierPosition == TouchpadModifierPosition.BOTH) {
+                        TouchpadModifierStrip(
+                            side = Modifier.align(Alignment.TopEnd),
+                            rightHandKeys = true,
+                            theme = keyboardTheme,
+                            btManager = btManager,
+                            triggerVibration = triggerVibration,
+                        )
+                    }
+
                     // Asus-Style backlit LED number keyboard overlay (absolutely drawn over the trackpad background area)
                     androidx.compose.animation.AnimatedVisibility(
                         visible = showNumpadLed,
@@ -485,6 +541,77 @@ fun TouchpadView(
             }
         }
     }
+}
+
+@Composable
+private fun TouchpadModifierStrip(
+    side: Modifier,
+    rightHandKeys: Boolean,
+    theme: KeyboardThemeDefinition,
+    btManager: BluetoothKeyboardManager,
+    triggerVibration: (Long) -> Unit,
+) {
+    val keys = if (rightHandKeys) {
+        listOf("Ctrl" to 0xE4, "Shift" to 0xE5, "Alt" to 0xE6, "Meta" to 0xE7)
+    } else {
+        listOf("Ctrl" to 0xE0, "Shift" to 0xE1, "Alt" to 0xE2, "Meta" to 0xE3)
+    }
+    Row(
+        modifier = side.padding(12.dp),
+        horizontalArrangement = Arrangement.spacedBy(3.dp),
+    ) {
+        keys.forEach { (label, keyCode) ->
+            MechanicalModifierKey(
+                label = label,
+                keyCode = keyCode,
+                style = if (label == "Meta") theme.accentStyle else theme.modifierStyle,
+                btManager = btManager,
+                triggerVibration = triggerVibration,
+            )
+        }
+    }
+}
+
+@Composable
+private fun MechanicalModifierKey(
+    label: String,
+    keyCode: Int,
+    style: KeyboardKeyStyle,
+    btManager: BluetoothKeyboardManager,
+    triggerVibration: (Long) -> Unit,
+) {
+    var isPressed by remember { mutableStateOf(false) }
+    DisposableEffect(btManager, keyCode) {
+        onDispose {
+            if (isPressed) btManager.sendKey(keyCode, false)
+        }
+    }
+    KeyCap(
+        legend = label,
+        shiftedLegend = "",
+        width = 50.dp,
+        height = 38.dp,
+        isPressed = isPressed,
+        keyBgColor = Color(style.backgroundArgb),
+        legendColor = Color(style.legendArgb),
+        legendScale = style.legendScale,
+        baseUnitWidth = 46.dp,
+        modifier = Modifier.pointerInput(keyCode) {
+            detectTapGestures(
+                onPress = {
+                    isPressed = true
+                    triggerVibration(12)
+                    btManager.sendKey(keyCode, true)
+                    try {
+                        tryAwaitRelease()
+                    } finally {
+                        btManager.sendKey(keyCode, false)
+                        isPressed = false
+                    }
+                },
+            )
+        },
+    )
 }
 
 @Composable

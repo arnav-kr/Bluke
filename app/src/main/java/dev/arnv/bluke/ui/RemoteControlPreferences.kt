@@ -17,3 +17,8 @@ enum class TouchpadModifierPosition(val preferenceValue: String, val displayName
             entries.firstOrNull { it.preferenceValue == value } ?: OFF
     }
 }
+
+private val touchpadSpeedSteps = listOf(0.25f, 0.5f, 1f, 1.5f, 2f, 2.5f)
+
+fun nextTouchpadSpeed(current: Float): Float =
+    touchpadSpeedSteps.firstOrNull { it > current + 0.01f } ?: touchpadSpeedSteps.first()

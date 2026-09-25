@@ -2,13 +2,14 @@ package dev.arnv.bluke.ui
 
 import android.content.Context
 import android.content.ContextWrapper
+import android.content.Intent
 import android.content.SharedPreferences
 import android.view.KeyEvent
 import androidx.compose.foundation.background
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
 import androidx.compose.foundation.layout.Row
@@ -21,8 +22,10 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.VolumeDown
 import androidx.compose.material.icons.automirrored.filled.VolumeOff
@@ -33,10 +36,10 @@ import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.SkipNext
 import androidx.compose.material.icons.filled.SkipPrevious
 import androidx.compose.material.icons.filled.Slideshow
+import androidx.compose.material.icons.filled.TouchApp
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -52,13 +55,15 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.core.content.edit
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import dev.arnv.bluke.QuickCycleActivity
 import dev.arnv.bluke.RemoteVolumeKeyHost
 import dev.arnv.bluke.bluetooth.BluetoothKeyboardManager
 import dev.arnv.bluke.bluetooth.ConsumerControl
@@ -82,9 +87,7 @@ fun MediaPresentationView(
     val context = LocalContext.current
     val lifecycleOwner = LocalLifecycleOwner.current
     val volumeKeyHost = remember(context) { context.findRemoteVolumeKeyHost() }
-    var useHardwareVolumeButtons by remember {
-        mutableStateOf(sharedPrefs.getBoolean(HARDWARE_VOLUME_REMOTE_PREFERENCE, false))
-    }
+    val useHardwareVolumeButtons = sharedPrefs.getBoolean(HARDWARE_VOLUME_REMOTE_PREFERENCE, false)
     var isForeground by remember {
         mutableStateOf(lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED))
     }
@@ -104,8 +107,7 @@ fun MediaPresentationView(
     DisposableEffect(volumeKeyHost, useHardwareVolumeButtons, isForeground, btManager) {
         if (useHardwareVolumeButtons && isForeground) {
             volumeKeyHost?.setRemoteVolumeKeyHandler { keyCode, isPressed ->
-                val control = consumerControlForHardwareVolumeKey(keyCode)
-                if (control != null) {
+                consumerControlForHardwareVolumeKey(keyCode)?.let { control ->
                     btManager.sendConsumerControl(if (isPressed) control else null)
                 }
             }
@@ -131,144 +133,154 @@ fun MediaPresentationView(
             isConnected = isConnected,
         )
 
-        Row(
+        BoxWithConstraints(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(12.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            ControlSection(
-                title = "Media",
-                subtitle = "Volume and playback on the connected host",
-                icon = Icons.Default.PlayArrow,
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxHeight(),
+            val wide = maxWidth >= 840.dp
+            Surface(
+                modifier = Modifier.fillMaxSize(),
+                color = MaterialTheme.colorScheme.surfaceContainer,
+                shape = RoundedCornerShape(26.dp),
+                border = androidx.compose.foundation.BorderStroke(
+                    1.dp,
+                    MaterialTheme.colorScheme.outlineVariant,
+                ),
             ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    ConsumerButton(
-                        "Mute",
-                        Icons.AutoMirrored.Filled.VolumeOff,
-                        ConsumerControl.MUTE,
-                        btManager,
-                        Modifier.weight(1f),
-                    )
-                    ConsumerButton(
-                        "Volume down",
-                        Icons.AutoMirrored.Filled.VolumeDown,
-                        ConsumerControl.VOLUME_DOWN,
-                        btManager,
-                        Modifier.weight(1f),
-                    )
-                    ConsumerButton(
-                        "Volume up",
-                        Icons.AutoMirrored.Filled.VolumeUp,
-                        ConsumerControl.VOLUME_UP,
-                        btManager,
-                        Modifier.weight(1f),
-                    )
-                }
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    ConsumerButton(
-                        "Previous",
-                        Icons.Default.SkipPrevious,
-                        ConsumerControl.PREVIOUS_TRACK,
-                        btManager,
-                        Modifier.weight(1f),
-                    )
-                    ConsumerButton(
-                        "Play / pause",
-                        Icons.Default.PlayArrow,
-                        ConsumerControl.PLAY_PAUSE,
-                        btManager,
-                        Modifier.weight(1f),
-                    )
-                    ConsumerButton(
-                        "Next",
-                        Icons.Default.SkipNext,
-                        ConsumerControl.NEXT_TRACK,
-                        btManager,
-                        Modifier.weight(1f),
-                    )
-                }
-                Surface(
-                    color = MaterialTheme.colorScheme.surfaceContainerHigh,
-                    shape = RoundedCornerShape(16.dp),
-                ) {
+                if (wide) {
                     Row(
                         modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(horizontal = 14.dp, vertical = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween,
+                            .fillMaxSize()
+                            .padding(16.dp),
+                        horizontalArrangement = Arrangement.spacedBy(18.dp),
                     ) {
-                        Column(modifier = Modifier.weight(1f)) {
-                            Text(
-                                "Phone volume buttons control host",
-                                style = MaterialTheme.typography.labelLarge,
-                                fontWeight = FontWeight.SemiBold,
-                            )
-                            Text(
-                                "Only while this mode is open",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            )
-                        }
-                        Switch(
-                            checked = useHardwareVolumeButtons,
-                            onCheckedChange = { enabled ->
-                                useHardwareVolumeButtons = enabled
-                                sharedPrefs.edit {
-                                    putBoolean(HARDWARE_VOLUME_REMOTE_PREFERENCE, enabled)
-                                }
-                            },
-                            modifier = Modifier.testTag("remote_hardware_volume_toggle"),
+                        MediaControls(btManager, Modifier.weight(0.9f).fillMaxHeight())
+                        PresentationControls(btManager, Modifier.weight(1f).fillMaxHeight())
+                        PresentationTouchpad(
+                            btManager = btManager,
+                            sharedPrefs = sharedPrefs,
+                            modifier = Modifier.weight(1.1f).fillMaxHeight(),
+                        )
+                    }
+                } else {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .verticalScroll(rememberScrollState())
+                            .padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(18.dp),
+                    ) {
+                        MediaControls(btManager, Modifier.fillMaxWidth())
+                        PresentationControls(btManager, Modifier.fillMaxWidth())
+                        PresentationTouchpad(
+                            btManager = btManager,
+                            sharedPrefs = sharedPrefs,
+                            modifier = Modifier.fillMaxWidth().height(210.dp),
                         )
                     }
                 }
             }
+        }
+    }
+}
 
-            ControlSection(
-                title = "Presentation",
-                subtitle = "Common slideshow shortcuts",
-                icon = Icons.Default.Slideshow,
+@Composable
+private fun MediaControls(
+    btManager: BluetoothKeyboardManager,
+    modifier: Modifier,
+) {
+    ControlGroup(
+        title = "Media",
+        subtitle = "Sound and playback",
+        icon = Icons.Default.PlayArrow,
+        modifier = modifier,
+    ) {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            ConsumerButton("Mute", Icons.AutoMirrored.Filled.VolumeOff, ConsumerControl.MUTE, btManager, Modifier.weight(1f))
+            ConsumerButton("Quieter", Icons.AutoMirrored.Filled.VolumeDown, ConsumerControl.VOLUME_DOWN, btManager, Modifier.weight(1f))
+            ConsumerButton("Louder", Icons.AutoMirrored.Filled.VolumeUp, ConsumerControl.VOLUME_UP, btManager, Modifier.weight(1f))
+        }
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            ConsumerButton("Previous", Icons.Default.SkipPrevious, ConsumerControl.PREVIOUS_TRACK, btManager, Modifier.weight(1f))
+            ConsumerButton("Play / pause", Icons.Default.PlayArrow, ConsumerControl.PLAY_PAUSE, btManager, Modifier.weight(1f))
+            ConsumerButton("Next", Icons.Default.SkipNext, ConsumerControl.NEXT_TRACK, btManager, Modifier.weight(1f))
+        }
+    }
+}
+
+@Composable
+private fun PresentationControls(
+    btManager: BluetoothKeyboardManager,
+    modifier: Modifier,
+) {
+    ControlGroup(
+        title = "Slides",
+        subtitle = "Present and navigate",
+        icon = Icons.Default.Slideshow,
+        modifier = modifier,
+    ) {
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            KeyboardButton("First", KeyboardLayouts.KEY_HOME, btManager, Modifier.weight(1f))
+            KeyboardButton("Previous", KeyboardLayouts.KEY_PAGEUP, btManager, Modifier.weight(1f))
+            KeyboardButton("Next", KeyboardLayouts.KEY_PAGEDOWN, btManager, Modifier.weight(1f))
+            KeyboardButton("Last", KeyboardLayouts.KEY_END, btManager, Modifier.weight(1f))
+        }
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            KeyboardButton("Start", KeyboardLayouts.KEY_F5, btManager, Modifier.weight(1f))
+            KeyboardButton("Black", KeyboardLayouts.KEY_B, btManager, Modifier.weight(1f))
+            KeyboardButton("End", KeyboardLayouts.KEY_ESC, btManager, Modifier.weight(1f))
+        }
+    }
+}
+
+@Composable
+private fun PresentationTouchpad(
+    btManager: BluetoothKeyboardManager,
+    sharedPrefs: SharedPreferences,
+    modifier: Modifier,
+) {
+    val sensitivity = sharedPrefs.getFloat("touchpad_sensitivity", 1.5f)
+    val scrollSensitivity = sharedPrefs.getFloat("touchpad_scroll_sensitivity", 1f)
+    ControlGroup(
+        title = "Pointer",
+        subtitle = "Move, click, drag, or change slides",
+        icon = Icons.Default.TouchApp,
+        modifier = modifier,
+    ) {
+        Row(
+            modifier = Modifier.fillMaxSize(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Box(
                 modifier = Modifier
                     .weight(1f)
-                    .fillMaxHeight(),
+                    .fillMaxHeight()
+                    .clip(RoundedCornerShape(16.dp))
+                    .background(Color(0xFF1E1E1E))
+                    .border(1.dp, Color.White.copy(alpha = 0.15f), RoundedCornerShape(16.dp)),
             ) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    KeyboardButton("Previous slide", KeyboardLayouts.KEY_PAGEUP, btManager, Modifier.weight(1f))
-                    KeyboardButton("Next slide", KeyboardLayouts.KEY_PAGEDOWN, btManager, Modifier.weight(1f))
-                }
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    KeyboardButton("First slide", KeyboardLayouts.KEY_HOME, btManager, Modifier.weight(1f))
-                    KeyboardButton("Last slide", KeyboardLayouts.KEY_END, btManager, Modifier.weight(1f))
-                }
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    KeyboardButton("Start (F5)", KeyboardLayouts.KEY_F5, btManager, Modifier.weight(1f))
-                    KeyboardButton("End (Esc)", KeyboardLayouts.KEY_ESC, btManager, Modifier.weight(1f))
-                    KeyboardButton("Black screen (B)", KeyboardLayouts.KEY_B, btManager, Modifier.weight(1f))
-                }
-                Text(
-                    "Presentation shortcuts depend on the host application; Page Up/Down and Esc are the most portable.",
-                    style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                TouchGestureLayer(
+                    btManager = btManager,
+                    sensitivity = sensitivity,
+                    scrollSensitivity = scrollSensitivity,
+                    buttonMode = TrackpadButtonMode.CLICKPAD,
+                    triggerVibration = {},
+                    showNumpadLed = false,
                 )
+                Text(
+                    "Touchpad",
+                    color = Color.White.copy(alpha = 0.45f),
+                    style = MaterialTheme.typography.labelMedium,
+                    modifier = Modifier.align(Alignment.TopCenter).padding(8.dp),
+                )
+            }
+            Column(
+                modifier = Modifier.width(86.dp).fillMaxHeight(),
+                verticalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                KeyboardButton("Previous", KeyboardLayouts.KEY_PAGEUP, btManager, Modifier.weight(1f))
+                KeyboardButton("Next", KeyboardLayouts.KEY_PAGEDOWN, btManager, Modifier.weight(1f))
             }
         }
     }
@@ -282,6 +294,7 @@ private fun MediaTopBar(
     sharedPrefs: SharedPreferences,
     isConnected: Boolean,
 ) {
+    val context = LocalContext.current
     Row(
         modifier = Modifier
             .fillMaxWidth()
@@ -303,66 +316,52 @@ private fun MediaTopBar(
                     val index = enabled.indexOfFirst { it.id == launchMode }.coerceAtLeast(0)
                     onModeChange(enabled[(index + 1) % enabled.size].id)
                 },
+                onLongClick = {
+                    context.startActivity(Intent(context, QuickCycleActivity::class.java))
+                },
             ) {
                 Icon(Icons.Default.Keyboard, "Switch mode", tint = Color.White, modifier = Modifier.size(12.dp))
                 Spacer(Modifier.width(4.dp))
                 Text("Media + Presentation", color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold)
             }
         }
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(7.dp),
-        ) {
-            Box(
-                Modifier
-                    .size(7.dp)
-                    .clip(CircleShape)
-                    .background(if (isConnected) Color(0xFF39FF14) else Color(0xFFFF9800)),
-            )
-            Text(
-                if (isConnected) "Host connected" else "Host offline",
-                color = Color.White,
-                fontSize = 10.sp,
-                fontWeight = FontWeight.Bold,
-            )
-        }
+        Box(
+            Modifier
+                .size(9.dp)
+                .clip(CircleShape)
+                .background(if (isConnected) Color(0xFF39FF14) else Color(0xFFFF9800))
+                .semantics {
+                    contentDescription = if (isConnected) "Host connected" else "Host offline"
+                },
+        )
     }
 }
 
 @Composable
-private fun ControlSection(
+private fun ControlGroup(
     title: String,
     subtitle: String,
     icon: ImageVector,
     modifier: Modifier,
     content: @Composable ColumnScope.() -> Unit,
 ) {
-    Surface(
+    Column(
         modifier = modifier,
-        color = MaterialTheme.colorScheme.surfaceContainer,
-        shape = RoundedCornerShape(24.dp),
-        border = androidx.compose.foundation.BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
-        Column(
-            modifier = Modifier
-                .verticalScroll(rememberScrollState())
-                .padding(14.dp),
-            verticalArrangement = Arrangement.spacedBy(10.dp),
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Icon(icon, null, modifier = Modifier.size(24.dp))
-                Spacer(Modifier.width(10.dp))
-                Column {
-                    Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
-                    Text(
-                        subtitle,
-                        style = MaterialTheme.typography.labelSmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(icon, null, modifier = Modifier.size(24.dp))
+            Spacer(Modifier.width(10.dp))
+            Column {
+                Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = FontWeight.Bold)
+                Text(
+                    subtitle,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
             }
-            content()
         }
+        content()
     }
 }
 
