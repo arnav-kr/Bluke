@@ -5,7 +5,6 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -14,26 +13,30 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.Check
-import androidx.compose.material3.Button
+import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LargeTopAppBar
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -42,10 +45,15 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.unit.dp
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.core.content.edit
 import dev.arnv.bluke.sound.CustomSoundPack
 import dev.arnv.bluke.sound.CustomSoundPackRepository
+import dev.arnv.bluke.sound.SELECTED_BUILT_IN_SOUND_PREFERENCE
 import dev.arnv.bluke.sound.SoundPackImportResult
+import dev.arnv.bluke.sound.SwitchType
+import dev.arnv.bluke.sound.builtInSoundProfileId
+import dev.arnv.bluke.sound.customSoundProfileId
+import dev.arnv.bluke.sound.selectedBuiltInSound
 import dev.arnv.bluke.ui.theme.MyApplicationTheme
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -56,20 +64,25 @@ class SoundPacksActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val repository = CustomSoundPackRepository(applicationContext)
+        val preferences = getSharedPreferences("app_prefs", MODE_PRIVATE)
 
         setContent {
             MyApplicationTheme {
                 var packs by remember { mutableStateOf(repository.listPacks()) }
-                var selectedId by remember { mutableStateOf(repository.selectedPackId()) }
-                var message by remember { mutableStateOf<String?>(null) }
+                var selectedProfileId by remember {
+                    mutableStateOf(
+                        repository.selectedPack()?.let { customSoundProfileId(it.id) }
+                            ?: builtInSoundProfileId(selectedBuiltInSound(preferences)),
+                    )
+                }
                 var importing by remember { mutableStateOf(false) }
                 val scope = rememberCoroutineScope()
+                val snackbarHostState = remember { SnackbarHostState() }
                 val importer = rememberLauncherForActivityResult(
-                    ActivityResultContracts.OpenDocument()
+                    ActivityResultContracts.OpenDocument(),
                 ) { uri ->
                     if (uri != null) {
                         importing = true
-                        message = null
                         scope.launch {
                             val result = withContext(Dispatchers.IO) {
                                 contentResolver.openInputStream(uri)?.use(repository::importZip)
@@ -79,10 +92,12 @@ class SoundPacksActivity : ComponentActivity() {
                             when (result) {
                                 is SoundPackImportResult.Success -> {
                                     packs = repository.listPacks()
-                                    selectedId = result.pack.id
-                                    message = "Imported and selected ${result.pack.name}."
+                                    selectedProfileId = customSoundProfileId(result.pack.id)
+                                    snackbarHostState.showSnackbar("Imported and selected ${result.pack.name}.")
                                 }
-                                is SoundPackImportResult.Failure -> message = result.message
+                                is SoundPackImportResult.Failure -> {
+                                    snackbarHostState.showSnackbar(result.message)
+                                }
                             }
                         }
                     }
@@ -93,13 +108,34 @@ class SoundPacksActivity : ComponentActivity() {
                     modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
                     topBar = {
                         LargeTopAppBar(
-                            title = { Text("Custom key sounds") },
+                            title = { Text("Key sounds") },
                             navigationIcon = {
                                 IconButton(onClick = ::finish) {
                                     Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                                 }
                             },
                             scrollBehavior = scrollBehavior,
+                        )
+                    },
+                    snackbarHost = { SnackbarHost(snackbarHostState) },
+                    floatingActionButton = {
+                        ExtendedFloatingActionButton(
+                            onClick = {
+                                if (!importing) {
+                                    importer.launch(arrayOf("application/zip", "application/octet-stream"))
+                                }
+                            },
+                            icon = {
+                                if (importing) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(20.dp),
+                                        strokeWidth = 2.dp,
+                                    )
+                                } else {
+                                    Icon(Icons.Default.Add, contentDescription = null)
+                                }
+                            },
+                            text = { Text(if (importing) "Importing…" else "Import pack") },
                         )
                     },
                 ) { innerPadding ->
@@ -112,59 +148,51 @@ class SoundPacksActivity : ComponentActivity() {
                         verticalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
                         Text(
-                            "Import Mechvibes ZIP packs. Audio-sprite packs are converted once, then the active pack is preloaded for low-latency playback.",
-                            style = MaterialTheme.typography.bodyMedium,
+                            "Choose one sound profile for every key press. Imported Mechvibes packs live beside Bluke's built-in switch sounds and can be reached by the keyboard toolbar cycle.",
+                            style = MaterialTheme.typography.bodyLarge,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
-                        Button(
-                            onClick = {
-                                importer.launch(arrayOf("application/zip", "application/octet-stream"))
-                            },
-                            enabled = !importing,
-                        ) {
-                            if (importing) CircularProgressIndicator(modifier = Modifier.height(18.dp))
-                            else Icon(Icons.Default.Add, contentDescription = null)
-                            Text(if (importing) "  Importing…" else "  Import sound pack")
-                        }
-                        message?.let {
-                            Text(
-                                it,
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.primary,
-                            )
-                        }
                         Text(
-                            "Available sounds",
+                            "Sound profiles",
                             style = MaterialTheme.typography.titleSmall,
                             color = MaterialTheme.colorScheme.primary,
                         )
-                        val choices = listOf<CustomSoundPack?>(null) + packs
+                        val choices = SwitchType.entries.map { SoundChoice.BuiltIn(it) } +
+                            packs.map { SoundChoice.Imported(it) }
                         Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                            choices.forEachIndexed { index, pack ->
-                                SoundPackChoice(
-                                    title = pack?.name ?: "Built-in switch sounds",
-                                    subtitle = if (pack == null) {
-                                        "Bluke's bundled switch profiles"
-                                    } else {
-                                        "Imported Mechvibes pack"
-                                    },
-                                    selected = selectedId == pack?.id,
+                            choices.forEachIndexed { index, choice ->
+                                SoundProfileChoice(
+                                    title = choice.title,
+                                    subtitle = choice.subtitle,
+                                    selected = selectedProfileId == choice.id,
                                     first = index == 0,
                                     last = index == choices.lastIndex,
                                     onSelect = {
-                                        repository.select(pack?.id)
-                                        selectedId = pack?.id
+                                        when (choice) {
+                                            is SoundChoice.BuiltIn -> {
+                                                repository.select(null)
+                                                preferences.edit {
+                                                    putString(
+                                                        SELECTED_BUILT_IN_SOUND_PREFERENCE,
+                                                        choice.switchType.name,
+                                                    )
+                                                }
+                                            }
+                                            is SoundChoice.Imported -> repository.select(choice.pack.id)
+                                        }
+                                        selectedProfileId = choice.id
                                     },
                                 )
                             }
                         }
                         if (packs.isEmpty()) {
                             Text(
-                                "No custom packs imported yet.",
+                                "Imported packs will appear in this same list.",
+                                style = MaterialTheme.typography.bodyMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }
-                        Spacer(Modifier.height(24.dp))
+                        Spacer(Modifier.height(96.dp))
                     }
                 }
             }
@@ -172,8 +200,26 @@ class SoundPacksActivity : ComponentActivity() {
     }
 }
 
+private sealed interface SoundChoice {
+    val id: String
+    val title: String
+    val subtitle: String
+
+    data class BuiltIn(val switchType: SwitchType) : SoundChoice {
+        override val id = builtInSoundProfileId(switchType)
+        override val title = switchType.displayName
+        override val subtitle = "Built-in"
+    }
+
+    data class Imported(val pack: CustomSoundPack) : SoundChoice {
+        override val id = customSoundProfileId(pack.id)
+        override val title = pack.name
+        override val subtitle = "Imported Mechvibes pack"
+    }
+}
+
 @Composable
-private fun SoundPackChoice(
+private fun SoundProfileChoice(
     title: String,
     subtitle: String,
     selected: Boolean,
@@ -182,9 +228,8 @@ private fun SoundPackChoice(
     onSelect: () -> Unit,
 ) {
     Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(onClick = onSelect),
+        onClick = onSelect,
+        modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(
             topStart = if (first) 28.dp else 4.dp,
             topEnd = if (first) 28.dp else 4.dp,
@@ -204,7 +249,11 @@ private fun SoundPackChoice(
             Icon(
                 Icons.Default.GraphicEq,
                 contentDescription = null,
-                tint = if (selected) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.primary,
+                tint = if (selected) {
+                    MaterialTheme.colorScheme.onPrimaryContainer
+                } else {
+                    MaterialTheme.colorScheme.primary
+                },
             )
             Column(
                 modifier = Modifier

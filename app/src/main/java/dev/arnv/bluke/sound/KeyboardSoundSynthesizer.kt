@@ -32,6 +32,20 @@ enum class SwitchType(val displayName: String) {
     NOVELKEYS_CREAM("NovelKeys Creams")
 }
 
+const val SELECTED_BUILT_IN_SOUND_PREFERENCE = "selected_builtin_key_sound"
+private const val BUILT_IN_PROFILE_PREFIX = "built_in:"
+private const val CUSTOM_PROFILE_PREFIX = "custom:"
+
+fun builtInSoundProfileId(switchType: SwitchType): String =
+    "$BUILT_IN_PROFILE_PREFIX${switchType.name}"
+
+fun customSoundProfileId(packId: String): String = "$CUSTOM_PROFILE_PREFIX$packId"
+
+fun selectedBuiltInSound(preferences: android.content.SharedPreferences): SwitchType =
+    preferences.getString(SELECTED_BUILT_IN_SOUND_PREFERENCE, null)
+        ?.let { stored -> SwitchType.entries.firstOrNull { it.name == stored } }
+        ?: SwitchType.CHERRY_MX_BROWN
+
 class KeyboardSoundSynthesizer(private val context: Context) {
     private data class CustomSoundBank(
         val packId: String,
@@ -58,6 +72,7 @@ class KeyboardSoundSynthesizer(private val context: Context) {
         Thread(runnable, "BlukeSoundLoader")
     }
     private val customSoundPacks = CustomSoundPackRepository(context)
+    private val preferences = context.getSharedPreferences("app_prefs", Context.MODE_PRIVATE)
     @Volatile private var customSoundBank: CustomSoundBank? = null
     @Volatile private var builtInSoundBank = BuiltInSoundBank()
     private val completedLoadStatuses = ConcurrentHashMap<Int, Int>()
@@ -65,7 +80,7 @@ class KeyboardSoundSynthesizer(private val context: Context) {
     @Volatile private var trackLoadStatuses = false
     
     private var isMuted = false
-    private var currentSwitchType = SwitchType.CHERRY_MX_BROWN
+    private var currentSwitchType = selectedBuiltInSound(preferences)
     private val sampleRate = 44100
     private val variationsCount = 3 // 3 different press variants to avoid repetitiveness
     
@@ -109,6 +124,7 @@ class KeyboardSoundSynthesizer(private val context: Context) {
         if (currentSwitchType == switchType && customSoundBank == null) return
         customSoundPacks.select(null)
         currentSwitchType = switchType
+        preferences.edit().putString(SELECTED_BUILT_IN_SOUND_PREFERENCE, switchType.name).apply()
         recompileSounds(switchType)
     }
 
@@ -120,10 +136,41 @@ class KeyboardSoundSynthesizer(private val context: Context) {
     fun getSelectedSoundProfileName(): String =
         customSoundPacks.selectedPack()?.name ?: currentSwitchType.displayName
 
+    fun getSelectedSoundProfileId(): String =
+        customSoundPacks.selectedPack()?.let { customSoundProfileId(it.id) }
+            ?: builtInSoundProfileId(currentSwitchType)
+
+    fun cycleSoundProfile(enabledBuiltIns: List<SwitchType>) {
+        val profileIds = enabledBuiltIns.map(::builtInSoundProfileId) +
+            customSoundPacks.listPacks().map { customSoundProfileId(it.id) }
+        if (profileIds.isEmpty()) return
+        val currentIndex = profileIds.indexOf(getSelectedSoundProfileId())
+        selectSoundProfile(profileIds[(currentIndex + 1) % profileIds.size])
+    }
+
+    private fun selectSoundProfile(profileId: String) {
+        when {
+            profileId.startsWith(BUILT_IN_PROFILE_PREFIX) -> {
+                val switchName = profileId.removePrefix(BUILT_IN_PROFILE_PREFIX)
+                SwitchType.entries.firstOrNull { it.name == switchName }?.let(::changeSwitchType)
+            }
+            profileId.startsWith(CUSTOM_PROFILE_PREFIX) -> {
+                val packId = profileId.removePrefix(CUSTOM_PROFILE_PREFIX)
+                val pack = customSoundPacks.listPacks().firstOrNull { it.id == packId } ?: return
+                customSoundPacks.select(pack.id)
+                loadCustomSoundPack(pack)
+            }
+        }
+    }
+
     fun reloadSelectedSoundPack() {
+        val preferredBuiltIn = selectedBuiltInSound(preferences)
         val selectedPack = customSoundPacks.selectedPack()
         if (selectedPack == null) {
-            if (customSoundBank != null) recompileSounds(currentSwitchType)
+            if (customSoundBank != null || currentSwitchType != preferredBuiltIn) {
+                currentSwitchType = preferredBuiltIn
+                recompileSounds(currentSwitchType)
+            }
         } else if (customSoundBank?.packId != selectedPack.id) {
             loadCustomSoundPack(selectedPack)
         }

@@ -40,6 +40,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.platform.testTag
@@ -531,12 +532,7 @@ fun HomeScreen(
                     end = Offset(500f, 500f)
                 )
             } else {
-                Brush.linearGradient(
-                    colors = listOf(
-                        caseColorVal,
-                        caseColorVal.copy(alpha = 0.92f)
-                    )
-                )
+                SolidColor(caseColorVal)
             }
 
             when (launchMode) {
@@ -958,12 +954,9 @@ fun HomeScreen(
                                                 val enabledSwitches = SwitchType.entries.filter { switch ->
                                                     sharedPrefs.getStringSet("cycle_key_sounds", SwitchType.entries.map { it.name }.toSet())?.contains(switch.name) == true
                                                 }.ifEmpty { listOf(currentSwitch) }
-                                                val currentIndexInEnabled = enabledSwitches.indexOf(currentSwitch)
-                                                val nextIndex = (currentIndexInEnabled + 1) % enabledSwitches.size
-                                                val nextSwitch = enabledSwitches[nextIndex]
-                                                soundSynth.changeSwitchType(nextSwitch)
-                                                currentSwitch = nextSwitch
-                                                currentSoundProfileName = nextSwitch.displayName
+                                                soundSynth.cycleSoundProfile(enabledSwitches)
+                                                currentSwitch = soundSynth.getCurrentSwitch()
+                                                currentSoundProfileName = soundSynth.getSelectedSoundProfileName()
                                                 soundSynth.playPress()
                                             },
                                             onLongClick = {

@@ -3,6 +3,7 @@ package dev.arnv.bluke.sound
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
@@ -50,5 +51,17 @@ class SoundPreferencesTest {
 
         assertFalse(preferences.getBoolean(KEY_SOUND_ENABLED_PREFERENCE, true))
         assertFalse(preferences.getBoolean("sound_toggle", true))
+    }
+
+    @Test
+    fun builtInSoundSelectionSurvivesActivityRecreation() {
+        assertEquals(SwitchType.CHERRY_MX_BROWN, selectedBuiltInSound(preferences))
+
+        preferences.edit()
+            .putString(SELECTED_BUILT_IN_SOUND_PREFERENCE, SwitchType.TOPRE.name)
+            .commit()
+
+        assertEquals(SwitchType.TOPRE, selectedBuiltInSound(preferences))
+        assertEquals("built_in:TOPRE", builtInSoundProfileId(SwitchType.TOPRE))
     }
 }
