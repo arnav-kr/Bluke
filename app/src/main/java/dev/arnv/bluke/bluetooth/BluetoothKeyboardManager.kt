@@ -240,7 +240,7 @@ class BluetoothKeyboardManager(private val context: Context) {
         }
     }
 
-    // Composite Keyboard, Mouse/Trackpad & Gamepad HID Descriptor definition
+    // Composite Keyboard, Mouse/Trackpad, Gamepad & Consumer Control HID Descriptor definition
     private val hidDescriptor = byteArrayOf(
         0x05.toByte(), 0x01.toByte(),         // USAGE_PAGE (Generic Desktop)
         0x09.toByte(), 0x06.toByte(),         // USAGE (Keyboard)
@@ -351,6 +351,20 @@ class BluetoothKeyboardManager(private val context: Context) {
         0x75.toByte(), 0x10.toByte(),         //     REPORT_SIZE (16)
         0x95.toByte(), 0x04.toByte(),         //     REPORT_COUNT (4)
         0x81.toByte(), 0x02.toByte(),         //     INPUT (Data,Var,Abs) - 4 16-bit Axes (X, Y, Z, Rx)
+        0xc0.toByte(),                        // END_COLLECTION (Application)
+
+        // Consumer controls (Report ID 4)
+        0x05.toByte(), 0x0c.toByte(),         // USAGE_PAGE (Consumer)
+        0x09.toByte(), 0x01.toByte(),         // USAGE (Consumer Control)
+        0xa1.toByte(), 0x01.toByte(),         // COLLECTION (Application)
+        0x85.toByte(), 0x04.toByte(),         //   REPORT_ID (4)
+        0x15.toByte(), 0x00.toByte(),         //   LOGICAL_MINIMUM (0)
+        0x26.toByte(), 0xff.toByte(), 0x03.toByte(), // LOGICAL_MAXIMUM (1023)
+        0x19.toByte(), 0x00.toByte(),         //   USAGE_MINIMUM (Unassigned)
+        0x2a.toByte(), 0xff.toByte(), 0x03.toByte(), // USAGE_MAXIMUM (1023)
+        0x75.toByte(), 0x10.toByte(),         //   REPORT_SIZE (16)
+        0x95.toByte(), 0x01.toByte(),         //   REPORT_COUNT (1)
+        0x81.toByte(), 0x00.toByte(),         //   INPUT (Data,Ary,Abs)
         0xc0.toByte()                         // END_COLLECTION (Application)
     )
 
@@ -1254,5 +1268,13 @@ class BluetoothKeyboardManager(private val context: Context) {
     @SuppressLint("MissingPermission")
     fun cleanup() {
         close()
+    }
+
+    @SuppressLint("MissingPermission")
+    fun sendConsumerControl(control: ConsumerControl?) {
+        val dev = _connectedDevice.value
+        if (dev != null) {
+            submitReport(dev, 4, buildConsumerControlReport(control))
+        }
     }
 }

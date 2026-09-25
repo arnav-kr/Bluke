@@ -54,6 +54,7 @@ import androidx.core.content.edit
 import androidx.core.net.toUri
 import dev.arnv.bluke.bluetooth.BluetoothKeyboardManager
 import dev.arnv.bluke.bluetooth.BluetoothState
+import dev.arnv.bluke.bluetooth.ConsumerControl
 import dev.arnv.bluke.bluetooth.CURRENT_HID_DESCRIPTOR_REVISION
 import dev.arnv.bluke.bluetooth.HID_DESCRIPTOR_REVISION_PREFERENCE
 import dev.arnv.bluke.bluetooth.requiresHidDescriptorRefresh
@@ -180,6 +181,9 @@ fun HomeScreen(
     
     // Active pressed keys set for visually pressing keycaps
     val activePressedKeys = remember { mutableStateListOf<Int>() }
+    var isFnActive by remember { mutableStateOf(false) }
+    var activeConsumerKey by remember { mutableStateOf<Int?>(null) }
+    val fnConsumedKeys = remember { mutableSetOf<Int>() }
 
     var showUpdateDialog by rememberSaveable { mutableStateOf(false) }
     var descriptorRefreshRequired by rememberSaveable { mutableStateOf(false) }
@@ -226,11 +230,10 @@ fun HomeScreen(
             text = {
                 Text(
                     if (descriptorRefreshRequired) {
-                        "Bluke's gamepad HID descriptor changed, but Bluetooth hosts cache the old layout. " +
-                            "To restore the D-pad and center-button mappings, forget the host on this phone, " +
+                        "Bluke's HID descriptor changed to add corrected gamepad mappings and media controls, " +
+                            "but Bluetooth hosts cache the old layout. To use the new controls, forget the host on this phone, " +
                             "remove Bluke on the host, then pair again once. Reinstalling the app alone is not enough. " +
-                            "After this refresh, Native Hat and Web Compatibility use the same descriptor, so switching " +
-                            "between them does not require pairing again."
+                            "After this refresh, switching controller behavior or using Fn shortcuts does not require pairing again."
                     } else {
                         "We've added new features and made significant underlying changes to the controller!\n" +
                             "For detailed information, see the changelog."
@@ -353,6 +356,50 @@ fun HomeScreen(
 
     // Process local screen-press inputs
     fun handleLocalKeyPress(keyCode: Int, isPress: Boolean) {
+        if (keyCode == KeyboardLayouts.KEY_FN) {
+            if (isPress && !isFnActive) {
+                if (isHapticsEnabled) {
+                    view.performHapticFeedback(android.view.HapticFeedbackConstants.KEYBOARD_PRESS)
+                }
+                isFnActive = true
+                activePressedKeys.add(keyCode)
+                soundSynth.playPress(keyCode)
+            } else if (!isPress && isFnActive) {
+                isFnActive = false
+                activePressedKeys.remove(keyCode)
+                soundSynth.playRelease(keyCode)
+                if (activeConsumerKey != null) {
+                    btManager.sendConsumerControl(null)
+                    activeConsumerKey = null
+                }
+            }
+            return
+        }
+
+        val fnControl = if (isPress && isFnActive) consumerControlForFnKey(keyCode) else null
+        if (fnControl != null) {
+            if (isHapticsEnabled) {
+                view.performHapticFeedback(android.view.HapticFeedbackConstants.KEYBOARD_PRESS)
+            }
+            if (fnConsumedKeys.add(keyCode)) {
+                activePressedKeys.add(keyCode)
+                soundSynth.playPress(keyCode)
+                activeConsumerKey = keyCode
+                btManager.sendConsumerControl(fnControl)
+            }
+            return
+        }
+
+        if (!isPress && fnConsumedKeys.remove(keyCode)) {
+            activePressedKeys.remove(keyCode)
+            soundSynth.playRelease(keyCode)
+            if (activeConsumerKey == keyCode) {
+                btManager.sendConsumerControl(null)
+                activeConsumerKey = null
+            }
+            return
+        }
+
         if (isPress) {
             if (isHapticsEnabled) {
                 view.performHapticFeedback(android.view.HapticFeedbackConstants.KEYBOARD_PRESS)
@@ -926,6 +973,15 @@ fun HomeScreen(
                                 keySensitivity = keySensitivity,
                                 onKeyPressChange = { code, press -> handleLocalKeyPress(code, press) }
                             )
+                            if (isFnActive) {
+                                Box(
+                                    modifier = Modifier
+                                        .align(Alignment.TopCenter)
+                                        .padding(top = 8.dp),
+                                ) {
+                                    FnShortcutOverlay()
+                                }
+                            }
                         }
                     }
                 }
@@ -1119,4 +1175,57 @@ fun HomeScreen(
     }
 }
 
+}
+
+@Composable
+@OptIn(ExperimentalLayoutApi::class)
+private fun FnShortcutOverlay() {
+    Surface(
+        color = MaterialTheme.colorScheme.surfaceContainerHigh.copy(alpha = 0.96f),
+        contentColor = MaterialTheme.colorScheme.onSurface,
+        shape = RoundedCornerShape(20.dp),
+        tonalElevation = 6.dp,
+        shadowElevation = 8.dp,
+    ) {
+        Column(
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Text(
+                text = "Fn shortcuts",
+                style = MaterialTheme.typography.titleSmall,
+                fontWeight = FontWeight.Bold,
+            )
+            FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+                maxItemsInEachRow = 5,
+            ) {
+                ConsumerControl.entries.forEach { control ->
+                    Surface(
+                        color = MaterialTheme.colorScheme.secondaryContainer,
+                        contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+                        shape = RoundedCornerShape(12.dp),
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        ) {
+                            Text(
+                                text = control.shortcutLabel,
+                                style = MaterialTheme.typography.labelLarge,
+                                fontWeight = FontWeight.Bold,
+                            )
+                            Text(
+                                text = control.actionLabel,
+                                style = MaterialTheme.typography.labelMedium,
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
 }

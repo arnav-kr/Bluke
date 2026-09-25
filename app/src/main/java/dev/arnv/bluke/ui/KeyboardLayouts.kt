@@ -227,6 +227,9 @@ data class KeyLayoutInfo(
 )
 
 object KeyboardLayouts {
+    // Local-only keycode. It is intercepted before HID keyboard reports are built.
+    const val KEY_FN = 0x100
+
     // Standard HID Keyboard codes
     const val KEY_A = 0x04
     const val KEY_B = 0x05
@@ -588,6 +591,7 @@ object KeyboardLayouts {
             "rwin" -> MOD_RWIN
             "alt", "lalt", "opt" -> MOD_LALT
             "ralt" -> MOD_RALT
+            "fn", "fn2" -> KEY_FN
             "spacebar", "space", "" -> KEY_SPACE
             "←", "left" -> KEY_LEFT
             "↑", "up" -> KEY_UP
