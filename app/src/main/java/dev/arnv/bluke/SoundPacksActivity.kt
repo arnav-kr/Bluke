@@ -1,5 +1,6 @@
 package dev.arnv.bluke
 
+import android.content.Intent
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -19,9 +20,13 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.GraphicEq
+import androidx.compose.material.icons.filled.Tune
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExtendedFloatingActionButton
@@ -34,6 +39,7 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -54,6 +60,7 @@ import dev.arnv.bluke.sound.SwitchType
 import dev.arnv.bluke.sound.builtInSoundProfileId
 import dev.arnv.bluke.sound.customSoundProfileId
 import dev.arnv.bluke.sound.selectedBuiltInSound
+import dev.arnv.bluke.ui.SettingsItem
 import dev.arnv.bluke.ui.theme.MyApplicationTheme
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -76,6 +83,7 @@ class SoundPacksActivity : ComponentActivity() {
                     )
                 }
                 var importing by remember { mutableStateOf(false) }
+                var pendingDeletion by remember { mutableStateOf<CustomSoundPack?>(null) }
                 val scope = rememberCoroutineScope()
                 val snackbarHostState = remember { SnackbarHostState() }
                 val importer = rememberLauncherForActivityResult(
@@ -95,6 +103,9 @@ class SoundPacksActivity : ComponentActivity() {
                                     selectedProfileId = customSoundProfileId(result.pack.id)
                                     snackbarHostState.showSnackbar("Imported and selected ${result.pack.name}.")
                                 }
+                                is SoundPackImportResult.Duplicate -> {
+                                    snackbarHostState.showSnackbar("${result.pack.name} is already imported.")
+                                }
                                 is SoundPackImportResult.Failure -> {
                                     snackbarHostState.showSnackbar(result.message)
                                 }
@@ -103,6 +114,38 @@ class SoundPacksActivity : ComponentActivity() {
                     }
                 }
                 val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
+
+                pendingDeletion?.let { pack ->
+                    AlertDialog(
+                        onDismissRequest = { pendingDeletion = null },
+                        title = { Text("Delete ${pack.name}?") },
+                        text = { Text("This removes the imported pack from Bluke. Built-in sounds are not affected.") },
+                        confirmButton = {
+                            TextButton(
+                                onClick = {
+                                    pendingDeletion = null
+                                    scope.launch {
+                                        val deleted = withContext(Dispatchers.IO) {
+                                            repository.deletePack(pack.id)
+                                        }
+                                        if (deleted) {
+                                            packs = repository.listPacks()
+                                            if (selectedProfileId == customSoundProfileId(pack.id)) {
+                                                selectedProfileId = builtInSoundProfileId(selectedBuiltInSound(preferences))
+                                            }
+                                            snackbarHostState.showSnackbar("Deleted ${pack.name}.")
+                                        } else {
+                                            snackbarHostState.showSnackbar("Could not delete ${pack.name}.")
+                                        }
+                                    }
+                                },
+                            ) { Text("Delete") }
+                        },
+                        dismissButton = {
+                            TextButton(onClick = { pendingDeletion = null }) { Text("Cancel") }
+                        },
+                    )
+                }
 
                 Scaffold(
                     modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
@@ -152,6 +195,35 @@ class SoundPacksActivity : ComponentActivity() {
                             style = MaterialTheme.typography.bodyLarge,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
+                        Surface(
+                            modifier = Modifier.fillMaxWidth(),
+                            shape = RoundedCornerShape(28.dp),
+                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
+                        ) {
+                            SettingsItem(
+                                title = "Quick-cycle choices",
+                                subtitle = "Choose which built-in sounds appear when cycling from the keyboard toolbar",
+                                icon = {
+                                    Icon(
+                                        Icons.Default.Tune,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.primary,
+                                    )
+                                },
+                                action = {
+                                    Icon(Icons.AutoMirrored.Filled.ArrowForward, contentDescription = null)
+                                },
+                                onClick = {
+                                    startActivity(
+                                        Intent(this@SoundPacksActivity, QuickCycleActivity::class.java)
+                                            .putExtra(
+                                                EXTRA_QUICK_CYCLE_SECTION,
+                                                QUICK_CYCLE_SECTION_KEY_SOUNDS,
+                                            ),
+                                    )
+                                },
+                            )
+                        }
                         Text(
                             "Sound profiles",
                             style = MaterialTheme.typography.titleSmall,
@@ -167,6 +239,9 @@ class SoundPacksActivity : ComponentActivity() {
                                     selected = selectedProfileId == choice.id,
                                     first = index == 0,
                                     last = index == choices.lastIndex,
+                                    onDelete = (choice as? SoundChoice.Imported)?.let {
+                                        { pendingDeletion = it.pack }
+                                    },
                                     onSelect = {
                                         when (choice) {
                                             is SoundChoice.BuiltIn -> {
@@ -225,6 +300,7 @@ private fun SoundProfileChoice(
     selected: Boolean,
     first: Boolean,
     last: Boolean,
+    onDelete: (() -> Unit)?,
     onSelect: () -> Unit,
 ) {
     Surface(
@@ -273,6 +349,11 @@ private fun SoundProfileChoice(
             }
             if (selected) {
                 Icon(Icons.Default.Check, contentDescription = "Selected")
+            }
+            if (onDelete != null) {
+                IconButton(onClick = onDelete) {
+                    Icon(Icons.Default.Delete, contentDescription = "Delete $title")
+                }
             }
         }
     }

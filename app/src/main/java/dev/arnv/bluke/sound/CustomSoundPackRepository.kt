@@ -22,6 +22,7 @@ data class CustomSoundPack(
 
 sealed interface SoundPackImportResult {
     data class Success(val pack: CustomSoundPack) : SoundPackImportResult
+    data class Duplicate(val pack: CustomSoundPack) : SoundPackImportResult
     data class Failure(val message: String) : SoundPackImportResult
 }
 
@@ -68,6 +69,14 @@ internal class CustomSoundPackRepository(
         return runCatching { parsePack(directory) }.getOrNull()
     }
 
+    fun deletePack(id: String): Boolean {
+        val pack = findPack(id) ?: return false
+        val wasSelected = selectedPackId() == pack.id
+        val deleted = pack.directory.deleteRecursively()
+        if (deleted && wasSelected) select(null)
+        return deleted
+    }
+
     fun importZip(input: InputStream): SoundPackImportResult {
         packsDirectory.mkdirs()
         val staging = File(packsDirectory, ".import-${System.nanoTime()}")
@@ -80,8 +89,11 @@ internal class CustomSoundPackRepository(
                     .also { staging.deleteRecursively() }
             val root = configFile.parentFile ?: staging
             val parsed = preparePack(root)
+            findPack(parsed.id)?.let { existing ->
+                staging.deleteRecursively()
+                return SoundPackImportResult.Duplicate(existing)
+            }
             val destination = File(packsDirectory, safePackId(parsed.id))
-            if (destination.exists()) destination.deleteRecursively()
             if (!root.renameTo(destination)) {
                 root.copyRecursively(destination, overwrite = true)
             }

@@ -108,6 +108,48 @@ class CustomSoundPackRepositoryTest {
         assertNull(repository.selectedPackId())
     }
 
+    @Test
+    fun duplicateImportDoesNotOverwriteOrSelectTheInstalledPack() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val repository = CustomSoundPackRepository(context)
+        val original = multiFileArchive(id = "duplicate-test-pack", name = "Original")
+        val duplicate = multiFileArchive(id = "duplicate-test-pack", name = "Replacement")
+        assertTrue(repository.importZip(ByteArrayInputStream(original)) is SoundPackImportResult.Success)
+        repository.select(null)
+
+        val result = repository.importZip(ByteArrayInputStream(duplicate))
+
+        assertTrue(result is SoundPackImportResult.Duplicate)
+        assertEquals("Original", repository.findPack("duplicate-test-pack")?.name)
+        assertNull(repository.selectedPackId())
+    }
+
+    @Test
+    fun deletingAnImportedPackRemovesItAndClearsItsSelection() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val repository = CustomSoundPackRepository(context)
+        val archive = multiFileArchive(id = "delete-test-pack", name = "Delete Me")
+        assertTrue(repository.importZip(ByteArrayInputStream(archive)) is SoundPackImportResult.Success)
+
+        assertTrue(repository.deletePack("delete-test-pack"))
+
+        assertNull(repository.findPack("delete-test-pack"))
+        assertNull(repository.selectedPackId())
+    }
+
+    private fun multiFileArchive(id: String, name: String): ByteArray = zip(
+        "config.json" to """
+            {
+              "id": "$id",
+              "name": "$name",
+              "version": 2,
+              "key_define_type": "multi",
+              "sound": "press.ogg"
+            }
+        """.trimIndent().toByteArray(),
+        "press.ogg" to byteArrayOf(1, 2, 3),
+    )
+
     private fun zip(vararg entries: Pair<String, ByteArray>): ByteArray {
         val output = ByteArrayOutputStream()
         ZipOutputStream(output).use { zip ->
