@@ -48,4 +48,35 @@ class KeyboardCharacterLayoutsTest {
             KeyboardCharacterLayout.fromPreference("future_layout"),
         )
     }
+
+    @Test
+    fun russianJcukenUsesStandardLegendsAndPhysicalHidUsages() {
+        val keys = KeyboardLayouts.getLayout(
+            KeyboardLayoutType.OBLIVION_75,
+            KeyboardCharacterLayout.RUSSIAN_JCUKEN,
+        ).flatten()
+
+        val physicalQ = keys.single { it.physicalKeyCode == KeyboardLayouts.KEY_Q }
+        val physicalA = keys.single { it.physicalKeyCode == KeyboardLayouts.KEY_A }
+        val physicalSlash = keys.single { it.physicalKeyCode == KeyboardLayouts.KEY_SLASH }
+        assertEquals("Й", physicalQ.legend)
+        assertEquals(KeyboardLayouts.KEY_Q, physicalQ.keyCode)
+        assertEquals("Ф", physicalA.legend)
+        assertEquals(KeyboardLayouts.KEY_A, physicalA.keyCode)
+        assertEquals(".", physicalSlash.legend)
+        assertEquals(",", physicalSlash.shiftedLegend)
+        assertEquals(KeyboardLayouts.KEY_SLASH, physicalSlash.keyCode)
+    }
+
+    @Test
+    fun nextCyclesThroughEveryTypingLayout() {
+        assertEquals(
+            KeyboardCharacterLayout.FRENCH_AZERTY,
+            KeyboardCharacterLayout.US_QWERTY.next(),
+        )
+        assertEquals(
+            KeyboardCharacterLayout.US_QWERTY,
+            KeyboardCharacterLayout.RUSSIAN_JCUKEN.next(),
+        )
+    }
 }

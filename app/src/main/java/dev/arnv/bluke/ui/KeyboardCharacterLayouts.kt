@@ -11,12 +11,15 @@ enum class KeyboardCharacterLayout(
     FRENCH_AZERTY("fr_azerty", "AZERTY", "French"),
     GERMAN_QWERTZ("de_qwertz", "QWERTZ", "German"),
     DVORAK("dvorak", "Dvorak", "Dvorak"),
-    COLEMAK("colemak", "Colemak", "Colemak");
+    COLEMAK("colemak", "Colemak", "Colemak"),
+    RUSSIAN_JCUKEN("ru_jcuken", "ЙЦУКЕН", "Russian");
 
     companion object {
         fun fromPreference(value: String?): KeyboardCharacterLayout =
             entries.firstOrNull { it.preferenceValue == value } ?: US_QWERTY
     }
+
+    fun next(): KeyboardCharacterLayout = entries[(ordinal + 1) % entries.size]
 }
 
 private data class KeyLegend(
@@ -89,7 +92,61 @@ private fun KeyboardCharacterLayout.legendOverrides(): Map<Int, KeyLegend> = whe
         KeyboardLayouts.KEY_L to "I", KeyboardLayouts.KEY_SEMICOLON to "O",
         KeyboardLayouts.KEY_N to "K",
     )
+    KeyboardCharacterLayout.RUSSIAN_JCUKEN -> mapOf(
+        physicalLegend(KeyboardLayouts.KEY_GRAVE, "Ё"),
+        physicalLegend(KeyboardLayouts.KEY_1, "1", "!"),
+        physicalLegend(KeyboardLayouts.KEY_2, "2", "\""),
+        physicalLegend(KeyboardLayouts.KEY_3, "3", "№"),
+        physicalLegend(KeyboardLayouts.KEY_4, "4", ";"),
+        physicalLegend(KeyboardLayouts.KEY_5, "5", "%"),
+        physicalLegend(KeyboardLayouts.KEY_6, "6", ":"),
+        physicalLegend(KeyboardLayouts.KEY_7, "7", "?"),
+        physicalLegend(KeyboardLayouts.KEY_8, "8", "*"),
+        physicalLegend(KeyboardLayouts.KEY_9, "9", "("),
+        physicalLegend(KeyboardLayouts.KEY_0, "0", ")"),
+        physicalLegend(KeyboardLayouts.KEY_MINUS, "-", "_"),
+        physicalLegend(KeyboardLayouts.KEY_EQUAL, "=", "+"),
+        physicalLegend(KeyboardLayouts.KEY_Q, "Й"),
+        physicalLegend(KeyboardLayouts.KEY_W, "Ц"),
+        physicalLegend(KeyboardLayouts.KEY_E, "У"),
+        physicalLegend(KeyboardLayouts.KEY_R, "К"),
+        physicalLegend(KeyboardLayouts.KEY_T, "Е"),
+        physicalLegend(KeyboardLayouts.KEY_Y, "Н"),
+        physicalLegend(KeyboardLayouts.KEY_U, "Г"),
+        physicalLegend(KeyboardLayouts.KEY_I, "Ш"),
+        physicalLegend(KeyboardLayouts.KEY_O, "Щ"),
+        physicalLegend(KeyboardLayouts.KEY_P, "З"),
+        physicalLegend(KeyboardLayouts.KEY_LBRACKET, "Х"),
+        physicalLegend(KeyboardLayouts.KEY_RBRACKET, "Ъ"),
+        physicalLegend(KeyboardLayouts.KEY_A, "Ф"),
+        physicalLegend(KeyboardLayouts.KEY_S, "Ы"),
+        physicalLegend(KeyboardLayouts.KEY_D, "В"),
+        physicalLegend(KeyboardLayouts.KEY_F, "А"),
+        physicalLegend(KeyboardLayouts.KEY_G, "П"),
+        physicalLegend(KeyboardLayouts.KEY_H, "Р"),
+        physicalLegend(KeyboardLayouts.KEY_J, "О"),
+        physicalLegend(KeyboardLayouts.KEY_K, "Л"),
+        physicalLegend(KeyboardLayouts.KEY_L, "Д"),
+        physicalLegend(KeyboardLayouts.KEY_SEMICOLON, "Ж"),
+        physicalLegend(KeyboardLayouts.KEY_APOSTROPHE, "Э"),
+        physicalLegend(KeyboardLayouts.KEY_Z, "Я"),
+        physicalLegend(KeyboardLayouts.KEY_X, "Ч"),
+        physicalLegend(KeyboardLayouts.KEY_C, "С"),
+        physicalLegend(KeyboardLayouts.KEY_V, "М"),
+        physicalLegend(KeyboardLayouts.KEY_B, "И"),
+        physicalLegend(KeyboardLayouts.KEY_N, "Т"),
+        physicalLegend(KeyboardLayouts.KEY_M, "Ь"),
+        physicalLegend(KeyboardLayouts.KEY_COMMA, "Б"),
+        physicalLegend(KeyboardLayouts.KEY_PERIOD, "Ю"),
+        physicalLegend(KeyboardLayouts.KEY_SLASH, ".", ","),
+    )
 }
+
+private fun physicalLegend(
+    keyCode: Int,
+    normal: String,
+    shifted: String = "",
+): Pair<Int, KeyLegend> = keyCode to KeyLegend(normal, shifted, keyCode)
 
 private fun legendMap(vararg entries: Pair<Int, String>): Map<Int, KeyLegend> =
     entries.associate { (keyCode, legend) -> keyCode to KeyLegend(legend) }

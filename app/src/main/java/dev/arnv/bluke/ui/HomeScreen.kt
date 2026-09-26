@@ -73,6 +73,7 @@ import dev.arnv.bluke.data.CYCLE_KEYBOARD_GEOMETRIES_PREFERENCE
 import dev.arnv.bluke.data.CYCLE_KEYBOARD_THEMES_PREFERENCE
 import dev.arnv.bluke.data.KEYBOARD_GEOMETRY_PREFERENCE
 import dev.arnv.bluke.data.KeyboardThemeRepository
+import kotlinx.coroutines.delay
 
 @SuppressLint("MissingPermission")
 @OptIn(ExperimentalFoundationApi::class, ExperimentalLayoutApi::class, ExperimentalMaterial3Api::class)
@@ -191,6 +192,10 @@ fun HomeScreen(
     var isFnActive by remember { mutableStateOf(false) }
     var activeConsumerKey by remember { mutableStateOf<Int?>(null) }
     val fnConsumedKeys = remember { mutableSetOf<Int>() }
+    var layoutCycleSpaceActive by remember { mutableStateOf(false) }
+    var pendingCharacterLayout by remember { mutableStateOf<KeyboardCharacterLayout?>(null) }
+    var layoutSwitcherRevision by remember { mutableIntStateOf(0) }
+    var showLayoutSwitcher by remember { mutableStateOf(false) }
 
     var showUpdateDialog by rememberSaveable { mutableStateOf(false) }
     var descriptorRefreshRequired by rememberSaveable { mutableStateOf(false) }
@@ -206,6 +211,13 @@ fun HomeScreen(
             if (sharedPrefs.getBoolean("mock_troubleshooting_nudge", false)) {
                 showTroubleshootingNudge = true
             }
+        }
+    }
+
+    LaunchedEffect(layoutSwitcherRevision) {
+        if (layoutSwitcherRevision > 0) {
+            delay(1_400L)
+            showLayoutSwitcher = false
         }
     }
 
@@ -445,6 +457,46 @@ fun HomeScreen(
 
     // Process local screen-press inputs
     fun handleLocalKeyPress(keyCode: Int, isPress: Boolean) {
+        fun applyPendingCharacterLayoutIfReleased() {
+            val shiftStillPressed = activePressedKeys.any {
+                it == KeyboardLayouts.MOD_LSHIFT || it == KeyboardLayouts.MOD_RSHIFT
+            }
+            if (!layoutCycleSpaceActive && !shiftStillPressed) {
+                pendingCharacterLayout?.let { nextLayout ->
+                    characterLayout = nextLayout
+                    sharedPrefs.edit {
+                        putString(KEYBOARD_CHARACTER_LAYOUT_PREFERENCE, nextLayout.preferenceValue)
+                    }
+                    pendingCharacterLayout = null
+                }
+            }
+        }
+
+        if (keyCode == KeyboardLayouts.KEY_SPACE) {
+            val isShiftPressed = activePressedKeys.any {
+                it == KeyboardLayouts.MOD_LSHIFT || it == KeyboardLayouts.MOD_RSHIFT
+            }
+            if (isPress && isShiftPressed && !layoutCycleSpaceActive) {
+                if (isHapticsEnabled) {
+                    view.performHapticFeedback(android.view.HapticFeedbackConstants.KEYBOARD_PRESS)
+                }
+                layoutCycleSpaceActive = true
+                activePressedKeys.add(keyCode)
+                soundSynth.playPress(keyCode)
+                pendingCharacterLayout = (pendingCharacterLayout ?: characterLayout).next()
+                showLayoutSwitcher = true
+                layoutSwitcherRevision++
+                return
+            }
+            if (!isPress && layoutCycleSpaceActive) {
+                layoutCycleSpaceActive = false
+                activePressedKeys.remove(keyCode)
+                soundSynth.playRelease(keyCode)
+                applyPendingCharacterLayoutIfReleased()
+                return
+            }
+        }
+
         if (keyCode == KeyboardLayouts.KEY_FN) {
             if (isPress && !isFnActive) {
                 if (isHapticsEnabled) {
@@ -512,6 +564,7 @@ fun HomeScreen(
             activePressedKeys.remove(keyCode)
             soundSynth.playRelease(keyCode)
             btManager.sendKey(keyCode, false)
+            applyPendingCharacterLayoutIfReleased()
         }
     }
 
@@ -1065,6 +1118,11 @@ fun HomeScreen(
                                 isFnActive = isFnActive,
                                 keySensitivity = keySensitivity,
                                 onKeyPressChange = { code, press -> handleLocalKeyPress(code, press) }
+                            )
+                            KeyboardLayoutSwitcherOverlay(
+                                visible = showLayoutSwitcher,
+                                selectedLayout = pendingCharacterLayout ?: characterLayout,
+                                modifier = Modifier.align(Alignment.Center),
                             )
                         }
                     }
