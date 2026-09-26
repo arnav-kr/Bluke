@@ -251,7 +251,7 @@ class BehaviorActivity : ComponentActivity() {
                                 ),
                                 SettingsItemData(
                                     title = "Phone volume buttons control host",
-                                    subtitle = "Only while Multimedia is open; off by default",
+                                    subtitle = "Only while Multimedia is open",
                                     icon = { Icon(Icons.Default.MusicNote, null, tint = MaterialTheme.colorScheme.primary) },
                                     action = {
                                         Switch(hardwareVolumeRemote, { value ->
