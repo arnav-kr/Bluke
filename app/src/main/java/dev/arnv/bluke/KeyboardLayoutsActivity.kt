@@ -27,6 +27,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -39,6 +40,7 @@ import dev.arnv.bluke.data.CYCLE_KEYBOARD_GEOMETRIES_PREFERENCE
 import dev.arnv.bluke.data.KEYBOARD_GEOMETRY_PREFERENCE
 import dev.arnv.bluke.ui.KeyboardGeometry
 import dev.arnv.bluke.ui.normalizedCycleSelection
+import dev.arnv.bluke.ui.selectedOrFirstEnabled
 import dev.arnv.bluke.ui.toggledCycleSelection
 import dev.arnv.bluke.ui.theme.MyApplicationTheme
 
@@ -50,11 +52,23 @@ class KeyboardLayoutsActivity : ComponentActivity() {
         setContent {
             MyApplicationTheme {
                 val ids = KeyboardGeometry.entries.map { it.name }
-                var selectedLayout by remember {
-                    mutableStateOf(KeyboardGeometry.fromPreference(preferences.getString(KEYBOARD_GEOMETRY_PREFERENCE, null)))
+                val initialCycleSelection = remember {
+                    normalizedCycleSelection(preferences.getStringSet(CYCLE_KEYBOARD_GEOMETRIES_PREFERENCE, null), ids)
                 }
                 var cycleSelection by remember {
-                    mutableStateOf(normalizedCycleSelection(preferences.getStringSet(CYCLE_KEYBOARD_GEOMETRIES_PREFERENCE, null), ids))
+                    mutableStateOf(initialCycleSelection)
+                }
+                val storedLayout = remember {
+                    KeyboardGeometry.fromPreference(preferences.getString(KEYBOARD_GEOMETRY_PREFERENCE, null))
+                }
+                var selectedLayout by remember {
+                    val selectedName = selectedOrFirstEnabled(storedLayout.name, initialCycleSelection, ids)!!
+                    mutableStateOf(KeyboardGeometry.valueOf(selectedName))
+                }
+                LaunchedEffect(Unit) {
+                    if (selectedLayout != storedLayout) {
+                        preferences.edit { putString(KEYBOARD_GEOMETRY_PREFERENCE, selectedLayout.name) }
+                    }
                 }
                 val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
                 Scaffold(
@@ -86,7 +100,12 @@ class KeyboardLayoutsActivity : ComponentActivity() {
                             Surface(
                                 onClick = {
                                     selectedLayout = layout
-                                    preferences.edit { putString(KEYBOARD_GEOMETRY_PREFERENCE, layout.name) }
+                                    val nextCycle = cycleSelection + layout.name
+                                    cycleSelection = nextCycle
+                                    preferences.edit {
+                                        putString(KEYBOARD_GEOMETRY_PREFERENCE, layout.name)
+                                        putStringSet(CYCLE_KEYBOARD_GEOMETRIES_PREFERENCE, nextCycle)
+                                    }
                                 },
                                 shape = RoundedCornerShape(
                                     topStart = if (index == 0) 28.dp else 4.dp,
@@ -110,8 +129,14 @@ class KeyboardLayoutsActivity : ComponentActivity() {
                                         checked = layout.name in cycleSelection,
                                         enabled = layout.name !in cycleSelection || cycleSelection.size > 1,
                                         onCheckedChange = {
-                                            cycleSelection = toggledCycleSelection(cycleSelection, layout.name)
-                                            preferences.edit { putStringSet(CYCLE_KEYBOARD_GEOMETRIES_PREFERENCE, cycleSelection) }
+                                            val nextCycle = toggledCycleSelection(cycleSelection, layout.name)
+                                            val nextSelectedName = selectedOrFirstEnabled(selectedLayout.name, nextCycle, ids)!!
+                                            cycleSelection = nextCycle
+                                            selectedLayout = KeyboardGeometry.valueOf(nextSelectedName)
+                                            preferences.edit {
+                                                putStringSet(CYCLE_KEYBOARD_GEOMETRIES_PREFERENCE, nextCycle)
+                                                putString(KEYBOARD_GEOMETRY_PREFERENCE, nextSelectedName)
+                                            }
                                         },
                                     )
                                 }

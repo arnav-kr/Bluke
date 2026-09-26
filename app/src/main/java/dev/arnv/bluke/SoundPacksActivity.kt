@@ -40,6 +40,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -61,6 +62,9 @@ import dev.arnv.bluke.sound.selectedBuiltInSound
 import dev.arnv.bluke.sound.saveSoundCycleSelection
 import dev.arnv.bluke.sound.soundCycleSelection
 import dev.arnv.bluke.ui.theme.MyApplicationTheme
+import dev.arnv.bluke.ui.normalizedCycleSelection
+import dev.arnv.bluke.ui.selectedOrFirstEnabled
+import dev.arnv.bluke.ui.toggledCycleSelection
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -75,19 +79,45 @@ class SoundPacksActivity : ComponentActivity() {
         setContent {
             MyApplicationTheme {
                 var packs by remember { mutableStateOf(repository.listPacks()) }
-                var selectedProfileId by remember {
-                    mutableStateOf(
-                        repository.selectedPack()?.let { customSoundProfileId(it.id) }
-                            ?: builtInSoundProfileId(selectedBuiltInSound(preferences)),
-                    )
+                val initialProfileIds = remember {
+                    SwitchType.entries.map(::builtInSoundProfileId) + packs.map { customSoundProfileId(it.id) }
+                }
+                val initialCycleSelection = remember {
+                    soundCycleSelection(preferences, packs.map { it.id })
                 }
                 var cycleSelection by remember {
-                    mutableStateOf(soundCycleSelection(preferences, packs.map { it.id }))
+                    mutableStateOf(initialCycleSelection)
+                }
+                val storedProfileId = remember {
+                    repository.selectedPack()?.let { customSoundProfileId(it.id) }
+                        ?: builtInSoundProfileId(selectedBuiltInSound(preferences))
+                }
+                var selectedProfileId by remember {
+                    mutableStateOf(selectedOrFirstEnabled(storedProfileId, initialCycleSelection, initialProfileIds)!!)
                 }
                 var importing by remember { mutableStateOf(false) }
                 var pendingDeletion by remember { mutableStateOf<CustomSoundPack?>(null) }
                 val scope = rememberCoroutineScope()
                 val snackbarHostState = remember { SnackbarHostState() }
+
+                fun selectProfile(profileId: String) {
+                    val builtIn = SwitchType.entries.firstOrNull { builtInSoundProfileId(it) == profileId }
+                    if (builtIn != null) {
+                        repository.select(null)
+                        preferences.edit { putString(SELECTED_BUILT_IN_SOUND_PREFERENCE, builtIn.name) }
+                        selectedProfileId = profileId
+                        return
+                    }
+                    val custom = repository.listPacks().firstOrNull { customSoundProfileId(it.id) == profileId }
+                    if (custom != null) {
+                        repository.select(custom.id)
+                        selectedProfileId = profileId
+                    }
+                }
+
+                LaunchedEffect(Unit) {
+                    if (selectedProfileId != storedProfileId) selectProfile(selectedProfileId)
+                }
                 val importer = rememberLauncherForActivityResult(
                     ActivityResultContracts.OpenDocument(),
                 ) { uri ->
@@ -133,12 +163,18 @@ class SoundPacksActivity : ComponentActivity() {
                                             repository.deletePack(pack.id)
                                         }
                                         if (deleted) {
-                                            packs = repository.listPacks()
-                                            cycleSelection = cycleSelection - customSoundProfileId(pack.id)
-                                            saveSoundCycleSelection(preferences, cycleSelection)
-                                            if (selectedProfileId == customSoundProfileId(pack.id)) {
-                                                selectedProfileId = builtInSoundProfileId(selectedBuiltInSound(preferences))
-                                            }
+                                            val updatedPacks = repository.listPacks()
+                                            packs = updatedPacks
+                                            val profileIds = SwitchType.entries.map(::builtInSoundProfileId) +
+                                                updatedPacks.map { customSoundProfileId(it.id) }
+                                            val nextCycle = normalizedCycleSelection(
+                                                cycleSelection - customSoundProfileId(pack.id),
+                                                profileIds,
+                                            )
+                                            val nextSelected = selectedOrFirstEnabled(selectedProfileId, nextCycle, profileIds)!!
+                                            cycleSelection = nextCycle
+                                            saveSoundCycleSelection(preferences, nextCycle)
+                                            selectProfile(nextSelected)
                                             snackbarHostState.showSnackbar("Deleted ${pack.name}.")
                                         } else {
                                             snackbarHostState.showSnackbar("Could not delete ${pack.name}.")
@@ -222,24 +258,19 @@ class SoundPacksActivity : ComponentActivity() {
                                         { pendingDeletion = it.pack }
                                     },
                                     onSelect = {
-                                        when (choice) {
-                                            is SoundChoice.BuiltIn -> {
-                                                repository.select(null)
-                                                preferences.edit {
-                                                    putString(
-                                                        SELECTED_BUILT_IN_SOUND_PREFERENCE,
-                                                        choice.switchType.name,
-                                                    )
-                                                }
-                                            }
-                                            is SoundChoice.Imported -> repository.select(choice.pack.id)
-                                        }
-                                        selectedProfileId = choice.id
+                                        val nextCycle = cycleSelection + choice.id
+                                        cycleSelection = nextCycle
+                                        saveSoundCycleSelection(preferences, nextCycle)
+                                        selectProfile(choice.id)
                                     },
                                     onCycleToggle = {
                                         if (choice.id !in cycleSelection || cycleSelection.size > 1) {
-                                            cycleSelection = if (choice.id in cycleSelection) cycleSelection - choice.id else cycleSelection + choice.id
-                                            saveSoundCycleSelection(preferences, cycleSelection)
+                                            val profileIds = choices.map { it.id }
+                                            val nextCycle = toggledCycleSelection(cycleSelection, choice.id)
+                                            val nextSelected = selectedOrFirstEnabled(selectedProfileId, nextCycle, profileIds)!!
+                                            cycleSelection = nextCycle
+                                            saveSoundCycleSelection(preferences, nextCycle)
+                                            selectProfile(nextSelected)
                                         }
                                     },
                                 )

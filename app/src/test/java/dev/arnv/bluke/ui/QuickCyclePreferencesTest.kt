@@ -22,4 +22,16 @@ class QuickCyclePreferencesTest {
         assertEquals(setOf("first"), toggledCycleSelection(setOf("first", "second"), "second"))
         assertEquals(setOf("first"), toggledCycleSelection(setOf("first"), "first"))
     }
+
+    @Test
+    fun selectedChoiceMovesToFirstEnabledChoiceWhenExcluded() {
+        assertEquals(
+            "second",
+            selectedOrFirstEnabled(
+                selected = "removed",
+                enabled = setOf("second", "third"),
+                available = available,
+            ),
+        )
+    }
 }

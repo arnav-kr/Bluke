@@ -53,6 +53,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateMapOf
@@ -81,6 +82,7 @@ import dev.arnv.bluke.ui.KeyboardThemeDefinition
 import dev.arnv.bluke.ui.KeyboardView
 import dev.arnv.bluke.ui.VisualColorPicker
 import dev.arnv.bluke.ui.normalizedCycleSelection
+import dev.arnv.bluke.ui.selectedOrFirstEnabled
 import dev.arnv.bluke.ui.toggledCycleSelection
 import dev.arnv.bluke.ui.theme.MyApplicationTheme
 import java.util.UUID
@@ -94,12 +96,22 @@ class KeyboardThemesActivity : ComponentActivity() {
             MyApplicationTheme {
                 val repository = remember { KeyboardThemeRepository(this) }
                 var customThemes by remember { mutableStateOf(repository.listCustomThemes()) }
-                var selectedThemeId by remember { mutableStateOf(repository.selectedThemeId()) }
                 var editingTheme by remember { mutableStateOf<KeyboardThemeDefinition?>(null) }
                 var pendingDelete by remember { mutableStateOf<KeyboardThemeDefinition?>(null) }
                 val preferences = remember { getSharedPreferences("app_prefs", MODE_PRIVATE) }
+                val initialThemeIds = remember { repository.allThemes().map { it.id } }
+                val initialCycleThemes = remember {
+                    normalizedCycleSelection(preferences.getStringSet(CYCLE_KEYBOARD_THEMES_PREFERENCE, null), initialThemeIds)
+                }
                 var cycleThemes by remember {
-                    mutableStateOf(normalizedCycleSelection(preferences.getStringSet(CYCLE_KEYBOARD_THEMES_PREFERENCE, null), repository.allThemes().map { it.id }))
+                    mutableStateOf(initialCycleThemes)
+                }
+                val storedThemeId = remember { repository.selectedThemeId() }
+                var selectedThemeId by remember {
+                    mutableStateOf(selectedOrFirstEnabled(storedThemeId, initialCycleThemes, initialThemeIds)!!)
+                }
+                LaunchedEffect(Unit) {
+                    if (selectedThemeId != storedThemeId) repository.selectTheme(selectedThemeId)
                 }
                 val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
 
@@ -137,6 +149,9 @@ class KeyboardThemesActivity : ComponentActivity() {
                             cycleThemes = cycleThemes,
                             onCreate = { beginCopy(repository.selectedTheme()) },
                             onSelect = { selected ->
+                                val nextCycle = cycleThemes + selected.id
+                                cycleThemes = nextCycle
+                                preferences.edit { putStringSet(CYCLE_KEYBOARD_THEMES_PREFERENCE, nextCycle) }
                                 repository.selectTheme(selected.id)
                                 selectedThemeId = selected.id
                             },
@@ -144,8 +159,13 @@ class KeyboardThemesActivity : ComponentActivity() {
                             onEdit = { editingTheme = it },
                             onDelete = { pendingDelete = it },
                             onCycleToggle = { id ->
-                                cycleThemes = toggledCycleSelection(cycleThemes, id)
-                                preferences.edit { putStringSet(CYCLE_KEYBOARD_THEMES_PREFERENCE, cycleThemes) }
+                                val nextCycle = toggledCycleSelection(cycleThemes, id)
+                                val themeIds = repository.allThemes().map { it.id }
+                                val nextSelected = selectedOrFirstEnabled(selectedThemeId, nextCycle, themeIds)!!
+                                cycleThemes = nextCycle
+                                selectedThemeId = nextSelected
+                                repository.selectTheme(nextSelected)
+                                preferences.edit { putStringSet(CYCLE_KEYBOARD_THEMES_PREFERENCE, nextCycle) }
                             },
                         )
                     } else {
@@ -178,10 +198,14 @@ class KeyboardThemesActivity : ComponentActivity() {
                         confirmButton = {
                             TextButton(onClick = {
                                 repository.delete(themeToDelete.id)
-                                cycleThemes = (cycleThemes - themeToDelete.id).ifEmpty { setOf(repository.selectedThemeId()) }
-                                preferences.edit { putStringSet(CYCLE_KEYBOARD_THEMES_PREFERENCE, cycleThemes) }
                                 customThemes = repository.listCustomThemes()
-                                selectedThemeId = repository.selectedThemeId()
+                                val themeIds = repository.allThemes().map { it.id }
+                                val nextCycle = normalizedCycleSelection(cycleThemes - themeToDelete.id, themeIds)
+                                val nextSelected = selectedOrFirstEnabled(repository.selectedThemeId(), nextCycle, themeIds)!!
+                                cycleThemes = nextCycle
+                                selectedThemeId = nextSelected
+                                repository.selectTheme(nextSelected)
+                                preferences.edit { putStringSet(CYCLE_KEYBOARD_THEMES_PREFERENCE, nextCycle) }
                                 pendingDelete = null
                             }) { Text("Delete") }
                         },
