@@ -726,6 +726,10 @@ private val volumeDownAction = RemoteAction.Consumer("Volume down", Icons.AutoMi
 private val previousAction = RemoteAction.Consumer("Previous track", Icons.Default.SkipPrevious, ConsumerControl.PREVIOUS_TRACK)
 private val playAction = RemoteAction.Consumer("Play or pause", Icons.Default.PlayArrow, ConsumerControl.PLAY_PAUSE)
 private val nextAction = RemoteAction.Consumer("Next track", Icons.Default.SkipNext, ConsumerControl.NEXT_TRACK)
+// Upright content is rotated -90 degrees. Use the opposite source glyphs so the rendered
+// Previous/Next symbols retain their intended visual direction without swapping HID commands.
+private val uprightPreviousAction = RemoteAction.Consumer("Previous track", Icons.Default.SkipNext, ConsumerControl.PREVIOUS_TRACK)
+private val uprightNextAction = RemoteAction.Consumer("Next track", Icons.Default.SkipPrevious, ConsumerControl.NEXT_TRACK)
 private val escapeAction = RemoteAction.Key("Esc", null, KeyboardLayouts.KEY_ESC)
 private val homeAction = RemoteAction.Key("Home", null, KeyboardLayouts.KEY_HOME)
 private val endAction = RemoteAction.Key("End", null, KeyboardLayouts.KEY_END)
@@ -742,9 +746,9 @@ private val landscapeMediaRows = listOf(
 
 private val portraitHeldMediaRows = listOf(
     listOf(muteAction, volumeUpAction, volumeDownAction),
-    listOf(previousAction, escapeAction, blackAction),
+    listOf(uprightPreviousAction, escapeAction, blackAction),
     listOf(playAction, pageDownAction, endAction),
-    listOf(nextAction, pageUpAction, homeAction),
+    listOf(uprightNextAction, pageUpAction, homeAction),
 )
 
 @Composable
