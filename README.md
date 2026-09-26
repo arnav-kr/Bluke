@@ -18,7 +18,7 @@ Bluke turns your Android device into a driverless, wireless Bluetooth HID mechan
 ## Features
 * **No host software required**: Uses Android's native Bluetooth HID profile to connect directly with Windows, macOS, Linux, ChromeOS, Android TV, and game consoles.
 * **Switch sound synthesis**: Generates mechanical switch acoustics (Cherry MX Brown, Holy Panda, Alpaca, Kailh Box Navy, Buckling Spring, and Topre) in real-time.
-* **Themes and case colors**: Includes built-in presets (Olivia, Dracula, Oblivion, Retro, Cafe, and Mizu) and selectable case colors.
+* **Keyboard themes**: Includes built-in presets and editable custom themes with per-theme case, plate, keycap, and legend colors.
 * **System integration**: Supports system haptics, OLED black mode, and Material You dynamic color schemes.
 
 

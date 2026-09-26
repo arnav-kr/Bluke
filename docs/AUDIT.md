@@ -1117,6 +1117,36 @@ BUILD SUCCESSFUL in 3m 40s
 Lint XML: issues=21 errors=0 warnings=21
 ```
 
+### 7.9 Settings information architecture and native cycle configuration (2026-09-26)
+
+Settings now follows the product-facing hierarchy rather than the original implementation boundaries. **Personalization** contains Look & Feel, Keyboard, and Controller. Look & Feel owns app color, dark theme, haptics, and the global sound enable switch. Keyboard owns touch-area behavior, character layout, host/local Caps Lock state, layouts, themes, and sound packs. Controller owns D-pad compatibility. **Controls & connection** now contains only reconnect, discovery filtering, device-address visibility, audio routing, and foreground Multimedia volume-button behavior. Help, About, and developer gating are unchanged.
+
+Layout, theme, and key-sound cycle membership no longer lives on a duplicate Quick-cycle screen. Each native list now has two independent controls: tapping a row selects the active item, while its checkbox includes or excludes that item from toolbar tapping. The final enabled item cannot be unchecked. Long-pressing the corresponding keyboard toolbar control opens the matching native list. The remaining Quick-cycle destination configures input modes only.
+
+Sound-cycle storage now uses stable profile IDs for both built-ins and imported packs. The migration converts legacy `SwitchType.name` values, preserves the existing built-in subset, and adds already-imported custom packs once because those packs were unconditionally included by the previous implementation. New imports join the cycle; deleting a pack removes its stale cycle ID. This is preference-only behavior and does not affect audio-pack files.
+
+Keyboard case styling is now part of `KeyboardThemeDefinition` instead of a separate global case-color cycle. Every custom theme stores `caseArgb` and `caseMetallic` beside its plate and key styles. Existing JSON without these fields resolves to the previous black, non-metallic startup default. The old global case selector and its competing preference path were removed. No HID descriptor, report mapping, pairing state, dependency, or toolchain version changed.
+
+Verification evidence:
+
+```text
+> .\gradlew.bat testDebugUnitTest --no-daemon
+BUILD SUCCESSFUL in 1m 8s
+JUnit XML: tests=99 failures=0 errors=0 skipped=0
+
+> .\gradlew.bat lintDebug --no-daemon
+BUILD SUCCESSFUL in 3m 3s
+lint-results-debug.xml: issues=22 errors=0 warnings=22
+
+> .\gradlew.bat assembleDebug --no-daemon
+BUILD SUCCESSFUL in 17s
+38 actionable tasks: 38 up-to-date
+```
+
+### Project authorship
+
+Bluke is authored and maintained by **Arnav Kumar** ([@arnav-kr](https://github.com/arnav-kr)). This documentation commit uses the repository's established GitHub noreply identity when adding Arnav as a co-author.
+
 ## 8. Open questions for the maintainer
 
 1. On which API 28, 31, and 36 devices did the physical matrix pass or fail, and can the resulting developer logs/build fingerprints be attached?

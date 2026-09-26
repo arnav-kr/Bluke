@@ -6,8 +6,8 @@ Source reviewed: `Bluke Improvements.pdf` (13 pages). The document is treated as
 
 - Keep the current SDK, AGP, Kotlin, Compose BOM, and Material 3 versions. The UI uses the existing Material APIs to reproduce connected/segmented list treatment instead of adopting alpha-only components.
 - Add no third-party dependency. The keyboard color picker is implemented with Compose primitives.
-- Preserve existing preferences and defaults so an app update does not reset users' layouts, themes, audio, modes, or case colors.
-- Keep keyboard geometry, character layout, keyboard theme, switch sound, input mode, and case color as separate concepts.
+- Preserve existing preferences and defaults so an app update does not reset users' layouts, themes, audio, or modes; existing themes gain the previous black/non-metallic case default.
+- Keep keyboard geometry, character layout, keyboard theme, switch sound, and input mode as separate concepts. Case styling belongs to each keyboard theme.
 - Make tap cycle a setting and long-press open its configuration wherever a compact controller toolbar exposes both actions.
 
 ## Traceability
@@ -24,13 +24,13 @@ Source reviewed: `Bluke Improvements.pdf` (13 pages). The document is treated as
 | IMP-08 | 4 | Remove D-pad jargon | Rename the choices to Native games and Browser games, with plain-language guidance. |
 | IMP-09 | 5 | Remove repeated typing-layout descriptions | Use one settings row that opens a single-choice layout dialog and explains the host-layout requirement once. |
 | IMP-10 | 6 | Clarify host audio routing | Rename it to Keep audio on this phone and describe the Linux-focused, best-effort behavior. |
-| IMP-11 | 7 | Redesign quick-cycle configuration | Move cycle membership to a dedicated screen with connected sections for layouts, sounds, modes, themes, and case colors. Custom themes remain eligible. |
+| IMP-11 | 7 | Redesign quick-cycle configuration | Configure layout, theme, and sound membership in their native lists; keep the remaining Quick-cycle screen for input modes only. Custom themes and imported sounds remain eligible. |
 | IMP-12 | 8 | Gate developer-only features | Keep developer controls unavailable when Developer Mode is off and clear active mock state when it is disabled. |
 | IMP-13 | 9 | Redesign keyboard theme editor | Use focused Material cards, concise copy, live preview, group/key targeting, and sticky save intent. |
-| IMP-14 | 9 | Replace RGB/hex-first editing | Add a shared visual hue/saturation/value picker for keyboard themes and custom case colors; keep hex as an optional precise input. |
+| IMP-14 | 9 | Replace RGB/hex-first editing | Add a shared visual hue/saturation/value picker for keyboard theme properties, including per-theme case color; keep hex as an optional precise input. |
 | IMP-15 | 10 | Standardize keyboard legends | Base legend size on available key-top width instead of shrinking named modifier keys by character count alone. |
 | IMP-16 | 10 | Fn should transform F-key legends | Replace F1-F12 legends in place while Fn is held; remove the overlay that obscured the keyboard. |
-| IMP-17 | 10 | Standardize toolbar tap/hold | Tap cycles; long-press opens the relevant configuration for layout, sound, theme, D-pad behavior, mode, and case color where applicable. |
+| IMP-17 | 10 | Standardize toolbar tap/hold | Tap cycles; long-press opens the relevant native list for layout, sound, theme, D-pad behavior, and input mode. Case appearance follows the selected keyboard theme. |
 | IMP-18 | 10 | Remove connected/offline text | Keep the accessible colored status indicator and host name, without the bracketed duplicate status. |
 | IMP-19 | 11 | Match D-pad toolbar styling | Use the same neutral toolbar surface as adjacent controls; communicate selection through icon and label. |
 | IMP-20 | 12 | Style touchpad modifiers like keys | Add a mechanical-key modifier strip using the active keyboard theme. |
@@ -63,3 +63,6 @@ Source reviewed: `Bluke Improvements.pdf` (13 pages). The document is treated as
 | UX-07 | Host filtering and device address used the same icon | Assigned distinct filter-off and fingerprint icons. |
 | UX-08 | The non-metallic Black case appeared as a gray-black gradient | Render non-metallic case colors as their exact solid color; reserve gradients for metallic finishes. |
 | UX-09 | Upright controls and pointer surface had mismatched widths and off-center margins | Give the control and pointer decks equal width, center the complete upright composition, and distribute the added width across buttons and gaps. |
+| UX-10 | Settings mixed keyboard/controller options into connection behavior | Split Personalization into Look & Feel, Keyboard, and Controller, leaving Controls & connection focused on host discovery and remote behavior. |
+| UX-11 | Quick-cycle configuration duplicated layout, theme, and sound lists | Put protected cycle-membership checkboxes directly in each native list; the last enabled choice cannot be removed. |
+| UX-12 | Keyboard case color was a competing global cycle | Store case color and metallic finish in each keyboard theme, with backward-compatible defaults for existing custom themes. |
