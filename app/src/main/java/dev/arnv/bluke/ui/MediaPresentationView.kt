@@ -5,6 +5,7 @@ import android.content.ContextWrapper
 import android.content.Intent
 import android.content.SharedPreferences
 import android.hardware.SensorManager
+import android.os.SystemClock
 import android.os.VibrationEffect
 import android.os.Vibrator
 import android.view.KeyEvent
@@ -35,7 +36,6 @@ import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.Dialpad
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Mouse
@@ -64,7 +64,6 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
@@ -76,7 +75,6 @@ import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import dev.arnv.bluke.QuickCycleActivity
-import dev.arnv.bluke.R
 import dev.arnv.bluke.RemoteVolumeKeyHost
 import dev.arnv.bluke.bluetooth.BluetoothKeyboardManager
 import dev.arnv.bluke.bluetooth.ConsumerControl
@@ -106,9 +104,37 @@ internal fun multimediaPostureForDegrees(
     val portraitDistance = min(distanceTo(0), distanceTo(180))
     val landscapeDistance = min(distanceTo(90), distanceTo(270))
     return when {
-        portraitDistance <= 35 -> MultimediaPosture.PORTRAIT_HELD
-        landscapeDistance <= 35 -> MultimediaPosture.LANDSCAPE
+        portraitDistance <= POSTURE_ENTRY_DEGREES -> MultimediaPosture.PORTRAIT_HELD
+        landscapeDistance <= POSTURE_ENTRY_DEGREES -> MultimediaPosture.LANDSCAPE
         else -> current
+    }
+}
+
+internal class MultimediaPostureStabilizer(
+    initial: MultimediaPosture,
+    private val stabilityMillis: Long = POSTURE_STABILITY_MILLIS,
+) {
+    var current: MultimediaPosture = initial
+        private set
+    private var candidate: MultimediaPosture? = null
+    private var candidateSinceMillis = 0L
+
+    fun update(degrees: Int, nowMillis: Long): MultimediaPosture {
+        val next = multimediaPostureForDegrees(degrees, current)
+        if (next == current) {
+            candidate = null
+            return current
+        }
+        if (candidate != next) {
+            candidate = next
+            candidateSinceMillis = nowMillis
+            return current
+        }
+        if (nowMillis - candidateSinceMillis >= stabilityMillis) {
+            current = next
+            candidate = null
+        }
+        return current
     }
 }
 
@@ -136,7 +162,6 @@ internal fun MediaPresentationView(
         mutableStateOf(lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED))
     }
     var posture by rememberSaveable { mutableStateOf(MultimediaPosture.LANDSCAPE) }
-    var showNumpadLed by rememberSaveable { mutableStateOf(false) }
     var sensitivity by remember {
         mutableFloatStateOf(sharedPrefs.getFloat("touchpad_sensitivity", 1.5f))
     }
@@ -163,9 +188,10 @@ internal fun MediaPresentationView(
             posture = postureOverride
             onDispose {}
         } else {
+            val stabilizer = MultimediaPostureStabilizer(posture)
             val listener = object : OrientationEventListener(context, SensorManager.SENSOR_DELAY_UI) {
                 override fun onOrientationChanged(orientation: Int) {
-                    posture = multimediaPostureForDegrees(orientation, posture)
+                    posture = stabilizer.update(orientation, SystemClock.elapsedRealtime())
                 }
             }
             if (listener.canDetectOrientation()) listener.enable()
@@ -200,10 +226,6 @@ internal fun MediaPresentationView(
     }
 
     val resolvedPosture = postureOverride ?: posture
-    val toggleNumpad = {
-        showNumpadLed = !showNumpadLed
-        triggerVibration(20)
-    }
     val cycleSensitivity = {
         sensitivity = nextTouchpadSpeed(sensitivity)
         sharedPrefs.edit { putFloat("touchpad_sensitivity", sensitivity) }
@@ -239,8 +261,6 @@ internal fun MediaPresentationView(
                 onModeChange = onModeChange,
                 sharedPrefs = sharedPrefs,
                 isConnected = isConnected,
-                showNumpadLed = showNumpadLed,
-                onToggleNumpad = toggleNumpad,
                 sensitivity = sensitivity,
                 onSensitivityChange = cycleSensitivity,
                 scrollSensitivity = scrollSensitivity,
@@ -253,7 +273,7 @@ internal fun MediaPresentationView(
                 posture = resolvedPosture,
                 sensitivity = sensitivity,
                 scrollSensitivity = scrollSensitivity,
-                showNumpadLed = showNumpadLed,
+                triggerVibration = ::triggerVibration,
                 modifier = Modifier.fillMaxSize(),
             )
         }
@@ -263,7 +283,6 @@ internal fun MediaPresentationView(
                 onClose = onClose,
                 onModeChange = cycleMode,
                 isConnected = isConnected,
-                onToggleNumpad = toggleNumpad,
                 sensitivity = sensitivity,
                 onSensitivityChange = cycleSensitivity,
                 scrollSensitivity = scrollSensitivity,
@@ -276,7 +295,7 @@ internal fun MediaPresentationView(
                 posture = resolvedPosture,
                 sensitivity = sensitivity,
                 scrollSensitivity = scrollSensitivity,
-                showNumpadLed = showNumpadLed,
+                triggerVibration = ::triggerVibration,
                 modifier = Modifier.weight(1f).fillMaxHeight(),
             )
         }
@@ -289,7 +308,7 @@ private fun MultimediaControlCanvas(
     posture: MultimediaPosture,
     sensitivity: Float,
     scrollSensitivity: Float,
-    showNumpadLed: Boolean,
+    triggerVibration: (Long) -> Unit,
     modifier: Modifier,
 ) {
     BoxWithConstraints(
@@ -328,6 +347,7 @@ private fun MultimediaControlCanvas(
                 buttonHeight = controlHeight,
                 horizontalGap = horizontalGap,
                 verticalGap = verticalGap,
+                triggerVibration = triggerVibration,
                 modifier = Modifier
                     .weight(if (posture == MultimediaPosture.LANDSCAPE) 1.025f else 1f)
                     .fillMaxHeight(),
@@ -337,9 +357,11 @@ private fun MultimediaControlCanvas(
                 posture = posture,
                 sensitivity = sensitivity,
                 scrollSensitivity = scrollSensitivity,
-                showNumpadLed = showNumpadLed,
+                triggerVibration = triggerVibration,
                 compact = compact,
-                modifier = Modifier.weight(if (posture == MultimediaPosture.LANDSCAPE) 0.975f else 1f).fillMaxHeight(),
+                modifier = Modifier
+                    .weight(if (posture == MultimediaPosture.LANDSCAPE) 0.975f else 1.08f)
+                    .fillMaxHeight(),
             )
         }
     }
@@ -353,6 +375,7 @@ private fun MultimediaButtonDeck(
     buttonHeight: Dp,
     horizontalGap: Dp,
     verticalGap: Dp,
+    triggerVibration: (Long) -> Unit,
     modifier: Modifier,
 ) {
     val contentRotation = if (posture == MultimediaPosture.PORTRAIT_HELD) -90f else 0f
@@ -376,6 +399,7 @@ private fun MultimediaButtonDeck(
                             width = buttonWidth,
                             height = buttonHeight,
                             contentRotation = contentRotation,
+                            triggerVibration = triggerVibration,
                         )
                     }
                 }
@@ -392,6 +416,7 @@ private fun MultimediaButtonDeck(
                     btManager,
                     buttonWidth,
                     buttonHeight,
+                    triggerVibration = triggerVibration,
                 )
             }
             Row(horizontalArrangement = Arrangement.spacedBy(horizontalGap)) {
@@ -400,6 +425,7 @@ private fun MultimediaButtonDeck(
                     btManager,
                     buttonWidth,
                     buttonHeight,
+                    triggerVibration = triggerVibration,
                 )
                 MultimediaActionButton(
                     RemoteAction.Key("OK", null, KeyboardLayouts.KEY_ENTER),
@@ -407,12 +433,14 @@ private fun MultimediaButtonDeck(
                     buttonWidth,
                     buttonHeight,
                     contentRotation,
+                    triggerVibration,
                 )
                 MultimediaActionButton(
                     RemoteAction.Key("Right", Icons.AutoMirrored.Filled.KeyboardArrowRight, KeyboardLayouts.KEY_RIGHT),
                     btManager,
                     buttonWidth,
                     buttonHeight,
+                    triggerVibration = triggerVibration,
                 )
             }
             Row(
@@ -424,6 +452,7 @@ private fun MultimediaButtonDeck(
                     btManager,
                     buttonWidth,
                     buttonHeight,
+                    triggerVibration = triggerVibration,
                 )
             }
             Row(horizontalArrangement = Arrangement.spacedBy(horizontalGap)) {
@@ -433,6 +462,7 @@ private fun MultimediaButtonDeck(
                     buttonWidth,
                     buttonHeight,
                     contentRotation,
+                    triggerVibration,
                 )
                 MultimediaActionButton(
                     RemoteAction.Key("Start", null, KeyboardLayouts.KEY_F5),
@@ -440,6 +470,7 @@ private fun MultimediaButtonDeck(
                     buttonWidth,
                     buttonHeight,
                     contentRotation,
+                    triggerVibration,
                 )
                 MultimediaActionButton(
                     RemoteAction.Key("Menu", null, KEY_APPLICATION),
@@ -447,6 +478,7 @@ private fun MultimediaButtonDeck(
                     buttonWidth,
                     buttonHeight,
                     contentRotation,
+                    triggerVibration,
                 )
             }
         }
@@ -459,12 +491,12 @@ private fun MultimediaPointerDeck(
     posture: MultimediaPosture,
     sensitivity: Float,
     scrollSensitivity: Float,
-    showNumpadLed: Boolean,
+    triggerVibration: (Long) -> Unit,
     compact: Boolean,
     modifier: Modifier,
 ) {
     val gap = if (compact) 7.dp else 8.dp
-    val navigationWidth = if (compact) 46.dp else 52.dp
+    val navigationWidth = if (compact) 52.dp else 60.dp
     val mouseThickness = if (compact) 38.dp else 42.dp
     if (posture == MultimediaPosture.LANDSCAPE) {
         Row(modifier = modifier, horizontalArrangement = Arrangement.spacedBy(gap)) {
@@ -476,12 +508,12 @@ private fun MultimediaPointerDeck(
                     btManager,
                     sensitivity,
                     scrollSensitivity,
-                    showNumpadLed,
+                    triggerVibration,
                     Modifier.weight(1f).fillMaxWidth(),
                 )
-                MouseButtonRow(btManager, Modifier.fillMaxWidth().height(mouseThickness), gap)
+                MouseButtonRow(btManager, Modifier.fillMaxWidth().height(mouseThickness), gap, triggerVibration)
             }
-            SlideNavigationColumn(btManager, Modifier.width(navigationWidth).fillMaxHeight(), gap)
+            SlideNavigationColumn(btManager, Modifier.width(navigationWidth).fillMaxHeight(), gap, triggerVibration)
         }
     } else {
         Row(modifier = modifier, horizontalArrangement = Arrangement.spacedBy(gap)) {
@@ -489,16 +521,16 @@ private fun MultimediaPointerDeck(
                 modifier = Modifier.weight(1f).fillMaxHeight(),
                 verticalArrangement = Arrangement.spacedBy(gap),
             ) {
-                SlideNavigationRow(btManager, Modifier.fillMaxWidth().height(mouseThickness), gap)
+                SlideNavigationRow(btManager, Modifier.fillMaxWidth().height(mouseThickness), gap, triggerVibration)
                 MultimediaTouchpad(
                     btManager,
                     sensitivity,
                     scrollSensitivity,
-                    showNumpadLed,
+                    triggerVibration,
                     Modifier.weight(1f).fillMaxWidth(),
                 )
             }
-            MouseButtonColumn(btManager, Modifier.width(mouseThickness).fillMaxHeight(), gap)
+            MouseButtonColumn(btManager, Modifier.width(mouseThickness).fillMaxHeight(), gap, triggerVibration)
         }
     }
 }
@@ -508,7 +540,7 @@ private fun MultimediaTouchpad(
     btManager: BluetoothKeyboardManager,
     sensitivity: Float,
     scrollSensitivity: Float,
-    showNumpadLed: Boolean,
+    triggerVibration: (Long) -> Unit,
     modifier: Modifier,
 ) {
     Box(
@@ -522,8 +554,8 @@ private fun MultimediaTouchpad(
             sensitivity = sensitivity,
             scrollSensitivity = scrollSensitivity,
             buttonMode = TrackpadButtonMode.CLICKPAD,
-            triggerVibration = {},
-            showNumpadLed = showNumpadLed,
+            triggerVibration = triggerVibration,
+            showNumpadLed = false,
         )
     }
 }
@@ -533,17 +565,20 @@ private fun SlideNavigationColumn(
     btManager: BluetoothKeyboardManager,
     modifier: Modifier,
     gap: Dp,
+    triggerVibration: (Long) -> Unit,
 ) {
     Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(gap)) {
         MultimediaActionButton(
             RemoteAction.Key("Previous slide", Icons.Default.KeyboardArrowUp, KeyboardLayouts.KEY_PAGEUP),
             btManager,
             Modifier.weight(1f).fillMaxWidth(),
+            triggerVibration = triggerVibration,
         )
         MultimediaActionButton(
             RemoteAction.Key("Next slide", Icons.Default.KeyboardArrowDown, KeyboardLayouts.KEY_PAGEDOWN),
             btManager,
             Modifier.weight(1f).fillMaxWidth(),
+            triggerVibration = triggerVibration,
         )
     }
 }
@@ -553,17 +588,20 @@ private fun SlideNavigationRow(
     btManager: BluetoothKeyboardManager,
     modifier: Modifier,
     gap: Dp,
+    triggerVibration: (Long) -> Unit,
 ) {
     Row(modifier = modifier, horizontalArrangement = Arrangement.spacedBy(gap)) {
         MultimediaActionButton(
             RemoteAction.Key("Previous slide", Icons.AutoMirrored.Filled.KeyboardArrowLeft, KeyboardLayouts.KEY_PAGEUP),
             btManager,
             Modifier.weight(1f).fillMaxHeight(),
+            triggerVibration = triggerVibration,
         )
         MultimediaActionButton(
             RemoteAction.Key("Next slide", Icons.AutoMirrored.Filled.KeyboardArrowRight, KeyboardLayouts.KEY_PAGEDOWN),
             btManager,
             Modifier.weight(1f).fillMaxHeight(),
+            triggerVibration = triggerVibration,
         )
     }
 }
@@ -573,11 +611,12 @@ private fun MouseButtonRow(
     btManager: BluetoothKeyboardManager,
     modifier: Modifier,
     gap: Dp,
+    triggerVibration: (Long) -> Unit,
 ) {
     Row(modifier = modifier, horizontalArrangement = Arrangement.spacedBy(gap)) {
-        MouseHoldButton("Left mouse button", 0x01, btManager, Modifier.weight(1f).fillMaxHeight())
-        MouseHoldButton("Middle mouse button", 0x04, btManager, Modifier.weight(1f).fillMaxHeight())
-        MouseHoldButton("Right mouse button", 0x02, btManager, Modifier.weight(1f).fillMaxHeight())
+        MouseHoldButton("Left mouse button", 0x01, btManager, Modifier.weight(1f).fillMaxHeight(), triggerVibration)
+        MouseHoldButton("Middle mouse button", 0x04, btManager, Modifier.weight(1f).fillMaxHeight(), triggerVibration)
+        MouseHoldButton("Right mouse button", 0x02, btManager, Modifier.weight(1f).fillMaxHeight(), triggerVibration)
     }
 }
 
@@ -586,11 +625,12 @@ private fun MouseButtonColumn(
     btManager: BluetoothKeyboardManager,
     modifier: Modifier,
     gap: Dp,
+    triggerVibration: (Long) -> Unit,
 ) {
     Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(gap)) {
-        MouseHoldButton("Left mouse button", 0x01, btManager, Modifier.weight(1f).fillMaxWidth())
-        MouseHoldButton("Middle mouse button", 0x04, btManager, Modifier.weight(1f).fillMaxWidth())
-        MouseHoldButton("Right mouse button", 0x02, btManager, Modifier.weight(1f).fillMaxWidth())
+        MouseHoldButton("Left mouse button", 0x01, btManager, Modifier.weight(1f).fillMaxWidth(), triggerVibration)
+        MouseHoldButton("Middle mouse button", 0x04, btManager, Modifier.weight(1f).fillMaxWidth(), triggerVibration)
+        MouseHoldButton("Right mouse button", 0x02, btManager, Modifier.weight(1f).fillMaxWidth(), triggerVibration)
     }
 }
 
@@ -600,6 +640,7 @@ private fun MouseHoldButton(
     mask: Int,
     btManager: BluetoothKeyboardManager,
     modifier: Modifier,
+    triggerVibration: (Long) -> Unit,
 ) {
     RemoteHoldButton(
         label = label,
@@ -611,6 +652,7 @@ private fun MouseHoldButton(
         showBorder = false,
         containerColor = RemoteButtonColor,
         contentColor = RemoteContentColor,
+        onPressFeedback = { triggerVibration(15) },
         onPressedChange = { pressed ->
             btManager.sendMouseReport(if (pressed) mask.toByte() else 0, 0, 0, 0)
         },
@@ -624,9 +666,10 @@ private fun MultimediaActionButton(
     width: Dp,
     height: Dp,
     contentRotation: Float = 0f,
+    triggerVibration: (Long) -> Unit,
 ) {
     Box(Modifier.width(width).height(height)) {
-        MultimediaActionButton(action, btManager, Modifier.fillMaxSize(), contentRotation)
+        MultimediaActionButton(action, btManager, Modifier.fillMaxSize(), contentRotation, triggerVibration)
     }
 }
 
@@ -636,6 +679,7 @@ private fun MultimediaActionButton(
     btManager: BluetoothKeyboardManager,
     modifier: Modifier,
     contentRotation: Float = 0f,
+    triggerVibration: (Long) -> Unit,
 ) {
     RemoteHoldButton(
         label = action.label,
@@ -648,6 +692,7 @@ private fun MultimediaActionButton(
         showBorder = false,
         containerColor = RemoteButtonColor,
         contentColor = RemoteContentColor,
+        onPressFeedback = { triggerVibration(15) },
         onPressedChange = { pressed ->
             when (action) {
                 is RemoteAction.Consumer -> {
@@ -708,7 +753,6 @@ private fun MultimediaUprightBar(
     onClose: () -> Unit,
     onModeChange: () -> Unit,
     isConnected: Boolean,
-    onToggleNumpad: () -> Unit,
     sensitivity: Float,
     onSensitivityChange: () -> Unit,
     scrollSensitivity: Float,
@@ -741,14 +785,6 @@ private fun MultimediaUprightBar(
                 },
         )
         Spacer(Modifier.weight(1f))
-        UprightToolbarButton("Toggle numpad", onToggleNumpad) {
-            Icon(
-                painterResource(R.drawable.ic_dialpad_off),
-                null,
-                tint = Color.White,
-                modifier = Modifier.size(13.dp),
-            )
-        }
         UprightToolbarButton("Pointer sensitivity ${sensitivity}x", onSensitivityChange) {
             Text("${sensitivity}x", color = Color.White, fontSize = 7.sp, fontWeight = FontWeight.Bold)
         }
@@ -810,8 +846,6 @@ private fun MultimediaTopBar(
     onModeChange: (Int) -> Unit,
     sharedPrefs: SharedPreferences,
     isConnected: Boolean,
-    showNumpadLed: Boolean,
-    onToggleNumpad: () -> Unit,
     sensitivity: Float,
     onSensitivityChange: () -> Unit,
     scrollSensitivity: Float,
@@ -877,25 +911,6 @@ private fun MultimediaTopBar(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            ToolbarPill(onClick = onToggleNumpad) {
-                if (showNumpadLed) {
-                    Icon(Icons.Default.Dialpad, "Numpad", tint = Color.White, modifier = Modifier.size(12.dp))
-                } else {
-                    Icon(
-                        painterResource(R.drawable.ic_dialpad_off),
-                        "Numpad",
-                        tint = Color.White,
-                        modifier = Modifier.size(12.dp),
-                    )
-                }
-                Spacer(Modifier.width(4.dp))
-                Text("Numpad", color = Color.White, fontSize = 9.sp, fontWeight = FontWeight.Bold)
-            }
-            ToolbarPill(onClick = {}) {
-                Icon(Icons.Default.Mouse, "Clickpad", tint = Color.White, modifier = Modifier.size(12.dp))
-                Spacer(Modifier.width(4.dp))
-                Text("Clickpad", color = Color.White, fontSize = 9.sp, fontWeight = FontWeight.Bold)
-            }
             ToolbarPill(onClick = onSensitivityChange) {
                 Icon(Icons.Default.Speed, "Sensitivity", tint = Color.White, modifier = Modifier.size(12.dp))
                 Spacer(Modifier.width(4.dp))
@@ -937,6 +952,8 @@ private fun MultimediaTopBar(
 }
 
 private const val KEY_APPLICATION = 0x65
+private const val POSTURE_ENTRY_DEGREES = 20
+internal const val POSTURE_STABILITY_MILLIS = 500L
 
 private tailrec fun Context.findRemoteVolumeKeyHost(): RemoteVolumeKeyHost? = when (this) {
     is RemoteVolumeKeyHost -> this

@@ -1,5 +1,7 @@
 package dev.arnv.bluke.ui
 
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -22,12 +24,16 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.semantics.Role
@@ -89,16 +95,28 @@ internal fun RemoteHoldButton(
     showBorder: Boolean = true,
     containerColor: Color? = null,
     contentColor: Color? = null,
+    onPressFeedback: () -> Unit = {},
     onPressedChange: (Boolean) -> Unit,
 ) {
     val currentPressHandler by rememberUpdatedState(onPressedChange)
+    val currentPressFeedback by rememberUpdatedState(onPressFeedback)
     val resolvedContainerColor = containerColor ?: MaterialTheme.colorScheme.secondaryContainer
     val resolvedContentColor = contentColor ?: MaterialTheme.colorScheme.onSecondaryContainer
+    var isPressed by remember { mutableStateOf(false) }
+    val animatedContainerColor by animateColorAsState(
+        targetValue = if (isPressed) {
+            lerp(resolvedContainerColor, resolvedContentColor, 0.16f)
+        } else {
+            resolvedContainerColor
+        },
+        animationSpec = tween(durationMillis = 60),
+        label = "remoteButtonPressColor",
+    )
     Column(
         modifier = modifier
             .then(if (fillHeight) Modifier.fillMaxHeight() else Modifier.height(62.dp))
             .clip(RoundedCornerShape(cornerRadius))
-            .background(resolvedContainerColor)
+            .background(animatedContainerColor)
             .then(
                 if (showBorder) {
                     Modifier.border(
@@ -114,6 +132,7 @@ internal fun RemoteHoldButton(
                 contentDescription = label
                 role = Role.Button
                 onClick {
+                    currentPressFeedback()
                     currentPressHandler(true)
                     currentPressHandler(false)
                     true
@@ -122,10 +141,13 @@ internal fun RemoteHoldButton(
             .pointerInput(Unit) {
                 detectTapGestures(
                     onPress = {
+                        isPressed = true
+                        currentPressFeedback()
                         currentPressHandler(true)
                         try {
                             tryAwaitRelease()
                         } finally {
+                            isPressed = false
                             currentPressHandler(false)
                         }
                     },
