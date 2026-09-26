@@ -12,7 +12,6 @@ import android.view.KeyEvent
 import android.view.OrientationEventListener
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -23,8 +22,8 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
@@ -249,7 +248,7 @@ internal fun MediaPresentationView(
     val rootModifier = Modifier
         .fillMaxSize()
         .background(RemoteCanvasColor)
-        .navigationBarsPadding()
+        .safeDrawingPadding()
         .testTag("media_presentation_view_root")
 
     if (resolvedPosture == MultimediaPosture.LANDSCAPE) {
@@ -786,19 +785,22 @@ private fun MultimediaUprightBar(
         )
         Spacer(Modifier.weight(1f))
         UprightToolbarButton("Pointer sensitivity ${sensitivity}x", onSensitivityChange) {
-            Text("${sensitivity}x", color = Color.White, fontSize = 7.sp, fontWeight = FontWeight.Bold)
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(2.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(Icons.Default.Speed, null, tint = Color.White, modifier = Modifier.size(10.dp))
+                Text("${sensitivity}x", color = Color.White, fontSize = 7.sp, fontWeight = FontWeight.Bold)
+            }
         }
         UprightToolbarButton("Scroll sensitivity ${scrollSensitivity}x", onScrollSensitivityChange) {
-            Text("${scrollSensitivity}x", color = Color.White, fontSize = 7.sp, fontWeight = FontWeight.Bold)
-        }
-        UprightToolbarButton("Black background", {}) {
-            Box(
-                Modifier
-                    .size(10.dp)
-                    .clip(CircleShape)
-                    .background(Color.Black)
-                    .border(0.5.dp, Color.White, CircleShape),
-            )
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(2.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Icon(Icons.Default.KeyboardArrowUp, null, tint = Color.White, modifier = Modifier.size(10.dp))
+                Text("${scrollSensitivity}x", color = Color.White, fontSize = 7.sp, fontWeight = FontWeight.Bold)
+            }
         }
         UprightToolbarButton(
             if (isVibrationEnabled) "Disable vibration" else "Enable vibration",
@@ -920,17 +922,6 @@ private fun MultimediaTopBar(
                 Icon(Icons.Default.KeyboardArrowUp, "Scroll speed", tint = Color.White, modifier = Modifier.size(12.dp))
                 Spacer(Modifier.width(4.dp))
                 Text("${scrollSensitivity}x", color = Color.White, fontSize = 9.sp, fontWeight = FontWeight.Bold)
-            }
-            ToolbarPill(onClick = {}) {
-                Box(
-                    Modifier
-                        .size(8.dp)
-                        .clip(CircleShape)
-                        .background(Color.Black)
-                        .border(0.5.dp, Color.White, CircleShape),
-                )
-                Spacer(Modifier.width(4.dp))
-                Text("Black", color = Color.White, fontSize = 9.sp, fontWeight = FontWeight.Bold)
             }
             Surface(
                 onClick = onToggleVibration,
