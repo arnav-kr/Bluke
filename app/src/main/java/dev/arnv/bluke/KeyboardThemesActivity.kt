@@ -35,6 +35,7 @@ import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FilterChip
@@ -65,6 +66,8 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.core.content.edit
+import dev.arnv.bluke.data.CYCLE_KEYBOARD_THEMES_PREFERENCE
 import dev.arnv.bluke.data.KEYBOARD_GEOMETRY_PREFERENCE
 import dev.arnv.bluke.data.KeyboardThemeRepository
 import dev.arnv.bluke.ui.CUSTOM_KEYBOARD_THEME_PREFIX
@@ -77,6 +80,8 @@ import dev.arnv.bluke.ui.KeyboardThemeCatalog
 import dev.arnv.bluke.ui.KeyboardThemeDefinition
 import dev.arnv.bluke.ui.KeyboardView
 import dev.arnv.bluke.ui.VisualColorPicker
+import dev.arnv.bluke.ui.normalizedCycleSelection
+import dev.arnv.bluke.ui.toggledCycleSelection
 import dev.arnv.bluke.ui.theme.MyApplicationTheme
 import java.util.UUID
 import kotlin.math.roundToInt
@@ -92,6 +97,10 @@ class KeyboardThemesActivity : ComponentActivity() {
                 var selectedThemeId by remember { mutableStateOf(repository.selectedThemeId()) }
                 var editingTheme by remember { mutableStateOf<KeyboardThemeDefinition?>(null) }
                 var pendingDelete by remember { mutableStateOf<KeyboardThemeDefinition?>(null) }
+                val preferences = remember { getSharedPreferences("app_prefs", MODE_PRIVATE) }
+                var cycleThemes by remember {
+                    mutableStateOf(normalizedCycleSelection(preferences.getStringSet(CYCLE_KEYBOARD_THEMES_PREFERENCE, null), repository.allThemes().map { it.id }))
+                }
                 val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
 
                 fun beginCopy(source: KeyboardThemeDefinition) {
@@ -125,6 +134,7 @@ class KeyboardThemesActivity : ComponentActivity() {
                             modifier = Modifier.padding(padding),
                             selectedThemeId = selectedThemeId,
                             customThemes = customThemes,
+                            cycleThemes = cycleThemes,
                             onCreate = { beginCopy(repository.selectedTheme()) },
                             onSelect = { selected ->
                                 repository.selectTheme(selected.id)
@@ -133,6 +143,10 @@ class KeyboardThemesActivity : ComponentActivity() {
                             onCopy = ::beginCopy,
                             onEdit = { editingTheme = it },
                             onDelete = { pendingDelete = it },
+                            onCycleToggle = { id ->
+                                cycleThemes = toggledCycleSelection(cycleThemes, id)
+                                preferences.edit { putStringSet(CYCLE_KEYBOARD_THEMES_PREFERENCE, cycleThemes) }
+                            },
                         )
                     } else {
                         KeyboardThemeEditor(
@@ -148,6 +162,8 @@ class KeyboardThemesActivity : ComponentActivity() {
                                 repository.selectTheme(saved.id)
                                 selectedThemeId = saved.id
                                 customThemes = repository.listCustomThemes()
+                                cycleThemes = cycleThemes + saved.id
+                                preferences.edit { putStringSet(CYCLE_KEYBOARD_THEMES_PREFERENCE, cycleThemes) }
                                 editingTheme = null
                             },
                         )
@@ -162,6 +178,8 @@ class KeyboardThemesActivity : ComponentActivity() {
                         confirmButton = {
                             TextButton(onClick = {
                                 repository.delete(themeToDelete.id)
+                                cycleThemes = (cycleThemes - themeToDelete.id).ifEmpty { setOf(repository.selectedThemeId()) }
+                                preferences.edit { putStringSet(CYCLE_KEYBOARD_THEMES_PREFERENCE, cycleThemes) }
                                 customThemes = repository.listCustomThemes()
                                 selectedThemeId = repository.selectedThemeId()
                                 pendingDelete = null
@@ -182,11 +200,13 @@ private fun KeyboardThemeLibrary(
     modifier: Modifier,
     selectedThemeId: String,
     customThemes: List<KeyboardThemeDefinition>,
+    cycleThemes: Set<String>,
     onCreate: () -> Unit,
     onSelect: (KeyboardThemeDefinition) -> Unit,
     onCopy: (KeyboardThemeDefinition) -> Unit,
     onEdit: (KeyboardThemeDefinition) -> Unit,
     onDelete: (KeyboardThemeDefinition) -> Unit,
+    onCycleToggle: (String) -> Unit,
 ) {
     LazyColumn(
         modifier = modifier.fillMaxSize(),
@@ -234,12 +254,15 @@ private fun KeyboardThemeLibrary(
                         KeyboardThemeCard(
                             theme = theme,
                             selected = selectedThemeId == theme.id,
+                            includedInCycle = theme.id in cycleThemes,
+                            canRemoveFromCycle = theme.id !in cycleThemes || cycleThemes.size > 1,
                             first = index == 0,
                             last = index == customThemes.lastIndex,
                             onSelect = { onSelect(theme) },
                             onCopy = { onCopy(theme) },
                             onEdit = { onEdit(theme) },
                             onDelete = { onDelete(theme) },
+                            onCycleToggle = { onCycleToggle(theme.id) },
                         )
                     }
                 }
@@ -252,10 +275,13 @@ private fun KeyboardThemeLibrary(
                     KeyboardThemeCard(
                         theme = theme,
                         selected = selectedThemeId == theme.id,
+                        includedInCycle = theme.id in cycleThemes,
+                        canRemoveFromCycle = theme.id !in cycleThemes || cycleThemes.size > 1,
                         first = index == 0,
                         last = index == KeyboardThemeCatalog.builtIns.lastIndex,
                         onSelect = { onSelect(theme) },
                         onCopy = { onCopy(theme) },
+                        onCycleToggle = { onCycleToggle(theme.id) },
                     )
                 }
             }
@@ -278,10 +304,13 @@ private fun ThemeSectionTitle(title: String) {
 private fun KeyboardThemeCard(
     theme: KeyboardThemeDefinition,
     selected: Boolean,
+    includedInCycle: Boolean,
+    canRemoveFromCycle: Boolean,
     first: Boolean,
     last: Boolean,
     onSelect: () -> Unit,
     onCopy: () -> Unit,
+    onCycleToggle: () -> Unit,
     onEdit: (() -> Unit)? = null,
     onDelete: (() -> Unit)? = null,
 ) {
@@ -313,6 +342,11 @@ private fun KeyboardThemeCard(
                     fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
                 )
             }
+            Checkbox(
+                checked = includedInCycle,
+                enabled = canRemoveFromCycle,
+                onCheckedChange = { onCycleToggle() },
+            )
             IconButton(onClick = onCopy) {
                 Icon(Icons.Default.ContentCopy, contentDescription = "Copy ${theme.name}")
             }
@@ -345,6 +379,7 @@ private fun KeyboardThemeSwatches(theme: KeyboardThemeDefinition) {
 }
 
 private enum class ThemeEditTarget(val label: String) {
+    CASE("Case"),
     PLATE("Background"),
     ALPHA("Alpha keys"),
     MODIFIER("Control keys"),
@@ -363,6 +398,8 @@ private fun KeyboardThemeEditor(
 ) {
     var name by remember(initialTheme.id) { mutableStateOf(initialTheme.name) }
     var plateArgb by remember(initialTheme.id) { mutableIntStateOf(initialTheme.plateArgb) }
+    var caseArgb by remember(initialTheme.id) { mutableIntStateOf(initialTheme.caseArgb) }
+    var caseMetallic by remember(initialTheme.id) { mutableStateOf(initialTheme.caseMetallic) }
     var alphaStyle by remember(initialTheme.id) { mutableStateOf(initialTheme.alphaStyle) }
     var modifierStyle by remember(initialTheme.id) { mutableStateOf(initialTheme.modifierStyle) }
     var accentStyle by remember(initialTheme.id) { mutableStateOf(initialTheme.accentStyle) }
@@ -386,6 +423,7 @@ private fun KeyboardThemeEditor(
                 overrides[key.styleId] = transform(overrides[key.styleId] ?: groupStyleFor(key))
             }
             ThemeEditTarget.PLATE -> Unit
+            ThemeEditTarget.CASE -> Unit
         }
     }
 
@@ -393,6 +431,8 @@ private fun KeyboardThemeEditor(
         id = initialTheme.id,
         name = name,
         plateArgb = plateArgb,
+        caseArgb = caseArgb,
+        caseMetallic = caseMetallic,
         alphaStyle = alphaStyle,
         modifierStyle = modifierStyle,
         accentStyle = accentStyle,
@@ -405,6 +445,7 @@ private fun KeyboardThemeEditor(
         ThemeEditTarget.ACCENT -> accentStyle
         ThemeEditTarget.KEY -> selectedKey?.let { overrides[it.styleId] ?: groupStyleFor(it) }
         ThemeEditTarget.PLATE -> null
+        ThemeEditTarget.CASE -> null
     }
 
     Column(
@@ -489,7 +530,7 @@ private fun KeyboardThemeEditor(
 
         ThemeEditorSection(
             title = "Customize keys",
-            supportingText = "Change the keyboard background, a whole key group, or the selected key.",
+            supportingText = "Change the keyboard case, background, a whole key group, or the selected key.",
         ) {
             FlowRow(
                 modifier = Modifier.fillMaxWidth(),
@@ -515,7 +556,14 @@ private fun KeyboardThemeEditor(
             }
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
 
-            if (target == ThemeEditTarget.PLATE) {
+            if (target == ThemeEditTarget.CASE) {
+                VisualColorPicker("Keyboard case", caseArgb) { caseArgb = it }
+                FilterChip(
+                    selected = caseMetallic,
+                    onClick = { caseMetallic = !caseMetallic },
+                    label = { Text("Metallic finish") },
+                )
+            } else if (target == ThemeEditTarget.PLATE) {
                 VisualColorPicker("Keyboard background", plateArgb) { plateArgb = it }
             } else if (selectedStyle != null) {
                 VisualColorPicker("Key color", selectedStyle.backgroundArgb) { color ->

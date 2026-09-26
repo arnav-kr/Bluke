@@ -67,8 +67,6 @@ fun TouchpadView(
     onModeChange: (Int) -> Unit,
     sharedPrefs: SharedPreferences,
     caseBrush: Brush,
-    selectedCaseColor: CaseColor,
-    onCaseColorChange: (CaseColor) -> Unit
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -388,46 +386,6 @@ fun TouchpadView(
                         )
                         Text(
                             text = "${scrollSensitivity}x",
-                            color = Color.White,
-                            fontSize = 9.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
-
-                    // Case Color Selector Pill
-                    Row(
-                        modifier = Modifier
-                            .height(28.dp)
-                            .clip(RoundedCornerShape(6.dp))
-                            .background(Color.White.copy(alpha = 0.15f))
-                            .combinedClickable(
-                                onClickLabel = "Next case color",
-                                onLongClickLabel = "Configure case color cycle",
-                                onClick = {
-                                    val enabledColors = CaseColor.entries.filter { color ->
-                                        sharedPrefs.getStringSet("cycle_case_colors", CaseColor.entries.map { it.name }.toSet())?.contains(color.name) == true
-                                    }.ifEmpty { listOf(selectedCaseColor) }
-                                    val currentIndexInEnabled = enabledColors.indexOf(selectedCaseColor)
-                                    val nextIndex = (currentIndexInEnabled + 1) % enabledColors.size
-                                    onCaseColorChange(enabledColors[nextIndex])
-                                },
-                                onLongClick = {
-                                    context.startActivity(Intent(context, QuickCycleActivity::class.java))
-                                },
-                            )
-                            .padding(horizontal = 8.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .size(8.dp)
-                                .clip(CircleShape)
-                                .background(selectedCaseColor.getActualColor(sharedPrefs))
-                                .border(0.5.dp, Color.White, CircleShape)
-                        )
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Text(
-                            text = selectedCaseColor.displayName,
                             color = Color.White,
                             fontSize = 9.sp,
                             fontWeight = FontWeight.Bold

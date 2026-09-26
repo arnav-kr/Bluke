@@ -44,6 +44,8 @@ data class KeyboardThemeDefinition(
     val accentStyle: KeyboardKeyStyle,
     val keyOverrides: Map<String, KeyboardKeyStyle> = emptyMap(),
     val editable: Boolean = false,
+    val caseArgb: Int = 0xFF1E1E20.toInt(),
+    val caseMetallic: Boolean = false,
 ) {
     fun styleFor(key: KeyLayoutInfo): KeyboardKeyStyle = keyOverrides[key.styleId] ?: when (key.category) {
         KeyColorCategory.ALPHA -> alphaStyle
@@ -70,6 +72,7 @@ object KeyboardThemeCatalog {
     fun builtIn(id: String?): KeyboardThemeDefinition? = builtIns.firstOrNull { it.id == id }
 
     fun previewColors(theme: KeyboardThemeDefinition): List<Color> = listOf(
+        Color(theme.caseArgb),
         Color(theme.plateArgb),
         Color(theme.alphaStyle.backgroundArgb),
         Color(theme.accentStyle.backgroundArgb),

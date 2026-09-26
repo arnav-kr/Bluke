@@ -36,6 +36,9 @@
         <activity android:name=".SettingsActivity" android:theme="@style/Theme.MyApplication" />
         <activity android:name=".LookAndFeelActivity" android:theme="@style/Theme.MyApplication" />
         <activity android:name=".KeyboardThemesActivity" android:theme="@style/Theme.MyApplication" />
+        <activity android:name=".KeyboardSettingsActivity" android:theme="@style/Theme.MyApplication" />
+        <activity android:name=".KeyboardLayoutsActivity" android:theme="@style/Theme.MyApplication" />
+        <activity android:name=".ControllerSettingsActivity" android:theme="@style/Theme.MyApplication" />
         <activity android:name=".SoundPacksActivity" android:theme="@style/Theme.MyApplication" />
         <activity android:name=".DarkThemeActivity" android:theme="@style/Theme.MyApplication" />
         <activity android:name=".BehaviorActivity" android:theme="@style/Theme.MyApplication" />

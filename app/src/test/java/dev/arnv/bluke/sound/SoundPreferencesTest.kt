@@ -64,4 +64,22 @@ class SoundPreferencesTest {
         assertEquals(SwitchType.TOPRE, selectedBuiltInSound(preferences))
         assertEquals("built_in:TOPRE", builtInSoundProfileId(SwitchType.TOPRE))
     }
+
+    @Test
+    fun legacyCycleSelectionMigratesAndIncludesExistingCustomPacks() {
+        preferences.edit()
+            .putStringSet(CYCLE_KEY_SOUNDS_PREFERENCE, setOf(SwitchType.TOPRE.name))
+            .commit()
+
+        val selected = soundCycleSelection(preferences, listOf("office"))
+
+        assertEquals(setOf("built_in:TOPRE", "custom:office"), selected)
+    }
+
+    @Test
+    fun explicitNativeCycleSelectionIsPreserved() {
+        saveSoundCycleSelection(preferences, setOf("custom:office"))
+
+        assertEquals(setOf("custom:office"), soundCycleSelection(preferences, listOf("office", "other")))
+    }
 }

@@ -53,6 +53,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.res.stringResource
 import dev.arnv.bluke.R
 import dev.arnv.bluke.KeyboardThemesActivity
+import dev.arnv.bluke.KeyboardLayoutsActivity
 import dev.arnv.bluke.HelpActivity
 import dev.arnv.bluke.QuickCycleActivity
 import dev.arnv.bluke.SoundPacksActivity
@@ -67,6 +68,7 @@ import dev.arnv.bluke.bluetooth.HID_DESCRIPTOR_REVISION_PREFERENCE
 import dev.arnv.bluke.bluetooth.requiresHidDescriptorRefresh
 import dev.arnv.bluke.sound.KeyboardSoundSynthesizer
 import dev.arnv.bluke.sound.SwitchType
+import dev.arnv.bluke.sound.soundCycleSelection
 import dev.arnv.bluke.data.CYCLE_KEYBOARD_GEOMETRIES_PREFERENCE
 import dev.arnv.bluke.data.CYCLE_KEYBOARD_THEMES_PREFERENCE
 import dev.arnv.bluke.data.KEYBOARD_GEOMETRY_PREFERENCE
@@ -102,7 +104,6 @@ fun HomeScreen(
             )
         )
     }
-    var selectedCaseColor by rememberSaveable { mutableStateOf(CaseColor.BLACK) }
     var isKeyboardActive by rememberSaveable { mutableStateOf(false) }
     BackHandler(enabled = isKeyboardActive) {
         isKeyboardActive = false
@@ -524,9 +525,8 @@ fun HomeScreen(
         label = "screen_navigation"
     ) { keyboardActive ->
         if (keyboardActive) {
-            val caseColor = selectedCaseColor
-            val caseColorVal = caseColor.getActualColor(sharedPrefs)
-            val caseMetallic = caseColor.getActualMetallic(sharedPrefs)
+            val caseColorVal = Color(selectedKeyboardTheme.caseArgb)
+            val caseMetallic = selectedKeyboardTheme.caseMetallic
             val caseBrush = if (caseMetallic) {
                 Brush.linearGradient(
                     colors = listOf(
@@ -567,11 +567,6 @@ fun HomeScreen(
                                     },
                                     sharedPrefs = sharedPrefs,
                                     caseBrush = caseBrush,
-                                    selectedCaseColor = selectedCaseColor,
-                                    onCaseColorChange = { newColor ->
-                                        selectedCaseColor = newColor
-                                        soundSynth.playRelease()
-                                    }
                                 )
                             }
                             2 -> {
@@ -900,7 +895,7 @@ fun HomeScreen(
                                                 soundSynth.playPress()
                                             },
                                             onLongClick = {
-                                                context.startActivity(Intent(context, QuickCycleActivity::class.java))
+                                                context.startActivity(Intent(context, KeyboardLayoutsActivity::class.java))
                                             },
                                         )
                                         .padding(horizontal = 8.dp),
@@ -934,10 +929,11 @@ fun HomeScreen(
                                             onClickLabel = "Next key sound",
                                             onLongClickLabel = "Manage key sounds",
                                             onClick = {
-                                                val enabledSwitches = SwitchType.entries.filter { switch ->
-                                                    sharedPrefs.getStringSet("cycle_key_sounds", SwitchType.entries.map { it.name }.toSet())?.contains(switch.name) == true
-                                                }.ifEmpty { listOf(currentSwitch) }
-                                                soundSynth.cycleSoundProfile(enabledSwitches)
+                                                val enabledProfiles = soundCycleSelection(
+                                                    sharedPrefs,
+                                                    dev.arnv.bluke.sound.CustomSoundPackRepository(context).listPacks().map { it.id },
+                                                )
+                                                soundSynth.cycleSoundProfile(enabledProfiles)
                                                 currentSwitch = soundSynth.getCurrentSwitch()
                                                 currentSoundProfileName = soundSynth.getSelectedSoundProfileName()
                                                 soundSynth.playPress()

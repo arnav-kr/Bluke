@@ -8,6 +8,7 @@ import dev.arnv.bluke.ui.KeyboardKeyStyle
 import dev.arnv.bluke.ui.KeyboardLayoutType
 import dev.arnv.bluke.ui.KeyboardThemeDefinition
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
@@ -81,6 +82,21 @@ class KeyboardThemeMigrationTest {
         assertEquals(overrideStyle, theme.styleFor(overriddenKey))
         assertEquals(groupStyle, theme.styleFor(groupKey))
         assertNotEquals(theme.styleFor(overriddenKey), theme.styleFor(groupKey))
+    }
+
+    @Test
+    fun legacyThemeGetsSafeCaseDefaults() {
+        val theme = KeyboardThemeDefinition(
+            id = "custom:legacy",
+            name = "Legacy",
+            plateArgb = 0xFF000000.toInt(),
+            alphaStyle = KeyboardKeyStyle(0, 0),
+            modifierStyle = KeyboardKeyStyle(0, 0),
+            accentStyle = KeyboardKeyStyle(0, 0),
+        )
+
+        assertEquals(0xFF1E1E20.toInt(), theme.caseArgb)
+        assertFalse(theme.caseMetallic)
     }
 
     @Test

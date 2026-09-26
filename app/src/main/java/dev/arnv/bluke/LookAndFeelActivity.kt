@@ -275,7 +275,7 @@ class LookAndFeelActivity : ComponentActivity() {
                                     }
                                 ),
                                 SettingsItemData(
-                                    title = "Key Press Sound",
+                                    title = "Enable sounds",
                                     subtitle = "Play sound effect on key press",
                                     icon = { Icon(Icons.AutoMirrored.Filled.VolumeUp, null, tint = MaterialTheme.colorScheme.primary) },
                                     action = {
@@ -289,14 +289,6 @@ class LookAndFeelActivity : ComponentActivity() {
                                                 }
                                             }
                                         )
-                                    }
-                                ),
-                                SettingsItemData(
-                                    title = "Key sounds",
-                                    subtitle = "Choose built-in sounds or import Mechvibes packs",
-                                    icon = { Icon(Icons.Default.GraphicEq, null, tint = MaterialTheme.colorScheme.primary) },
-                                    onClick = {
-                                        startActivity(Intent(this@LookAndFeelActivity, SoundPacksActivity::class.java))
                                     }
                                 )
                             )

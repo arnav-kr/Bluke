@@ -1,6 +1,7 @@
 package dev.arnv.bluke.ui
 
 import android.content.Context
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onRoot
@@ -89,9 +90,7 @@ class MediaPresentationScreenshotTest {
                     launchMode = InputMode.TOUCHPAD.id,
                     onModeChange = {},
                     sharedPrefs = preferences,
-                    caseBrush = SolidColor(CaseColor.BLACK.caseColor),
-                    selectedCaseColor = CaseColor.BLACK,
-                    onCaseColorChange = {},
+                    caseBrush = SolidColor(Color(0xFF1E1E20)),
                 )
             }
         }

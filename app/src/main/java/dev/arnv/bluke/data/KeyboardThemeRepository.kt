@@ -82,6 +82,8 @@ class KeyboardThemeRepository(context: Context) {
         .put("id", theme.id)
         .put("name", theme.name)
         .put("plate", theme.plateArgb)
+        .put("case", theme.caseArgb)
+        .put("caseMetallic", theme.caseMetallic)
         .put("alpha", styleToJson(theme.alphaStyle))
         .put("modifier", styleToJson(theme.modifierStyle))
         .put("accent", styleToJson(theme.accentStyle))
@@ -101,6 +103,8 @@ class KeyboardThemeRepository(context: Context) {
             id = json.getString("id"),
             name = json.optString("name", "Custom keyboard").take(40),
             plateArgb = json.getInt("plate"),
+            caseArgb = json.optInt("case", 0xFF1E1E20.toInt()),
+            caseMetallic = json.optBoolean("caseMetallic", false),
             alphaStyle = parseStyle(json.getJSONObject("alpha")),
             modifierStyle = parseStyle(json.getJSONObject("modifier")),
             accentStyle = parseStyle(json.getJSONObject("accent")),

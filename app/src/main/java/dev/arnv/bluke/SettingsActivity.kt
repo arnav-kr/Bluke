@@ -84,11 +84,19 @@ class SettingsActivity : ComponentActivity() {
                                     }
                                 ),
                                 SettingsItemData(
-                                    title = "Keyboard themes",
-                                    subtitle = "Choose, copy, and customize keyboard-only colors",
+                                    title = "Keyboard",
+                                    subtitle = "Typing behavior, layouts, themes, and key sounds",
                                     icon = { Icon(Icons.Default.Keyboard, null, tint = MaterialTheme.colorScheme.primary) },
                                     onClick = {
-                                        startActivity(Intent(this@SettingsActivity, KeyboardThemesActivity::class.java))
+                                        startActivity(Intent(this@SettingsActivity, KeyboardSettingsActivity::class.java))
+                                    }
+                                ),
+                                SettingsItemData(
+                                    title = "Controller",
+                                    subtitle = "Gamepad behavior and compatibility",
+                                    icon = { Icon(Icons.Default.Gamepad, null, tint = MaterialTheme.colorScheme.primary) },
+                                    onClick = {
+                                        startActivity(Intent(this@SettingsActivity, ControllerSettingsActivity::class.java))
                                     }
                                 ),
                             )
@@ -97,8 +105,8 @@ class SettingsActivity : ComponentActivity() {
                             title = "Controls & connection",
                             items = listOf(
                                 SettingsItemData(
-                                    title = "Input behavior",
-                                    subtitle = "Typing, gamepad, Bluetooth, audio, and quick-cycle choices",
+                                    title = "Behavior",
+                                    subtitle = "Bluetooth discovery, reconnect, and remote controls",
                                     icon = { Icon(Icons.Default.Settings, null, tint = MaterialTheme.colorScheme.primary) },
                                     onClick = { 
                                         startActivity(Intent(this@SettingsActivity, BehaviorActivity::class.java))

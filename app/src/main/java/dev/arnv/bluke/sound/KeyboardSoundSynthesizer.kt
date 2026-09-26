@@ -140,9 +140,10 @@ class KeyboardSoundSynthesizer(private val context: Context) {
         customSoundPacks.selectedPack()?.let { customSoundProfileId(it.id) }
             ?: builtInSoundProfileId(currentSwitchType)
 
-    fun cycleSoundProfile(enabledBuiltIns: List<SwitchType>) {
-        val profileIds = enabledBuiltIns.map(::builtInSoundProfileId) +
-            customSoundPacks.listPacks().map { customSoundProfileId(it.id) }
+    fun cycleSoundProfile(enabledProfileIds: Set<String>) {
+        val profileIds = (SwitchType.entries.map(::builtInSoundProfileId) +
+            customSoundPacks.listPacks().map { customSoundProfileId(it.id) })
+            .filter(enabledProfileIds::contains)
         if (profileIds.isEmpty()) return
         val currentIndex = profileIds.indexOf(getSelectedSoundProfileId())
         selectSoundProfile(profileIds[(currentIndex + 1) % profileIds.size])
