@@ -6,6 +6,7 @@ import android.bluetooth.BluetoothDevice
 import android.content.Intent
 import android.bluetooth.BluetoothAdapter
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import android.content.pm.ActivityInfo
 import android.os.Build
@@ -103,6 +104,9 @@ fun HomeScreen(
     }
     var selectedCaseColor by rememberSaveable { mutableStateOf(CaseColor.BLACK) }
     var isKeyboardActive by rememberSaveable { mutableStateOf(false) }
+    BackHandler(enabled = isKeyboardActive) {
+        isKeyboardActive = false
+    }
     var hideUnknownDevices by remember { mutableStateOf(sharedPrefs.getBoolean("hide_unknown", false)) }
     var hideUnsupportedDevices by remember { mutableStateOf(sharedPrefs.getBoolean("hide_unsupported", true)) }
     var showMacAddress by remember { mutableStateOf(sharedPrefs.getBoolean("show_mac", false)) }
