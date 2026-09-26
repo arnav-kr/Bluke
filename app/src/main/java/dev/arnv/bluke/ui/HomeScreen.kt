@@ -1224,7 +1224,7 @@ fun HomeScreen(
                                 val modeIcon = when (launchMode) {
                                     1 -> Icons.Default.Mouse
                                     2 -> Icons.Default.SportsEsports
-                                    4 -> Icons.Default.Slideshow
+                                    4 -> Icons.Filled.SmartDisplay
                                     else -> Icons.Default.Keyboard
                                 }
                                 Icon(
