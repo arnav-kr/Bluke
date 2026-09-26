@@ -112,7 +112,11 @@ fun HomeScreen(
     var isHapticsEnabled by remember { mutableStateOf(sharedPrefs.getBoolean("haptics_enabled", true)) }
     var keySensitivity by remember { mutableFloatStateOf(sharedPrefs.getFloat("key_sensitivity", 6f)) }
     var lockSyncMode by remember { mutableStateOf(sharedPrefs.getString("lock_sync_mode", "host") ?: "host") }
-    var launchMode by rememberSaveable { mutableIntStateOf(sharedPrefs.getInt("launch_mode", 0)) }
+    var launchMode by rememberSaveable {
+        val enabledModes = sharedPrefs.enabledInputModes().map(InputMode::id)
+        val savedMode = sharedPrefs.getInt("launch_mode", InputMode.KEYBOARD.id)
+        mutableIntStateOf(savedMode.takeIf(enabledModes::contains) ?: enabledModes.first())
+    }
 
     // Sound synth switch state
     var currentSwitch by remember { mutableStateOf(soundSynth.getCurrentSwitch()) }
@@ -536,7 +540,7 @@ fun HomeScreen(
             }
 
             when (launchMode) {
-                1, 2, 3, 4 -> {
+                1, 2, 4 -> {
                     val darkScheme = darkColorScheme(
                         primary = MaterialTheme.colorScheme.primary,
                         background = Color(0xFF141218),
@@ -577,30 +581,6 @@ fun HomeScreen(
                                     },
                                     sharedPrefs = sharedPrefs,
                                     caseBrush = caseBrush
-                                )
-                            }
-                            3 -> {
-                                KeyboardTouchpadView(
-                                    btManager = btManager,
-                                    onClose = { isKeyboardActive = false },
-                                    launchMode = launchMode,
-                                    onModeChange = { newMode ->
-                                        launchMode = newMode
-                                        sharedPrefs.edit { putInt("launch_mode", newMode) }
-                                    },
-                                    sharedPrefs = sharedPrefs,
-                                    caseBrush = caseBrush,
-                                    geometry = selectedGeometry,
-                                    theme = selectedKeyboardTheme,
-                                    characterLayout = characterLayout,
-                                    activePressedKeys = activePressedKeys,
-                                    isConnected = isConnected,
-                                    isCapsLockActive = isCapsLockActive,
-                                    isNumLockActive = isNumLockActive,
-                                    isScrollLockActive = isScrollLockActive,
-                                    keySensitivity = keySensitivity,
-                                    isFnActive = isFnActive,
-                                    onKeyPressChange = { code, press -> handleLocalKeyPress(code, press) },
                                 )
                             }
                             4 -> {
@@ -1244,7 +1224,6 @@ fun HomeScreen(
                                 val modeIcon = when (launchMode) {
                                     1 -> Icons.Default.Mouse
                                     2 -> Icons.Default.SportsEsports
-                                    3 -> Icons.Default.Keyboard
                                     4 -> Icons.Default.Slideshow
                                     else -> Icons.Default.Keyboard
                                 }
@@ -1280,7 +1259,6 @@ fun HomeScreen(
                                 val launchText = when (launchMode) {
                                     1 -> "Launch Touchpad"
                                     2 -> "Launch Gamepad"
-                                    3 -> "Launch Keyboard + Touchpad"
                                     4 -> "Launch Multimedia"
                                     else -> "Launch Keyboard"
                                 }

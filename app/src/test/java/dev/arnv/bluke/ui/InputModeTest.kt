@@ -1,6 +1,7 @@
 package dev.arnv.bluke.ui
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -10,8 +11,8 @@ class InputModeTest {
         val normalized = normalizeInputModeKeys(setOf("keyboard", "touchpad", "gamepad"))
 
         assertEquals(defaultInputModeKeys, normalized)
-        assertTrue(normalized.contains(InputMode.KEYBOARD_TOUCHPAD.preferenceKey))
         assertTrue(normalized.contains(InputMode.MEDIA_PRESENTATION.preferenceKey))
+        assertFalse(normalized.contains("keyboard_touchpad"))
     }
 
     @Test
@@ -33,5 +34,18 @@ class InputModeTest {
             setOf("keyboard", "media_presentation"),
             normalizeInputModeKeys(setOf("keyboard", "mouse")),
         )
+    }
+
+    @Test
+    fun removedKeyboardTouchpadModeFallsBackSafely() {
+        assertEquals(
+            setOf("keyboard"),
+            normalizeInputModeKeys(setOf("keyboard_touchpad")),
+        )
+        assertEquals(
+            setOf("touchpad"),
+            normalizeInputModeKeys(setOf("touchpad", "keyboard_touchpad")),
+        )
+        assertEquals(InputMode.KEYBOARD, InputMode.fromId(3))
     }
 }
