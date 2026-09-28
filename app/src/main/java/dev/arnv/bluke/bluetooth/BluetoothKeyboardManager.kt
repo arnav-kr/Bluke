@@ -36,6 +36,7 @@ import java.util.concurrent.atomic.AtomicLong
 import kotlin.random.Random
 
 sealed class BluetoothState {
+    object CheckingCapabilities : BluetoothState()
     object Unsupported : BluetoothState()
     object PermissionRequired : BluetoothState()
     object BluetoothOff : BluetoothState()
@@ -80,7 +81,7 @@ class BluetoothKeyboardManager(private val context: Context) {
         }
     }
 
-    private val _serviceState = MutableStateFlow<BluetoothState>(BluetoothState.ReadyDisconnected)
+    private val _serviceState = MutableStateFlow<BluetoothState>(BluetoothState.CheckingCapabilities)
     val serviceState: StateFlow<BluetoothState> = _serviceState
 
     private val _statusMessage = MutableStateFlow("Initializing Bluetooth Controller...")
@@ -138,6 +139,7 @@ class BluetoothKeyboardManager(private val context: Context) {
     @Volatile private var pendingProxyBinding: CompletableDeferred<BluetoothHidDevice?>? = null
     @Volatile private var incompatibleVerdictLatched = false
     @Volatile private var incompatibleVerdictMessage: String? = null
+    @Volatile private var registrationCommandAccepted = false
     private val retryPolicy = RetryPolicy()
     private val connectionStateFlow = MutableSharedFlow<Pair<BluetoothDevice, Int>>(
         extraBufferCapacity = 1,
@@ -454,12 +456,14 @@ class BluetoothKeyboardManager(private val context: Context) {
 
     fun checkBluetoothCapabilities() {
         if (bluetoothAdapter == null) {
+            registrationCommandAccepted = false
             _serviceState.value = BluetoothState.Unsupported
             _statusMessage.value = "Bluetooth is not supported on this device's hardware."
             return
         }
 
         if (!bluetoothAdapter.isEnabled) {
+            registrationCommandAccepted = false
             clearIncompatibleVerdict()
             _serviceState.value = BluetoothState.BluetoothOff
             _statusMessage.value = "Bluetooth is currently turned off. Please enable Bluetooth."
@@ -719,13 +723,15 @@ class BluetoothKeyboardManager(private val context: Context) {
     private fun initProfileListener() {
         if (incompatibleVerdictLatched) return
         _statusMessage.value = "Connecting to HID service profile proxy..."
-        _serviceState.value = BluetoothState.ReadyDisconnected
+        _serviceState.value = BluetoothState.CheckingCapabilities
         managerScope.launch {
             ensureHidReady()
         }
     }
 
     private fun confirmIncompatibleVerdict(message: String) {
+        registrationCommandAccepted = false
+        appRegistrationState.value = false
         incompatibleVerdictMessage = message
         incompatibleVerdictLatched = true
         _serviceState.value = BluetoothState.ProfileNotSupported
@@ -738,9 +744,13 @@ class BluetoothKeyboardManager(private val context: Context) {
     }
 
     fun retryBluetoothCapabilities() {
+        registrationCommandAccepted = false
+        appRegistrationState.value = false
         clearIncompatibleVerdict()
         lastRegistrationFailure = null
         _lifecycleState.value = HidLifecycleState.Idle
+        _serviceState.value = BluetoothState.CheckingCapabilities
+        _statusMessage.value = "Rechecking Bluetooth HID Device compatibility..."
         checkBluetoothCapabilities()
     }
 
@@ -847,6 +857,7 @@ class BluetoothKeyboardManager(private val context: Context) {
 
         override fun onServiceDisconnected(profile: Int) {
             if (profile == BluetoothProfile.HID_DEVICE) {
+                registrationCommandAccepted = false
                 hidDeviceProfile = null
                 appRegistrationState.value = false
                 _lifecycleState.value = HidLifecycleState.Idle
@@ -866,13 +877,21 @@ class BluetoothKeyboardManager(private val context: Context) {
             
             DeveloperLogManager.log("BluetoothKeyboard", "onAppStatusChanged: registered=$registered, device=${pluggedDevice?.address}")
 
-            appRegistrationState.value = registered
             if (incompatibleVerdictLatched) {
                 _serviceState.value = BluetoothState.ProfileNotSupported
                 _statusMessage.value = incompatibleVerdictMessage
                     ?: "This device appears incompatible with the Bluetooth HID Device role."
                 return
             }
+            if (!isRegistrationCallbackActionable(registered, registrationCommandAccepted)) {
+                DeveloperLogManager.log(
+                    "BluetoothKeyboard",
+                    "Ignoring registered callback because the current registerApp command was rejected",
+                )
+                return
+            }
+            appRegistrationState.value = registered
+            if (!registered) registrationCommandAccepted = false
             if (registered) {
                 _lifecycleState.value = HidLifecycleState.Registered
                 updateBondedDevices()
@@ -1014,6 +1033,9 @@ class BluetoothKeyboardManager(private val context: Context) {
 
     @SuppressLint("MissingPermission")
     private fun registerApp() {
+        if (incompatibleVerdictLatched) return
+        _serviceState.value = BluetoothState.CheckingCapabilities
+        _statusMessage.value = "Checking Bluetooth HID Device compatibility..."
         managerScope.launch {
             ensureHidReady()
         }
@@ -1038,6 +1060,7 @@ class BluetoothKeyboardManager(private val context: Context) {
                 override val registrationState: StateFlow<Boolean> = appRegistrationState
 
                 override fun unregisterApp() {
+                    registrationCommandAccepted = false
                     try {
                         hid.unregisterApp()
                     } catch (e: Exception) {
@@ -1045,13 +1068,17 @@ class BluetoothKeyboardManager(private val context: Context) {
                     }
                 }
 
-                override fun registerApp(): Boolean =
-                    try {
+                override fun registerApp(): Boolean {
+                    registrationCommandAccepted = false
+                    val accepted = try {
                         hid.registerApp(settings, null, null, executor, hidCallback)
                     } catch (e: Exception) {
                         Log.w("BluetoothKeyboard", "registerApp failed", e)
                         false
                     }
+                    registrationCommandAccepted = accepted
+                    return accepted
+                }
             }
             val result = HidRegistrationCoordinator(
                 facade = facade,
@@ -1300,6 +1327,7 @@ class BluetoothKeyboardManager(private val context: Context) {
             Log.e("BluetoothKeyboard", "Error closing profile proxy", e)
         }
         hidDeviceProfile = null
+        registrationCommandAccepted = false
         appRegistrationState.value = false
         _lifecycleState.value = HidLifecycleState.Idle
         lastConnectedDevice = null

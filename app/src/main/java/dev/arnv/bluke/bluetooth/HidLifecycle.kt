@@ -38,6 +38,11 @@ internal fun HidFailure.indicatesLikelyDeviceIncompatibility(): Boolean = when (
     HidFailure.CONNECTION_REJECTED -> false
 }
 
+internal fun isRegistrationCallbackActionable(
+    registered: Boolean,
+    registrationCommandAccepted: Boolean,
+): Boolean = !registered || registrationCommandAccepted
+
 data class RetryPolicy(
     val maxAttempts: Int = 3,
     val initialDelayMillis: Long = 300,

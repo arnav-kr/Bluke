@@ -8,6 +8,7 @@ import org.junit.Test
 class HomeUiPolicyTest {
     @Test
     fun launchControlsAreHiddenForBlockingBluetoothStates() {
+        assertTrue(BluetoothState.CheckingCapabilities.blocksInputLaunch())
         assertTrue(BluetoothState.BluetoothOff.blocksInputLaunch())
         assertTrue(BluetoothState.Unsupported.blocksInputLaunch())
         assertTrue(BluetoothState.ProfileNotSupported.blocksInputLaunch())
@@ -17,6 +18,12 @@ class HomeUiPolicyTest {
 
     @Test
     fun incompatibilityScreenReplacesDuplicateErrorToast() {
+        assertFalse(
+            shouldShowBluetoothErrorToast(
+                BluetoothState.CheckingCapabilities,
+                "Previous registration failed"
+            )
+        )
         assertFalse(
             shouldShowBluetoothErrorToast(
                 BluetoothState.ProfileNotSupported,

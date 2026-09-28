@@ -6,9 +6,18 @@ import kotlinx.coroutines.flow.toList
 import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class HidLifecycleTest {
+    @Test
+    fun positiveRegistrationCallbackRequiresAcceptedCommand() {
+        assertFalse(isRegistrationCallbackActionable(registered = true, registrationCommandAccepted = false))
+        assertTrue(isRegistrationCallbackActionable(registered = true, registrationCommandAccepted = true))
+        assertTrue(isRegistrationCallbackActionable(registered = false, registrationCommandAccepted = false))
+    }
+
     @Test
     fun onlySynchronousProfileRejectionsIndicateLikelyIncompatibility() {
         assertEquals(true, HidFailure.BINDING_REJECTED.indicatesLikelyDeviceIncompatibility())

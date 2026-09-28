@@ -9,10 +9,12 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.BluetoothSearching
 import androidx.compose.material.icons.filled.BluetoothDisabled
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
@@ -37,7 +39,11 @@ internal fun ProfileNotSupportedScreen(
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Icon(
-            imageVector = Icons.Default.BluetoothDisabled,
+            imageVector = if (bluetoothState is BluetoothState.CheckingCapabilities) {
+                Icons.AutoMirrored.Filled.BluetoothSearching
+            } else {
+                Icons.Default.BluetoothDisabled
+            },
             contentDescription = null,
             modifier = Modifier.size(80.dp),
             tint = MaterialTheme.colorScheme.onSurfaceVariant
@@ -45,6 +51,7 @@ internal fun ProfileNotSupportedScreen(
         Spacer(Modifier.height(24.dp))
         Text(
             text = when (bluetoothState) {
+                is BluetoothState.CheckingCapabilities -> "Checking compatibility"
                 is BluetoothState.Unsupported -> "Bluetooth Not Supported"
                 is BluetoothState.ProfileNotSupported -> "Device Not Compatible"
                 else -> "Bluetooth is Off"
@@ -55,7 +62,14 @@ internal fun ProfileNotSupportedScreen(
             textAlign = TextAlign.Center
         )
         Spacer(Modifier.height(12.dp))
-        if (bluetoothState is BluetoothState.ProfileNotSupported) {
+        if (bluetoothState is BluetoothState.CheckingCapabilities) {
+            Text(
+                text = "Verifying that this phone's firmware provides the Bluetooth HID Device role. This can take a few seconds.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center
+            )
+        } else if (bluetoothState is BluetoothState.ProfileNotSupported) {
             Text(
                 text = "Bluke could not access the Bluetooth HID Device role after repeated attempts. This device's firmware may omit or disable the role required for keyboard, mouse, and gamepad output.",
                 style = MaterialTheme.typography.bodyMedium,
@@ -81,7 +95,9 @@ internal fun ProfileNotSupportedScreen(
             )
         }
         Spacer(Modifier.height(32.dp))
-        if (bluetoothState is BluetoothState.BluetoothOff) {
+        if (bluetoothState is BluetoothState.CheckingCapabilities) {
+            CircularProgressIndicator(modifier = Modifier.size(32.dp))
+        } else if (bluetoothState is BluetoothState.BluetoothOff) {
             Button(
                 onClick = onEnableBluetooth,
                 colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary)
