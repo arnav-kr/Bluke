@@ -3,11 +3,14 @@ package dev.arnv.bluke
 import android.os.Build
 import android.os.Bundle
 import android.view.KeyEvent
+import android.view.View
+import android.view.ViewTreeObserver
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import dev.arnv.bluke.bluetooth.BluetoothKeyboardManager
+import dev.arnv.bluke.bluetooth.BluetoothState
 import dev.arnv.bluke.sound.KeyboardSoundSynthesizer
 import dev.arnv.bluke.sound.migrateSoundPreferences
 import dev.arnv.bluke.data.migrateKeyboardCustomizationPreferences
@@ -43,6 +46,27 @@ class MainActivity : ComponentActivity(), RemoteVolumeKeyHost {
         }
 
         btManager = (application as BlukeApplication).bluetoothKeyboardManager
+        val contentView = findViewById<View>(android.R.id.content)
+        contentView.viewTreeObserver.addOnPreDrawListener(
+            object : ViewTreeObserver.OnPreDrawListener {
+                private var terminalStateObserved = false
+
+                override fun onPreDraw(): Boolean {
+                    if (btManager.serviceState.value is BluetoothState.InitializingCapabilities) {
+                        return false
+                    }
+                    if (!terminalStateObserved) {
+                        terminalStateObserved = true
+                        contentView.postInvalidateOnAnimation()
+                        return false
+                    }
+                    if (contentView.viewTreeObserver.isAlive) {
+                        contentView.viewTreeObserver.removeOnPreDrawListener(this)
+                    }
+                    return true
+                }
+            }
+        )
 
         soundSynth = KeyboardSoundSynthesizer(applicationContext)
 

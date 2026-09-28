@@ -3,7 +3,8 @@ package dev.arnv.bluke.ui
 import dev.arnv.bluke.bluetooth.BluetoothState
 
 internal fun BluetoothState.blocksInputLaunch(): Boolean =
-    this is BluetoothState.CheckingCapabilities ||
+    this is BluetoothState.InitializingCapabilities ||
+        this is BluetoothState.CheckingCapabilities ||
         this is BluetoothState.BluetoothOff ||
         this is BluetoothState.Unsupported ||
         this is BluetoothState.ProfileNotSupported
@@ -12,7 +13,8 @@ internal fun shouldShowBluetoothErrorToast(
     bluetoothState: BluetoothState,
     message: String
 ): Boolean {
-    if (bluetoothState is BluetoothState.CheckingCapabilities ||
+    if (bluetoothState is BluetoothState.InitializingCapabilities ||
+        bluetoothState is BluetoothState.CheckingCapabilities ||
         bluetoothState is BluetoothState.ProfileNotSupported
     ) return false
 

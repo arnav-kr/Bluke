@@ -21,7 +21,9 @@ import dev.arnv.bluke.utils.LogType
 import androidx.core.content.edit
 import java.util.concurrent.Executors
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.launch
@@ -36,6 +38,7 @@ import java.util.concurrent.atomic.AtomicLong
 import kotlin.random.Random
 
 sealed class BluetoothState {
+    object InitializingCapabilities : BluetoothState()
     object CheckingCapabilities : BluetoothState()
     object Unsupported : BluetoothState()
     object PermissionRequired : BluetoothState()
@@ -81,7 +84,7 @@ class BluetoothKeyboardManager(private val context: Context) {
         }
     }
 
-    private val _serviceState = MutableStateFlow<BluetoothState>(BluetoothState.CheckingCapabilities)
+    private val _serviceState = MutableStateFlow<BluetoothState>(BluetoothState.InitializingCapabilities)
     val serviceState: StateFlow<BluetoothState> = _serviceState
 
     private val _statusMessage = MutableStateFlow("Initializing Bluetooth Controller...")
@@ -136,6 +139,9 @@ class BluetoothKeyboardManager(private val context: Context) {
     val lifecycleState: StateFlow<HidLifecycleState> = _lifecycleState
     private val bindingMutex = Mutex()
     private val registrationMutex = Mutex()
+    private val capabilityCheckLock = Any()
+    private val capabilityCheckGeneration = AtomicLong()
+    @Volatile private var capabilityCheckJob: Job? = null
     @Volatile private var pendingProxyBinding: CompletableDeferred<BluetoothHidDevice?>? = null
     @Volatile private var incompatibleVerdictLatched = false
     @Volatile private var incompatibleVerdictMessage: String? = null
@@ -503,6 +509,10 @@ class BluetoothKeyboardManager(private val context: Context) {
             return
         }
 
+        if (isCapabilityCheckRunning()) {
+            return
+        }
+
         updateBondedDevices()
         // Initialize HID Device Profile safely
         val hid = hidDeviceProfile
@@ -511,23 +521,10 @@ class BluetoothKeyboardManager(private val context: Context) {
         } else if (!isAppRegistered) {
             registerApp()
         } else {
-            // Already initialized and registered. Sync connection state.
-            try {
-                val connectedDevs = hid.connectedDevices
-                if (!connectedDevs.isNullOrEmpty()) {
-                    val activeDev = connectedDevs.first()
-                    _connectedDevice.value = activeDev
-                    lastConnectedDevice = activeDev
-                    _serviceState.value = BluetoothState.Connected(activeDev.name ?: "Paired Host")
-                    _statusMessage.value = "Link established with '${activeDev.name ?: "Host"}'! Keyboard active."
-                } else {
-                    _connectedDevice.value = null
-                    _serviceState.value = BluetoothState.PairingMode(bluetoothAdapter.name ?: context.getString(R.string.app_name))
-                    _statusMessage.value = "Bluke Bluetooth Deck is ready and advertising."
-                }
-            } catch (e: Exception) {
-                Log.e("BluetoothKeyboard", "Error restoring connected devices", e)
-            }
+            publishRegisteredUiState(
+                scheduleReconnect = false,
+                respectAutoConnectPreference = false,
+            )
         }
     }
 
@@ -723,10 +720,7 @@ class BluetoothKeyboardManager(private val context: Context) {
     private fun initProfileListener() {
         if (incompatibleVerdictLatched) return
         _statusMessage.value = "Connecting to HID service profile proxy..."
-        _serviceState.value = BluetoothState.CheckingCapabilities
-        managerScope.launch {
-            ensureHidReady()
-        }
+        launchCapabilityCheck()
     }
 
     private fun confirmIncompatibleVerdict(message: String) {
@@ -751,7 +745,47 @@ class BluetoothKeyboardManager(private val context: Context) {
         _lifecycleState.value = HidLifecycleState.Idle
         _serviceState.value = BluetoothState.CheckingCapabilities
         _statusMessage.value = "Rechecking Bluetooth HID Device compatibility..."
-        checkBluetoothCapabilities()
+        launchCapabilityCheck(replaceRunning = true)
+    }
+
+    private fun isCapabilityCheckRunning(): Boolean = synchronized(capabilityCheckLock) {
+        capabilityCheckJob?.isActive == true
+    }
+
+    private fun launchCapabilityCheck(replaceRunning: Boolean = false) {
+        if (incompatibleVerdictLatched) return
+        val jobToStart = synchronized(capabilityCheckLock) {
+            val running = capabilityCheckJob
+            if (running?.isActive == true && !replaceRunning) return
+            if (replaceRunning) running?.cancel()
+
+            val generation = capabilityCheckGeneration.incrementAndGet()
+            if (_serviceState.value !is BluetoothState.InitializingCapabilities) {
+                _serviceState.value = BluetoothState.CheckingCapabilities
+            }
+            val newJob = managerScope.launch(start = CoroutineStart.LAZY) {
+                try {
+                    val hid = ensureHidReady()
+                    if (
+                        hid != null &&
+                        appRegistrationState.value &&
+                        !incompatibleVerdictLatched &&
+                        capabilityCheckGeneration.get() == generation
+                    ) {
+                        publishRegisteredUiState(scheduleReconnect = true)
+                    }
+                } finally {
+                    synchronized(capabilityCheckLock) {
+                        if (capabilityCheckJob === coroutineContext[Job]) {
+                            capabilityCheckJob = null
+                        }
+                    }
+                }
+            }
+            capabilityCheckJob = newJob
+            newJob
+        }
+        jobToStart.start()
     }
 
     private suspend fun ensureHidReady(awaitLateCallback: Boolean = false): BluetoothHidDevice? {
@@ -844,7 +878,9 @@ class BluetoothKeyboardManager(private val context: Context) {
                         lastConnectedDeviceAddress = activeDev.address
                         lastConnectedDevice = activeDev
                         _connectedDevice.value = activeDev
-                        _serviceState.value = BluetoothState.Connected(activeDev.name ?: "Paired Host")
+                        if (!isCapabilityCheckRunning()) {
+                            _serviceState.value = BluetoothState.Connected(activeDev.name ?: "Paired Host")
+                        }
                         // We intentionally DO NOT call connectDevice() here.
                         // We must wait for registerApp() to complete. 
                         // onAppStatusChanged(true) will seamlessly pick up lastConnectedDeviceAddress and connect.
@@ -866,6 +902,79 @@ class BluetoothKeyboardManager(private val context: Context) {
                 // STATE_DISCONNECTED via onConnectionStateChanged if the link actually drops.
                 _statusMessage.value = "HID Service Proxy disconnected. Rebinding..."
                 initProfileListener()
+            }
+        }
+    }
+
+    @SuppressLint("MissingPermission")
+    private fun publishRegisteredUiState(
+        scheduleReconnect: Boolean,
+        respectAutoConnectPreference: Boolean = true,
+    ) {
+        if (incompatibleVerdictLatched) return
+        _lifecycleState.value = HidLifecycleState.Registered
+        updateBondedDevices()
+        val connectedDevs = try {
+            hidDeviceProfile?.connectedDevices
+        } catch (e: Exception) {
+            Log.e("BluetoothKeyboard", "Error restoring connected devices", e)
+            null
+        }
+        val activeDev = connectedDevs?.firstOrNull()
+        if (activeDev != null) {
+            val isAutoConnectEnabled = !respectAutoConnectPreference ||
+                appPreferences.getBoolean("auto_connect", true)
+            if (isAutoConnectEnabled) {
+                _connectedDevice.value = activeDev
+                lastConnectedDevice = activeDev
+                lastConnectedDeviceAddress = activeDev.address
+                _statusMessage.value = if (scheduleReconnect) {
+                    "Restoring link with '${activeDev.name ?: "Host"}'..."
+                } else {
+                    "Link established with '${activeDev.name ?: "Host"}'! Keyboard active."
+                }
+                _serviceState.value = BluetoothState.Connected(activeDev.name ?: "Paired Host")
+
+                if (scheduleReconnect) {
+                    managerScope.launch {
+                        delay(500)
+                        connectDevice(activeDev, skipDisconnect = false)
+                    }
+                }
+            } else {
+                _connectedDevice.value = null
+                _statusMessage.value = "Custom HID Deck is ready and advertising."
+                _serviceState.value = BluetoothState.PairingMode(
+                    bluetoothAdapter?.name ?: context.getString(R.string.app_name),
+                )
+            }
+            return
+        }
+
+        _connectedDevice.value = null
+        _statusMessage.value = "Custom HID Deck is ready and advertising."
+        _serviceState.value = BluetoothState.PairingMode(
+            bluetoothAdapter?.name ?: context.getString(R.string.app_name),
+        )
+
+        if (!scheduleReconnect || connectRequestProcessor.pending.value != null) return
+        val isAutoConnectEnabled = appPreferences.getBoolean("auto_connect", true)
+        if (!isAutoConnectEnabled) return
+        lastConnectedDeviceAddress?.let { address ->
+            try {
+                val lastDevice = bluetoothAdapter?.getRemoteDevice(address)
+                if (lastDevice != null && lastDevice.bondState == BluetoothDevice.BOND_BONDED) {
+                    Log.d(
+                        "BluetoothKeyboard",
+                        "Scheduling auto-reconnect to last connected device: ${lastDevice.name ?: address}",
+                    )
+                    managerScope.launch {
+                        delay(600)
+                        connectDevice(lastDevice, skipDisconnect = true)
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e("BluetoothKeyboard", "Failed to schedule auto-reconnect to last connected device", e)
             }
         }
     }
@@ -893,60 +1002,12 @@ class BluetoothKeyboardManager(private val context: Context) {
             appRegistrationState.value = registered
             if (!registered) registrationCommandAccepted = false
             if (registered) {
-                _lifecycleState.value = HidLifecycleState.Registered
-                updateBondedDevices()
-                val connectedDevs = hidDeviceProfile?.connectedDevices
-                val activeDev = connectedDevs?.firstOrNull()
-                if (activeDev != null) {
-                    val prefs = context.getSharedPreferences("app_prefs", Context.MODE_PRIVATE)
-                    val isAutoConnectEnabled = prefs.getBoolean("auto_connect", true)
-                    if (isAutoConnectEnabled) {
-                        _connectedDevice.value = activeDev
-                        lastConnectedDevice = activeDev
-                        lastConnectedDeviceAddress = activeDev.address
-                        _statusMessage.value = "Restoring link with '${activeDev.name ?: "Host"}'..."
-                        _serviceState.value = BluetoothState.Connected(activeDev.name ?: "Paired Host")
-                        
-                        // Schedule clean reconnect to refresh L2CAP channels for newly registered app process
-                        managerScope.launch {
-                            delay(500)
-                            connectDevice(activeDev, skipDisconnect = false)
-                        }
-                    } else {
-                        _connectedDevice.value = null
-                        _statusMessage.value = "Custom HID Deck is ready and advertising."
-                        _serviceState.value = BluetoothState.PairingMode(bluetoothAdapter?.name ?: context.getString(R.string.app_name))
-                    }
-                } else {
-                    _connectedDevice.value = null
-                    _statusMessage.value = "Custom HID Deck is ready and advertising."
-                    _serviceState.value = BluetoothState.PairingMode(bluetoothAdapter?.name ?: context.getString(R.string.app_name))
-
-                    // Explicit requests are drained by the latest-wins StateFlow collector once
-                    // registrationState becomes true. Only synthesize an automatic request when
-                    // the user has not selected a target in this process.
-                    if (connectRequestProcessor.pending.value == null) {
-                        // Otherwise, check preference before auto-reconnecting to the last known device
-                        val prefs = context.getSharedPreferences("app_prefs", Context.MODE_PRIVATE)
-                        val isAutoConnectEnabled = prefs.getBoolean("auto_connect", true)
-                        if (isAutoConnectEnabled) {
-                            lastConnectedDeviceAddress?.let { addr ->
-                                try {
-                                    val lastDevice = bluetoothAdapter?.getRemoteDevice(addr)
-                                    if (lastDevice != null && lastDevice.bondState == BluetoothDevice.BOND_BONDED) {
-                                        Log.d("BluetoothKeyboard", "Scheduling auto-reconnect to last connected device: ${lastDevice.name ?: addr}")
-                                        managerScope.launch {
-                                            delay(600)
-                                            connectDevice(lastDevice, skipDisconnect = true)
-                                        }
-                                    }
-                                } catch (e: Exception) {
-                                    Log.e("BluetoothKeyboard", "Failed to schedule auto-reconnect to last connected device", e)
-                                }
-                            }
-                        }
-                    }
-                }
+                if (isCapabilityCheckRunning()) return
+                if (
+                    _serviceState.value is BluetoothState.PairingMode ||
+                    _serviceState.value is BluetoothState.Connected
+                ) return
+                publishRegisteredUiState(scheduleReconnect = true)
             } else {
                 if (_lifecycleState.value !is HidLifecycleState.Registering) {
                     _lifecycleState.value = HidLifecycleState.Idle
@@ -1034,11 +1095,8 @@ class BluetoothKeyboardManager(private val context: Context) {
     @SuppressLint("MissingPermission")
     private fun registerApp() {
         if (incompatibleVerdictLatched) return
-        _serviceState.value = BluetoothState.CheckingCapabilities
         _statusMessage.value = "Checking Bluetooth HID Device compatibility..."
-        managerScope.launch {
-            ensureHidReady()
-        }
+        launchCapabilityCheck()
     }
 
     @SuppressLint("MissingPermission")
