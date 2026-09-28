@@ -4,7 +4,6 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.collectLatest
-import kotlinx.coroutines.flow.filterNotNull
 import kotlinx.coroutines.launch
 
 internal class LatestRequestProcessor<T : Any>(
@@ -16,11 +15,17 @@ internal class LatestRequestProcessor<T : Any>(
 
     init {
         scope.launch {
-            mutablePending.filterNotNull().collectLatest(process)
+            mutablePending.collectLatest { request ->
+                if (request != null) process(request)
+            }
         }
     }
 
     fun submit(request: T) {
         mutablePending.value = request
+    }
+
+    fun clear() {
+        mutablePending.value = null
     }
 }

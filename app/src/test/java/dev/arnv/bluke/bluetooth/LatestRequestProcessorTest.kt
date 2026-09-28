@@ -49,4 +49,25 @@ class LatestRequestProcessorTest {
 
         assertTrue(processor.pending.value == "host-b")
     }
+
+    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+    @Test
+    fun clearingPendingRequestCancelsInFlightWork() = runTest {
+        var cancelled = false
+        val processor = LatestRequestProcessor<String>(backgroundScope) {
+            try {
+                awaitCancellation()
+            } finally {
+                cancelled = true
+            }
+        }
+
+        processor.submit("host")
+        runCurrent()
+        processor.clear()
+        runCurrent()
+
+        assertTrue(cancelled)
+        assertTrue(processor.pending.value == null)
+    }
 }

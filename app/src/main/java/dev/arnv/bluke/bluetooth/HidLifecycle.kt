@@ -43,6 +43,16 @@ internal fun isRegistrationCallbackActionable(
     registrationCommandAccepted: Boolean,
 ): Boolean = !registered || registrationCommandAccepted
 
+internal fun shouldBlockServiceStatePublication(
+    incompatibleVerdictLatched: Boolean,
+    publishingIncompatibleVerdict: Boolean,
+    capabilityCheckRunning: Boolean,
+    currentStateIsCapabilityCheck: Boolean,
+    publishingOperationalState: Boolean,
+): Boolean =
+    (incompatibleVerdictLatched && !publishingIncompatibleVerdict) ||
+        (capabilityCheckRunning && currentStateIsCapabilityCheck && publishingOperationalState)
+
 data class RetryPolicy(
     val maxAttempts: Int = 3,
     val initialDelayMillis: Long = 300,

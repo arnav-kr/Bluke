@@ -19,6 +19,10 @@ internal fun shouldShowBluetoothErrorToast(
     ) return false
 
     val normalizedMessage = message.lowercase()
+    if (normalizedMessage.contains("appears incompatible") ||
+        normalizedMessage.contains("repeatedly rejected hid")
+    ) return false
+
     return normalizedMessage.contains("timed out") ||
         normalizedMessage.contains("rejected") ||
         normalizedMessage.contains("failed") ||

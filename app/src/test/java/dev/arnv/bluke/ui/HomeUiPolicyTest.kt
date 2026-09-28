@@ -37,6 +37,12 @@ class HomeUiPolicyTest {
                 "Android repeatedly rejected HID Device registration"
             )
         )
+        assertFalse(
+            shouldShowBluetoothErrorToast(
+                BluetoothState.ReadyDisconnected,
+                "This device appears incompatible: Android repeatedly rejected HID Device registration."
+            )
+        )
         assertTrue(
             shouldShowBluetoothErrorToast(
                 BluetoothState.ReadyDisconnected,

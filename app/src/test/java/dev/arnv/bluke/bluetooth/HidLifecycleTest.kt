@@ -19,6 +19,37 @@ class HidLifecycleTest {
     }
 
     @Test
+    fun terminalIncompatibilityAndActiveChecksBlockOperationalUiStates() {
+        assertTrue(
+            shouldBlockServiceStatePublication(
+                incompatibleVerdictLatched = true,
+                publishingIncompatibleVerdict = false,
+                capabilityCheckRunning = false,
+                currentStateIsCapabilityCheck = false,
+                publishingOperationalState = true,
+            )
+        )
+        assertTrue(
+            shouldBlockServiceStatePublication(
+                incompatibleVerdictLatched = false,
+                publishingIncompatibleVerdict = false,
+                capabilityCheckRunning = true,
+                currentStateIsCapabilityCheck = true,
+                publishingOperationalState = true,
+            )
+        )
+        assertFalse(
+            shouldBlockServiceStatePublication(
+                incompatibleVerdictLatched = true,
+                publishingIncompatibleVerdict = true,
+                capabilityCheckRunning = false,
+                currentStateIsCapabilityCheck = false,
+                publishingOperationalState = false,
+            )
+        )
+    }
+
+    @Test
     fun onlySynchronousProfileRejectionsIndicateLikelyIncompatibility() {
         assertEquals(true, HidFailure.BINDING_REJECTED.indicatesLikelyDeviceIncompatibility())
         assertEquals(true, HidFailure.REGISTRATION_REJECTED.indicatesLikelyDeviceIncompatibility())
