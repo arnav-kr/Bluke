@@ -1176,7 +1176,7 @@ fun HomeScreen(
                             onEnableBluetooth = {
                                 btLauncher.launch(Intent(BluetoothAdapter.ACTION_REQUEST_ENABLE))
                             },
-                            onRetry = btManager::checkBluetoothCapabilities
+                            onRetry = btManager::retryBluetoothCapabilities
                         )
                     } else {
                         var isPairedExpanded by rememberSaveable { mutableStateOf(true) }
