@@ -51,6 +51,8 @@ class LayoutRepository(context: Context) {
                 CONSOLE_PREFIXES.any(key::startsWith) && value is Float
             }
         dataStore.edit { preferences ->
+            // Another repository instance may have migrated while we awaited edit().
+            if (preferences[MIGRATION_COMPLETE] == true) return@edit
             legacyValues.forEach { (name, value) ->
                 preferences[floatPreferencesKey(name)] = value as Float
             }

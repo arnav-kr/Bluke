@@ -25,6 +25,13 @@ enum class HidFailure {
     CONNECTION_REJECTED,
 }
 
+internal fun shouldDiagnoseHidIncompatibility(
+    failure: HidFailure,
+    previouslyRegistered: Boolean,
+    appInForeground: Boolean,
+): Boolean = appInForeground && !previouslyRegistered &&
+    failure.indicatesLikelyDeviceIncompatibility()
+
 /**
  * A synchronous rejection that persists through the bounded retry policy is the best signal
  * Android exposes for firmware that does not provide a usable HID Device role. Callback timeouts

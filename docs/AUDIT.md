@@ -1159,6 +1159,168 @@ BUILD SUCCESSFUL in 17s
 
 Bluke is authored and maintained by **Arnav Kumar** ([@arnav-kr](https://github.com/arnav-kr)). This documentation commit uses the repository's established GitHub noreply identity when adding Arnav as a co-author.
 
+## Foreground recovery and input-view follow-up (2026-10-03)
+
+- Reviewed the supplied 20.83-second recording at 0.5-second intervals. Gamepad is reached through in-view mode cycling without the first-use acknowledgement; Multimedia also has a different inset policy. The separate photograph shows an incompatible verdict. ASSUMPTION: the background/lock transition reported by the user caused that verdict; the recording does not establish its Bluetooth callback sequence.
+- Centralized the gamepad entry acknowledgement for all in-view cycle paths and the home launcher. Cancelling the dialog keeps the previous mode; accepting it opens Gamepad and remembers the acknowledgement.
+- Replaced the keyboard's screen-local reconnect control with a shared control in Keyboard, Touchpad, Gamepad, and both Multimedia postures. It resolves the last successful host from persisted preferences, verifies it is still bonded, and uses the existing latest-request connection queue. Manual disconnect still disables automatic reconnect but retains the manual reconnect target. Never-connected and forgotten hosts have no reconnect button.
+- Removed **only Multimedia's** root `safeDrawingPadding`. Keyboard, Touchpad, and Gamepad screen-fitting policies are unchanged.
+- Android explicitly documents automatic HID unregistration outside the foreground: [BluetoothHidDevice.registerApp](https://developer.android.com/reference/android/bluetooth/BluetoothHidDevice#registerApp(android.bluetooth.BluetoothHidDeviceAppSdpSettings,android.bluetooth.BluetoothHidDeviceAppQosSettings,android.bluetooth.BluetoothHidDeviceAppQosSettings,java.util.concurrent.Executor,android.bluetooth.BluetoothHidDevice.Callback)). Registration checks are now paused while MainActivity is stopped and resumed when it starts. Successful HID registration/connection records support for the current `Build.FINGERPRINT`, including across process recreation. A later rejection on that same firmware is a recoverable connection failure, not proof of incompatibility. A firmware change requires fresh evidence. Initial, never-successful foreground failures still use the bounded incompatibility policy and existing terminal Retry screen.
+- Recovery no longer disconnects an already-live host merely to reconnect it. This does not promise uninterrupted Bluetooth while the phone is locked; Android/OEM policy can still remove the HID registration.
+- Added regression tests for first-use Gamepad gating and compatibility classification after proven support/background suspension. Physical Bluetooth/lock-screen validation remains required; no OEM device matrix was executed in this environment. The Android/Desktop/Web mapping proposal is deliberately not implemented in this pass.
+
+Final verification command: `./gradlew.bat assembleDebug testDebugUnitTest --offline --console=plain`, with workspace-local `GRADLE_USER_HOME` and `ANDROID_USER_HOME` (no signing configuration edit). Real final output:
+
+```text
+> Task :app:testDebugUnitTest
+> Task :app:finalizeTestRoborazziDebug SKIPPED
+
+BUILD SUCCESSFUL in 3m 32s
+47 actionable tasks: 8 executed, 39 up-to-date
+Configuration cache entry reused.
+```
+
+JUnit XML totals: 107 tests, 0 failures, 0 errors, 0 skipped. APK: `app/build/outputs/apk/debug/app-debug.apk`. Initial sandbox attempts could not access Android's default user directory/debug signing lock; the successful run used the same source with workspace-local tool directories and approved execution. No SDK, library, descriptor, or signing-configuration versions changed.
+
+The delivered APK was subsequently rebuilt using a workspace copy of the existing `C:/Users/DELL/.android/debug.keystore`, rather than the newly generated diagnostic key, to preserve debug-update signature compatibility. That packaging-only run reported `BUILD SUCCESSFUL in 13s` and `38 actionable tasks: 1 executed, 37 up-to-date`.
+
+### Background connection and launch reconnect follow-up (2026-10-04)
+
+- The activity stop handler does not explicitly call `disconnect()` or `unregisterApp()`. ASSUMPTION: the reported immediate background disconnect is Android/OEM UID-importance enforcement, pending device logs. [AOSP HidDeviceService](https://android.googlesource.com/platform/packages/modules/Bluetooth/+/refs/heads/master/android/app/src/com/android/bluetooth/hid/HidDeviceService.java) unregisters HID when the application's importance exceeds `IMPORTANCE_VISIBLE`; Android's foreground-service importance is within that cutoff.
+- Added a non-exported `connectedDevice` foreground service, started only from a visible activity with Bluetooth permission. It keeps an established connection alive when the activity stops, and stops for Bluetooth off, permission loss, incompatibility, task removal, or an idle background session. Recovery work is not canceled merely because a connected activity stops. This follows the [Android connected-device foreground-service requirements](https://developer.android.com/develop/background-work/services/fgs/service-types#connected-device), with `FOREGROUND_SERVICE` and `FOREGROUND_SERVICE_CONNECTED_DEVICE` permissions. No wake lock, SDK bump, dependency, or HID descriptor change. The connection notification is ongoing and opens the app; Android 13+ may display the service only in its active-apps UI when notifications are not permitted. Play Console foreground-service declarations must be reviewed before release.
+- Concrete launch race: the already-registered proxy path previously called `publishRegisteredUiState(scheduleReconnect = false)`, while the registration-completion path scheduled reconnect. Both now schedule the saved bonded host when auto-connect is enabled and no request is pending. Existing connections remain visible regardless of that preference.
+- Moved the 600 ms reconnect delay inside the latest-request processor. Selecting another host cancels the delayed saved-host request, rather than allowing it to overwrite the user's selection. A host that establishes an incoming connection during that delay is not redundantly connected again.
+- Clear a pending connection request only when that exact host successfully connects (callback or live-proxy restoration). A completed request must not block later reconnect checks; a newer request for another host must not be cleared by a late callback from the old host.
+- Added session-retention policy tests (background connected, idle background, visible pairing, blocked states) and a delayed-reconnect cancellation regression test. These test app logic, not physical Bluetooth behavior. API/OEM sleep, app-switch, notification-permission, battery-restriction and cold-launch reconnect tests remain required on the affected phones; a foreground service does not guarantee survival of force-stop, OEM process killing, Bluetooth toggles, or host-initiated disconnection.
+
+Executed `./gradlew.bat assembleDebug testDebugUnitTest lintDebug --offline --console=plain` using the existing debug signing key and workspace-local tool directories. Real output:
+
+```text
+> Task :app:testDebugUnitTest
+> Task :app:finalizeTestRoborazziDebug SKIPPED
+> Task :app:lintReportDebug
+Wrote HTML report to file:///C:/Users/DELL/Documents/Bluke/app/build/reports/lint-results-debug.html
+> Task :app:lintDebug
+BUILD SUCCESSFUL in 6m
+56 actionable tasks: 16 executed, 40 up-to-date
+Configuration cache entry stored.
+```
+
+JUnit XML: 111 tests, zero failures/errors/skipped. Lint XML: zero errors, six warnings: `OldTargetApi` (`app/build.gradle.kts:17`); `GradleDependency` (`app/build.gradle.kts:12`, `gradle/libs.versions.toml:16`, `:17`); `ObsoleteSdkInt` (`mipmap-anydpi-v26`); `UseKtx` (`KeyboardSoundSynthesizer.kt:127`). No reported issues in the new service, manifest, activity, or Bluetooth manager. These unrelated warnings remain unchanged; no dependency/SDK upgrade or blanket suppression was introduced.
+
+After the final matching-host request cleanup, repeated `assembleDebug testDebugUnitTest` to ensure the APK contains the final source:
+
+```text
+> Task :app:testDebugUnitTest
+> Task :app:finalizeTestRoborazziDebug SKIPPED
+BUILD SUCCESSFUL in 2m 35s
+47 actionable tasks: 7 executed, 40 up-to-date
+Configuration cache entry reused.
+```
+
+### Android controller output profile (2026-10-04)
+
+Added a manually selected third controller profile: **Native → Android → Web → Native**. Tap the Gamepad toolbar's mode control to cycle, or hold it to open Settings → Controller → Behaviour → Controller compatibility. Existing `native_hat`/`web_buttons` preferences remain valid; Native remains the default. The existing preference key is retained for upgrade safety, although the choice now governs the complete button encoder, not only the D-pad.
+
+Android's [Generic.kl](https://raw.githubusercontent.com/aosp-mirror/platform_frameworks_base/master/data/keyboards/Generic.kl) maps Linux gamepad events to Android buttons. The generic [Linux HID input mapper](https://raw.githubusercontent.com/torvalds/linux/master/drivers/hid/hid-input.c) maps Gamepad Button usage N to `BTN_GAMEPAD + N - 1` through usage 16. Those sources explain the reported Minecraft Mobile mismatches (e.g. desktop LB was Android Y, desktop Back was Android L2). Android mode translates canonical UI indices to these zero-based report bits:
+
+| Control | Canonical / Native / Web bit | Android bit | Android key |
+| --- | --- | --- | --- |
+| A / B | 0 / 1 | 0 / 1 | BUTTON_A / BUTTON_B |
+| X / Y | 2 / 3 | 3 / 4 | BUTTON_X / BUTTON_Y |
+| LB / RB | 4 / 5 | 6 / 7 | BUTTON_L1 / BUTTON_R1 |
+| LT / RT | 6 / 7 | 8 / 9 | BUTTON_L2 / BUTTON_R2 |
+| Back / Start | 8 / 9 | 10 / 11 | BUTTON_SELECT / BUTTON_START |
+| L3 / R3 | 10 / 11 | 13 / 14 | BUTTON_THUMBL / BUTTON_THUMBR |
+| Guide | 16 | 12 | BUTTON_MODE |
+| Share / touchpad-click | 17 / 18 | 17 / 18 | Extras; no standard Generic.kl action |
+
+Android and Native use the existing Hat Switch, while Web retains its directional buttons. Bits 12–14 are ordinary controller buttons in Android mode, **not** Web D-pad directions; canonical reserved-bit cleanup occurs before Android remapping to avoid clearing Guide/L3/R3. Unit tests cover every standard button, collisions, combined Guide/stick clicks with a diagonal Hat, extra buttons, high-bit/padding safety, unchanged Native/Web encoding, persisted mode parsing, cycling, identical neutral reports, and unchanged axes.
+
+The descriptor, report ID 3, 12-byte packet, descriptor revision, and axis usages are unchanged. Neutral reports around the live preference change use the existing pipeline. No re-pair, app-data reset, dependency, SDK or automatic host-OS detection is introduced.
+
+ASSUMPTION: the target Android device uses the generic key layout, consistent with the user's observed mismatches. OEM/vendor layouts and individual game mappings can differ; physical Minecraft Mobile verification is still required. Triggers remain digital buttons, not new analog axes. Existing right-stick usages Z/Rx are preserved for desktop compatibility; games that insist on Android's commonly used Z/Rz pair may need a future descriptor-level solution, rather than a false promise that a button-only profile fixes every game. Share/touchpad-click are preserved but cannot be guaranteed to perform Android actions. Verify all buttons, diagonals, both sticks, and transitions while a control is held on a physical Android host, then switch back to Native/Web on Windows/Linux/browser hosts.
+
+Executed `./gradlew.bat assembleDebug testDebugUnitTest --offline --console=plain`. Real output for the three-profile UI and encoder regression pass:
+
+```text
+> Task :app:testDebugUnitTest
+> Task :app:finalizeTestRoborazziDebug SKIPPED
+BUILD SUCCESSFUL in 3m 46s
+47 actionable tasks: 8 executed, 39 up-to-date
+Configuration cache entry reused.
+```
+
+JUnit XML totals: 116 tests, zero failures, errors, or skipped tests. The five new tests cover the Android remap and descriptor-stable behavior; the existing cycle test now covers all three profiles. No physical Android/Minecraft test was available in this environment.
+
+Final packaging after updating the in-app help: `./gradlew.bat assembleDebug --offline --console=plain`:
+
+```text
+> Task :app:assembleDebug
+BUILD SUCCESSFUL in 1m 29s
+38 actionable tasks: 4 executed, 34 up-to-date
+Configuration cache entry reused.
+```
+
+### First-pair connection and application lifecycle concurrency review (2026-10-04)
+
+Scope: reviewed Bluetooth binding/registration/connection, startup permissions and capability checks, activity/service visibility and teardown, report submission, Compose input disposal, sound loading, DataStore migration, and developer logging. This is a source review with deterministic fake-facade tests, not proof that the app is race-free. No device was available to reproduce the first-pair failure. ASSUMPTION: the observed failure involved the callback ordering described below; the unsafe source paths themselves are confirmed.
+
+| Priority | Finding / concrete interleaving | Resolution / proposed follow-up | Status |
+| --- | --- | --- | --- |
+| P1 | `BOND_BONDED` previously scheduled a delayed connect which could disconnect a host already automatically connected; a connection callback could then cancel that delayed reconnect. | Bond completion applies only to the selected address. The coordinator treats an already-connected host as success and joins an existing CONNECTING handshake instead of disconnecting/reconnecting it. | Fixed; fake facade tests. |
+| P1 | Cancelling a latest-wins coroutine cannot cancel the Bluetooth stack's already-issued connect command. | Serialize physical transactions with a mutex; before connecting the new target, disconnect other CONNECTED/CONNECTING/DISCONNECTING hosts and await their disconnection. Repeated taps on an in-flight target are idempotent. | Fixed; cancellation and concurrent-request tests. |
+| P1 | A non-replaying shared callback stream could lose a synchronous disconnect before the coroutine started waiting. | Use revisioned per-address StateFlow events; establish the event baseline before issuing commands and also consult the current facade state. | Fixed; synchronous callback tests. |
+| P1 | Late DISCONNECTED(A) could clear the displayed connection to B. CONNECTED(A) could also overwrite a newer target B. | Address guards and a selection lock protect selected/connected host publication and clearing. An old coroutine's finally block cannot clear the newer request. | Fixed; pure guard and latest-request tests. |
+| P1 | Command acceptance was treated as eventual success; failure callbacks did not drive a bounded retry. | Wait for CONNECTED/DISCONNECTED, with at most three attempt windows, 10 seconds per connection window, a 3-second previous-host disconnect window, and 500/1000 ms retry delays. A false command result is reported as failure to start a connection, not proof that the host rejected it. | Fixed; rejection, timeout and callback-failure tests. Timeouts are recovery policy, not compatibility verdicts. |
+| P1 | Home matched an active connection by status-message device name, while scan and bonded snapshots could disagree. Two different addresses with the same name could get the wrong active row. | Expose the selected address in HomeUiState. Reconcile scanned rows against the bonded address set and deduplicate scanned rows by address. Never merge different MAC addresses solely by name. | Fixed; address reconciliation test. ASSUMPTION: the reported two icons were stale snapshots or different Bluetooth identities; icons/name alone cannot establish which. |
+| P1 | MainActivity alone owned app visibility; opening settings looked like backgrounding. Idle-session shutdown also ignored a pending handshake and service visibility was read non-reactively. | Application tracks all started activities. Service observes visibility and pending-request flows and preserves a pending handshake in background. Main ensures the service on resume, with existing permission/foreground guards. | Fixed; session policy regression test. Physical background/lock/OEM checks remain required. |
+| P1 | Bluetooth-off could leave a capability coroutine publishing a later operational result. Permission checks read adapter state before confirming CONNECT permission. | Cancel/invalidate the capability generation on Bluetooth-off, gate late registration/proxy callbacks while off, and check CONNECT permission before adapter access. | Fixed guards; device permission-revocation/toggle tests remain required. |
+| P1 | Reports queued for an old proxy/link could be sent after a host switch or input-screen stop; executor shutdown could race submission. Input disposal alone does not cover a stopped activity whose composition remains alive. | Report tasks check link epoch, proxy identity and connected address. Handle submission after shutdown. Activity stop releases keyboard/mouse/gamepad/consumer state without disconnecting; Gamepad also resets its local sampled state on STOP. Reset keyboard state under the same lock as key mutation. | Fixed. Already executing Binder calls cannot be recalled; physical interrupted-drag/held-key validation remains required. |
+| P2 | A HID proxy callback could arrive after manager close and resurrect the proxy/rebinding path. | Closed guards, immediate release of a late received proxy, cancel manager work before closing resources, and serialize the closed transition with connection selection. | Fixed guard; teardown uses application lifetime, not Activity destruction. |
+| P2 | Separate LayoutRepository instances had separate migration mutexes: a second migration could overwrite values edited after the first migration. | Recheck the migration marker inside DataStore's serialized edit transaction. | Fixed; no preference-format change. |
+| P2 | Concurrent report/callback logging copied and replaced the same in-memory list, losing entries. | Atomic StateFlow.update for bounded in-memory append. | Fixed. File autosave still needs the follow-up below. |
+| P1 | The single shared registration callback has no binding/registration-attempt token. A true callback can arrive before `registerApp()` returns and sets `registrationCommandAccepted`; a late false callback from an older registration can clear a newer registration. The capability generation check and final publication are also separate operations. | Next step: a serialized lifecycle reducer owning proxy and registration generations; buffer callbacks during command acceptance, accept/reject them after the return value is known, and perform generation validation plus state publication atomically. Do not invent attempt identity that Android callbacks do not provide. Add fake callback-order tests before migrating the manager. | Proposed; not changed in this connection-focused patch. These are possible interleavings, not captured OEM evidence. |
+| P2 | Audio profile proxy acquisition can complete after a host changes or audio suppression is disabled. Its proxies close in finally, but the sweep may still disconnect audio for an old host. | Capture session generation and preference state; recheck in each proxy callback before reflection, always closing the proxy. | Proposed; optional audio routing behavior left unchanged. |
+| P2 | Sound loader jobs serialize but lack selection/release generation checks. An older failed custom pack load clears the saved selection and can queue a built-in fallback after the user chose a newer pack; release can race sample loading. | Add a latest-selection generation, per-job captured pool, release guard and cancellation-aware sample waits; only current jobs publish a bank or change preferences. Test rapid cycling, failed A followed by valid B, and Activity destruction during loading. | Proposed; no audio architecture rewrite here. |
+| P2 | Developer log autosave launches concurrent file appends/clear operations on an unowned IO scope. Atomic memory updates do not fix file order or clear-vs-pending-write races. | Use an application-owned single-writer queue with a clear/config generation barrier and explicit close policy. | Proposed. |
+| P2 | Pending pairing/late-registration waits may outlive the visible UI indefinitely if firmware never emits a terminal event. Keeping the foreground service during pending work makes that cost visible. | Add an explicit user-cancellable waiting state and pairing watchdog; retain late registration intent only under a documented session policy. Do not turn a watchdog timeout into an unsupported-hardware verdict. | Proposed; current late-callback behavior deliberately retained. |
+
+There are no `GlobalScope` or `runBlocking` matches in `app/src/main/java`. The source sweep found manager IO scope owned by SupervisorJob/close, service Main.immediate scope cancelled onDestroy, Compose rememberCoroutineScope instances owned by composition, and developer logging's process-lived IO scope (follow-up above). Registered Bluetooth receivers retain their platform-broadcast EXPORTED flags and matching close-time unregister calls; those privileged system broadcasts must not be casually switched to NOT_EXPORTED.
+
+No descriptor semantics, Android/Native/Web mappings, dependency versions, SDK levels, signing settings, or unsupported-device verdict rules were changed for this connection fix. The device matrix remains unexecuted: test fresh first pairing on both affected phones, rapid repeated Connect, A→B while A is connecting, host-initiated connect during bonding, Bluetooth off/on during registration, settings navigation, 2–3 second backgrounding, screen lock/unlock, permission revocation, and interrupted held inputs. Successful deterministic tests do not substitute for that matrix.
+
+Executed `./gradlew.bat assembleDebug testDebugUnitTest lintDebug --offline --console=plain` using the existing debug signing key. First verification pass (before the final input-release and Bluetooth-off cleanup guards):
+
+```text
+> Task :app:testDebugUnitTest
+> Task :app:finalizeTestRoborazziDebug SKIPPED
+> Task :app:lintReportDebug
+Wrote HTML report to file:///C:/Users/DELL/Documents/Bluke/app/build/reports/lint-results-debug.html
+> Task :app:lintDebug
+BUILD SUCCESSFUL in 5m 19s
+56 actionable tasks: 18 executed, 38 up-to-date
+Configuration cache entry reused.
+```
+
+Executed XML inspection (`Get-ChildItem app/build/test-results/testDebugUnitTest/TEST-*.xml` and `Measure-Object -Property tests,failures,errors,skipped -Sum`): 29 suites, 129 tests, 0 failures, 0 errors, 0 skipped. This adds eleven fake connection-facade tests, one pending-handshake service policy test and one address reconciliation test to the prior 116-test suite. Lint XML contains six existing warnings: OldTargetApi, three GradleDependency, ObsoleteSdkInt and UseKtx; no lint errors.
+
+Final repeat of the same build/test/lint command, including the input-release and Bluetooth-off cleanup guards:
+
+```text
+> Task :app:assembleDebug
+> Task :app:testDebugUnitTest
+> Task :app:finalizeTestRoborazziDebug SKIPPED
+> Task :app:lintReportDebug
+Wrote HTML report to file:///C:/Users/DELL/Documents/Bluke/app/build/reports/lint-results-debug.html
+> Task :app:lintDebug
+BUILD SUCCESSFUL in 4m 46s
+56 actionable tasks: 16 executed, 40 up-to-date
+Configuration cache entry reused.
+```
+
+Final JUnit XML totals remain 129 tests, zero failures/errors/skipped. No Kotlin compiler warnings appeared in these two runs. APK: `app/build/outputs/apk/debug/app-debug.apk`; SHA-256 `3F333F2AF1FDDD3140F70A89CA032E9BC5D942163F99A9C1448BAD74A0051519`. Changes remain in the existing `refactor` working tree alongside previous work; no merge or push performed.
+
 ## 8. Open questions for the maintainer
 
 1. On which API 28, 31, and 36 devices did the physical matrix pass or fail, and can the resulting developer logs/build fingerprints be attached?
@@ -1174,6 +1336,6 @@ Bluke is authored and maintained by **Arnav Kumar** ([@arnav-kr](https://github.
 11. On a small phone and a tablet, are the wrapped customizer controls and 180 dp preview comfortable for reliable individual-key selection, and does tap-to-cycle / hold-to-customize remain discoverable in the landscape keyboard toolbar?
 12. Should a future release add licensed font-family packs after glyph-coverage and key-fit rules are specified, or keep customization limited to legend color and scale?
 13. On a physical phone, do the opt-in volume buttons control only the connected host while Media + Presentation is visible, return immediately to local Android volume after leaving it, and always release after interrupted presses?
-14. On phones with left- and right-side display cutouts, do Multimedia's safe-drawing insets keep the upright toolbar clear of the notch without wasting excessive space?
+14. On phones with left- and right-side display cutouts, are Multimedia's controls usable with the same fullscreen fitting as the other input modes, in both postures?
 15. Which presentation hosts should define the compatibility target for F5, `B`, Home/End, and Page Up/Down: PowerPoint, Google Slides, LibreOffice Impress, Keynote, or all four?
 16. After this relative-touchpad fix, does tap once, then touch again within 300 ms and keep the second contact down while moving reliably drag icons on both Windows and Linux?

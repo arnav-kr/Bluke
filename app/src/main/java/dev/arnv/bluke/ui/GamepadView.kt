@@ -46,7 +46,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.edit
 import dev.arnv.bluke.R
-import dev.arnv.bluke.BehaviorActivity
+import dev.arnv.bluke.ControllerSettingsActivity
 import dev.arnv.bluke.QuickCycleActivity
 import dev.arnv.bluke.bluetooth.BluetoothKeyboardManager
 import dev.arnv.bluke.bluetooth.GAMEPAD_DPAD_MODE_PREFERENCE
@@ -421,7 +421,7 @@ fun GamepadView(
 
     val connectedDevNow by btManager.connectedDevice.collectAsState()
     val isConnected = connectedDevNow != null
-    val deviceName = connectedDevNow?.name ?: "No Host"
+    val deviceName = (connectedDevNow ?: btManager.getReconnectTarget())?.name ?: "No Host"
 
     var buttonMask by remember { mutableIntStateOf(0) }
     var dpadMask by remember { mutableIntStateOf(0) }
@@ -465,8 +465,23 @@ fun GamepadView(
         }
     }
 
-    DisposableEffect(btManager) {
+    val inputLifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+    DisposableEffect(btManager, inputLifecycleOwner) {
+        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            if (event == androidx.lifecycle.Lifecycle.Event.ON_STOP) {
+                buttonMask = 0
+                dpadMask = 0
+                leftStickX = 0f
+                leftStickY = 0f
+                rightStickX = 0f
+                rightStickY = 0f
+                isGamepadDirty = false
+                btManager.sendGamepadReport(0, 0, 0f, 0f, 0f, 0f)
+            }
+        }
+        inputLifecycleOwner.lifecycle.addObserver(observer)
         onDispose {
+            inputLifecycleOwner.lifecycle.removeObserver(observer)
             // Do not leave the host with a sampled stick/button state after this UI and its
             // 8 ms ticker are disposed. Release reports are safety-critical and bypass sampling.
             btManager.sendGamepadReport(0, 0, 0f, 0f, 0f, 0f)
@@ -553,13 +568,14 @@ fun GamepadView(
                     // Connection status
                     Box(Modifier.size(6.dp).clip(CircleShape).background(if (isConnected) Color(0xFF39FF14) else Color(0xFFFF9800)))
                     Text(deviceName, color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.SansSerif)
+                    ReconnectHostButton(btManager, iconOnly = true)
                 }
 
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
-                    // D-pad output selector. The descriptor exposes both representations, so
+                    // Output profile selector. All profiles share one descriptor, so
                     // changing this preference takes effect immediately without re-pairing.
                     Row(
                         modifier = Modifier
@@ -567,8 +583,8 @@ fun GamepadView(
                             .clip(RoundedCornerShape(6.dp))
                             .background(Color.White.copy(alpha = 0.15f))
                             .combinedClickable(
-                                onClickLabel = "Switch D-pad behavior",
-                                onLongClickLabel = "Configure D-pad behavior",
+                                onClickLabel = "Switch controller compatibility",
+                                onLongClickLabel = "Configure controller compatibility",
                                 onClick = {
                                     val newMode = dpadOutputMode.next()
                                     dpadOutputMode = newMode
@@ -578,7 +594,7 @@ fun GamepadView(
                                     triggerVibration(15)
                                 },
                                 onLongClick = {
-                                    context.startActivity(Intent(context, BehaviorActivity::class.java))
+                                    context.startActivity(Intent(context, ControllerSettingsActivity::class.java))
                                 },
                             )
                             .padding(horizontal = 8.dp)
@@ -587,21 +603,17 @@ fun GamepadView(
                         horizontalArrangement = Arrangement.spacedBy(4.dp)
                     ) {
                         Icon(
-                            imageVector = if (dpadOutputMode == GamepadDpadOutputMode.WEB_BUTTONS) {
-                                Icons.Default.Language
-                            } else {
-                                Icons.Default.Gamepad
+                            imageVector = when (dpadOutputMode) {
+                                GamepadDpadOutputMode.WEB_BUTTONS -> Icons.Default.Language
+                                GamepadDpadOutputMode.ANDROID -> Icons.Default.Android
+                                GamepadDpadOutputMode.NATIVE_HAT -> Icons.Default.Gamepad
                             },
                             contentDescription = null,
                             tint = Color.White,
                             modifier = Modifier.size(11.dp)
                         )
                         Text(
-                            text = if (dpadOutputMode == GamepadDpadOutputMode.WEB_BUTTONS) {
-                                "D-pad: Web"
-                            } else {
-                                "D-pad: Native"
-                            },
+                            text = "Mode: ${dpadOutputMode.label}",
                             color = Color.White,
                             fontSize = 9.sp,
                             fontWeight = FontWeight.Bold

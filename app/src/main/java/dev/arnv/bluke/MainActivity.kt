@@ -9,6 +9,11 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.flow.collect
 import dev.arnv.bluke.bluetooth.BluetoothKeyboardManager
 import dev.arnv.bluke.bluetooth.BluetoothState
 import dev.arnv.bluke.sound.KeyboardSoundSynthesizer
@@ -29,8 +34,10 @@ class MainActivity : ComponentActivity(), RemoteVolumeKeyHost {
     private val permissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { _ ->
+        if (!::btManager.isInitialized || isDestroyed) return@registerForActivityResult
         // Notify Bluetooth service to re-check status after user interaction
         btManager.checkBluetoothCapabilities()
+        ensureBluetoothSessionService()
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -46,6 +53,11 @@ class MainActivity : ComponentActivity(), RemoteVolumeKeyHost {
         }
 
         btManager = (application as BlukeApplication).bluetoothKeyboardManager
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                btManager.serviceState.collect { ensureBluetoothSessionService() }
+            }
+        }
         val contentView = findViewById<View>(android.R.id.content)
         contentView.viewTreeObserver.addOnPreDrawListener(
             object : ViewTreeObserver.OnPreDrawListener {
@@ -98,10 +110,47 @@ class MainActivity : ComponentActivity(), RemoteVolumeKeyHost {
         }
     }
 
+    override fun onStart() {
+        super.onStart()
+        if (::btManager.isInitialized) {
+            ensureBluetoothSessionService()
+        }
+    }
+
+    override fun onStop() {
+        if (::btManager.isInitialized) {
+            btManager.releaseAllInputs()
+            if (!btManager.isAppVisible() && btManager.connectedDevice.value == null && !btManager.hasPendingConnection.value) {
+                stopService(android.content.Intent(this, BluetoothSessionService::class.java))
+            }
+        }
+        super.onStop()
+    }
+
+    private fun ensureBluetoothSessionService() {
+        if (!::btManager.isInitialized || !btManager.isAppVisible()) return
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S &&
+            checkSelfPermission(android.Manifest.permission.BLUETOOTH_CONNECT) != android.content.pm.PackageManager.PERMISSION_GRANTED
+        ) return
+        when (btManager.serviceState.value) {
+            BluetoothState.BluetoothOff, BluetoothState.PermissionRequired,
+            BluetoothState.Unsupported, BluetoothState.ProfileNotSupported -> return
+            else -> Unit
+        }
+        try {
+            androidx.core.content.ContextCompat.startForegroundService(
+                this, android.content.Intent(this, BluetoothSessionService::class.java),
+            )
+        } catch (e: RuntimeException) {
+            android.util.Log.w("BluetoothSession", "Could not start connection notification", e)
+        }
+    }
+
     override fun onResume() {
         super.onResume()
         if (::btManager.isInitialized) {
             btManager.checkBluetoothCapabilities()
+            ensureBluetoothSessionService()
         }
         if (::soundSynth.isInitialized) {
             soundSynth.reloadSelectedSoundPack()

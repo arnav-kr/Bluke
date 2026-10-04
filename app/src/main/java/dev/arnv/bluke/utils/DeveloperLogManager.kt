@@ -7,6 +7,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.io.File
 import java.io.FileWriter
@@ -60,12 +61,7 @@ object DeveloperLogManager {
         val entry = LogEntry(tag = tag, message = message, type = type)
         
         // Update in-memory state for the LogViewer UI
-        val currentList = _logs.value.toMutableList()
-        currentList.add(entry)
-        if (currentList.size > MAX_LOG_COUNT) {
-            currentList.removeAt(0)
-        }
-        _logs.value = currentList
+        _logs.update { current -> (current + entry).takeLast(MAX_LOG_COUNT) }
 
         // Optionally autosave to file for live ADB tailing
         autoSaveFile?.let { file ->

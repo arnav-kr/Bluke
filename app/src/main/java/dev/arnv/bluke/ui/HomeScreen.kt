@@ -200,6 +200,17 @@ fun HomeScreen(
     var showUpdateDialog by rememberSaveable { mutableStateOf(false) }
     var descriptorRefreshRequired by rememberSaveable { mutableStateOf(false) }
     var showGamepadGuide by rememberSaveable { mutableStateOf(false) }
+    var pendingGamepadMode by rememberSaveable { mutableStateOf<Int?>(null) }
+
+    fun switchInputMode(newMode: Int) {
+        if (shouldShowGamepadGuide(newMode, sharedPrefs.getBoolean("has_seen_gamepad_guide", false))) {
+            pendingGamepadMode = newMode
+            showGamepadGuide = true
+        } else {
+            launchMode = newMode
+            sharedPrefs.edit { putInt("launch_mode", newMode) }
+        }
+    }
     var connectionAttempts by rememberSaveable { mutableIntStateOf(0) }
     var showTroubleshootingNudge by rememberSaveable { mutableStateOf(false) }
     var previousConnectionState by remember { mutableStateOf<Boolean?>(null) }
@@ -338,13 +349,14 @@ fun HomeScreen(
         AlertDialog(
             onDismissRequest = {
                 showGamepadGuide = false
+                pendingGamepadMode = null
                 sharedPrefs.edit { putBoolean("mock_gamepad_guide", false) }
             },
             icon = { Icon(Icons.Default.SportsEsports, contentDescription = null) },
             title = { Text("Before using the gamepad") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text("Start with D-pad: Native games. Switch to Browser games only when a web game ignores directions.")
+                    Text("Choose Native for Windows/Linux games, Android for games on Android, or Web when a browser game ignores directions. Tap the controller mode button to switch; hold it to open settings.")
                     Text("On Windows, some newer games accept only Xbox XInput controllers. Bluke is a standard Bluetooth HID gamepad, so Steam Input or another compatibility layer may be needed.")
                     Text("If the host cached an older Bluke controller layout, forget Bluke on both devices and pair again once.")
                 }
@@ -355,6 +367,11 @@ fun HomeScreen(
                         sharedPrefs.edit { putBoolean("has_seen_gamepad_guide", true) }
                         sharedPrefs.edit { putBoolean("mock_gamepad_guide", false) }
                         showGamepadGuide = false
+                        pendingGamepadMode?.let {
+                            launchMode = it
+                            sharedPrefs.edit { putInt("launch_mode", it) }
+                        }
+                        pendingGamepadMode = null
                         isKeyboardActive = true
                     },
                 ) { Text("Open gamepad") }
@@ -362,6 +379,7 @@ fun HomeScreen(
             dismissButton = {
                 TextButton(onClick = {
                     showGamepadGuide = false
+                    pendingGamepadMode = null
                     sharedPrefs.edit { putBoolean("mock_gamepad_guide", false) }
                 }) { Text("Not now") }
             },
@@ -615,8 +633,7 @@ fun HomeScreen(
                                     onClose = { isKeyboardActive = false },
                                     launchMode = launchMode,
                                     onModeChange = { newMode -> 
-                                        launchMode = newMode
-                                        sharedPrefs.edit { putInt("launch_mode", newMode) }
+                                        switchInputMode(newMode)
                                     },
                                     sharedPrefs = sharedPrefs,
                                     caseBrush = caseBrush,
@@ -628,8 +645,7 @@ fun HomeScreen(
                                     onClose = { isKeyboardActive = false },
                                     launchMode = launchMode,
                                     onModeChange = { newMode -> 
-                                        launchMode = newMode
-                                        sharedPrefs.edit { putInt("launch_mode", newMode) }
+                                        switchInputMode(newMode)
                                     },
                                     sharedPrefs = sharedPrefs,
                                     caseBrush = caseBrush
@@ -641,8 +657,7 @@ fun HomeScreen(
                                     onClose = { isKeyboardActive = false },
                                     launchMode = launchMode,
                                     onModeChange = { newMode ->
-                                        launchMode = newMode
-                                        sharedPrefs.edit { putInt("launch_mode", newMode) }
+                                        switchInputMode(newMode)
                                     },
                                     sharedPrefs = sharedPrefs,
                                     isConnected = isConnected,
@@ -716,8 +731,7 @@ fun HomeScreen(
                                                 val currentIndexInEnabled = enabledModes.indexOf(launchMode)
                                                 val nextIndex = (currentIndexInEnabled + 1) % enabledModes.size
                                                 val nextMode = enabledModes[nextIndex]
-                                                launchMode = nextMode
-                                                sharedPrefs.edit { putInt("launch_mode", nextMode) }
+                                                switchInputMode(nextMode)
                                                 if (isHapticsEnabled) {
                                                     view.performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS)
                                                 }
@@ -748,7 +762,7 @@ fun HomeScreen(
                                 // Status LED and connection details
                                 val statusLedColor = if (isConnected) Color(0xFF39FF14) else Color(0xFFFF9800)
                                 // Use collected state (not .value) so UI reacts to changes from background
-                                val activeDevice = homeUiState.connectedDevice ?: lastConnectedDevice
+                                val activeDevice = homeUiState.connectedDevice ?: lastConnectedDevice ?: btManager.getReconnectTarget()
                                 val deviceName = activeDevice?.name ?: "No Host"
                                 
                                 Box(
@@ -767,35 +781,7 @@ fun HomeScreen(
                                 )
                                 
                                 // Reconnect Button
-                                if (!isConnected && lastConnectedDevice != null) {
-                                    Row(
-                                        modifier = Modifier
-                                            .height(28.dp)
-                                            .clip(RoundedCornerShape(6.dp))
-                                            .background(Color.White.copy(alpha = 0.15f))
-                                            .clickable {
-                                                lastConnectedDevice?.let { dev ->
-                                                    btManager.connectDevice(dev)
-                                                }
-                                            }
-                                            .padding(horizontal = 8.dp),
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.spacedBy(4.dp)
-                                    ) {
-                                        Icon(
-                                            imageVector = Icons.Default.Refresh,
-                                            contentDescription = "Reconnect",
-                                            tint = Color.White,
-                                            modifier = Modifier.size(11.dp)
-                                        )
-                                        Text(
-                                            text = "Reconnect",
-                                            color = Color.White,
-                                            fontSize = 9.sp,
-                                            fontWeight = FontWeight.Bold
-                                        )
-                                    }
-                                }
+                                ReconnectHostButton(btManager)
                             }
 
                             // Right Section: lock LEDs indicators, configuration pills, and mute button
@@ -1221,6 +1207,7 @@ fun HomeScreen(
                                 bluetoothState = btState,
                                 statusMessage = btMessage,
                                 connectedDevice = connectedDeviceState,
+                                connectionTargetAddress = homeUiState.connectionTargetAddress,
                                 bondedDevices = bondedDevices,
                                 scannedDevices = scannedDevices,
                                 isScanning = isScanning,
@@ -1296,10 +1283,7 @@ fun HomeScreen(
                             // Dynamic Launch Option button
                             Button(
                                 onClick = {
-                                    if (
-                                        launchMode == InputMode.GAMEPAD.id &&
-                                        !sharedPrefs.getBoolean("has_seen_gamepad_guide", false)
-                                    ) {
+                                    if (shouldShowGamepadGuide(launchMode, sharedPrefs.getBoolean("has_seen_gamepad_guide", false))) {
                                         showGamepadGuide = true
                                     } else {
                                         isKeyboardActive = true

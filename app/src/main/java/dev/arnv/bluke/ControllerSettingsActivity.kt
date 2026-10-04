@@ -69,8 +69,8 @@ class ControllerSettingsActivity : ComponentActivity() {
                             title = "Behaviour",
                             items = listOf(
                                 SettingsItemData(
-                                    title = "D-Pad compatibility",
-                                    subtitle = if (dpadMode == GamepadDpadOutputMode.NATIVE_HAT) "Native games · standard HID hat" else "Browser games · buttons 12–15",
+                                    title = "Controller compatibility",
+                                    subtitle = dpadMode.description,
                                     icon = { Icon(Icons.Default.Gamepad, null, tint = MaterialTheme.colorScheme.primary) },
                                     onClick = { showDialog = true },
                                 ),
@@ -80,12 +80,12 @@ class ControllerSettingsActivity : ComponentActivity() {
                 }
                 if (showDialog) {
                     ChoiceDialog(
-                        title = "D-Pad compatibility",
-                        explanation = "Native games use the controller standard. Use browser mode only when a web game ignores directions. Switching does not require pairing again.",
-                        choices = listOf("Native games", "Browser games"),
-                        selectedIndex = if (dpadMode == GamepadDpadOutputMode.NATIVE_HAT) 0 else 1,
+                        title = "Controller compatibility",
+                        explanation = "Use Native for Windows/Linux games, Android for games on Android, or Web when a browser game ignores directions. Switching does not require pairing again. Games may not support Share or touchpad-click.",
+                        choices = GamepadDpadOutputMode.entries.map { it.label },
+                        selectedIndex = dpadMode.ordinal,
                         onSelect = { index ->
-                            dpadMode = if (index == 0) GamepadDpadOutputMode.NATIVE_HAT else GamepadDpadOutputMode.WEB_BUTTONS
+                            dpadMode = GamepadDpadOutputMode.entries[index]
                             preferences.edit { putString(GAMEPAD_DPAD_MODE_PREFERENCE, dpadMode.preferenceValue) }
                             showDialog = false
                         },

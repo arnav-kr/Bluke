@@ -11,14 +11,16 @@ internal const val GAMEPAD_BUTTON_PADDING_BITS = 5
 internal const val GAMEPAD_REPORT_SIZE_BYTES = 12
 private const val GAMEPAD_DPAD_BUTTON_MASK = 0x0F shl GAMEPAD_DPAD_FIRST_BUTTON_INDEX
 
-internal enum class GamepadDpadOutputMode(val preferenceValue: String) {
-    NATIVE_HAT("native_hat"),
-    WEB_BUTTONS("web_buttons");
+internal enum class GamepadDpadOutputMode(
+    val preferenceValue: String,
+    val label: String,
+    val description: String,
+) {
+    NATIVE_HAT("native_hat", "Native", "Windows/Linux games · standard HID hat"),
+    ANDROID("android", "Android", "Android games · Android button mapping and HID hat"),
+    WEB_BUTTONS("web_buttons", "Web", "Browser games · D-pad buttons 12–15");
 
-    fun next(): GamepadDpadOutputMode = when (this) {
-        NATIVE_HAT -> WEB_BUTTONS
-        WEB_BUTTONS -> NATIVE_HAT
-    }
+    fun next(): GamepadDpadOutputMode = entries[(ordinal + 1) % entries.size]
 
     companion object {
         fun fromPreference(value: String?): GamepadDpadOutputMode =
@@ -41,6 +43,20 @@ internal fun dpadMaskToHat(mask: Int): Int = when (mask and 0x0F) {
 internal fun dpadMaskToButtonMask(mask: Int): Int =
     (mask and 0x0F) shl GAMEPAD_DPAD_FIRST_BUTTON_INDEX
 
+// Canonical UI button indices -> Linux BTN_GAMEPAD offsets consumed by Android Generic.kl.
+// Offsets 2 and 5 are BUTTON_C/Z, not X/Y; 12 is MODE and 13/14 are stick clicks.
+private val androidButtonIndices = intArrayOf(0, 1, 3, 4, 6, 7, 8, 9, 10, 11, 13, 14)
+
+internal fun androidGamepadButtonMask(buttonMask: Int): Int {
+    var encoded = 0
+    androidButtonIndices.forEachIndexed { source, destination ->
+        if (buttonMask and (1 shl source) != 0) encoded = encoded or (1 shl destination)
+    }
+    if (buttonMask and (1 shl GAMEPAD_GUIDE_BUTTON_INDEX) != 0) encoded = encoded or (1 shl 12)
+    // Preserve extras without inventing Android system actions for them.
+    return encoded or (buttonMask and ((1 shl GAMEPAD_SHARE_BUTTON_INDEX) or (1 shl GAMEPAD_TOUCHPAD_BUTTON_INDEX)))
+}
+
 internal fun buildGamepadReport(
     buttonMask: Int,
     dpadMask: Int,
@@ -53,6 +69,7 @@ internal fun buildGamepadReport(
     val buttonsWithoutDpad = buttonMask and GAMEPAD_DPAD_BUTTON_MASK.inv()
     val encodedButtonMask = when (dpadOutputMode) {
         GamepadDpadOutputMode.NATIVE_HAT -> buttonsWithoutDpad
+        GamepadDpadOutputMode.ANDROID -> androidGamepadButtonMask(buttonsWithoutDpad)
         GamepadDpadOutputMode.WEB_BUTTONS -> buttonsWithoutDpad or dpadMaskToButtonMask(dpadMask)
     }
     val report = ByteArray(GAMEPAD_REPORT_SIZE_BYTES)
@@ -60,7 +77,7 @@ internal fun buildGamepadReport(
     report[1] = ((encodedButtonMask ushr 8) and 0xFF).toByte()
     report[2] = ((encodedButtonMask ushr 16) and 0x07).toByte()
     report[3] = when (dpadOutputMode) {
-        GamepadDpadOutputMode.NATIVE_HAT -> dpadMaskToHat(dpadMask).toByte()
+        GamepadDpadOutputMode.NATIVE_HAT, GamepadDpadOutputMode.ANDROID -> dpadMaskToHat(dpadMask).toByte()
         GamepadDpadOutputMode.WEB_BUTTONS -> GAMEPAD_HAT_NEUTRAL.toByte()
     }
 

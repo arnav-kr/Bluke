@@ -6,6 +6,19 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class HomeUiPolicyTest {
+    @org.junit.Test fun discoveryReconcilesByAddressNotDeviceName() {
+        org.junit.Assert.assertFalse(shouldShowDiscoveredHost("A", setOf("A"), null))
+        org.junit.Assert.assertFalse(shouldShowDiscoveredHost("B", emptySet(), "B"))
+        org.junit.Assert.assertTrue(shouldShowDiscoveredHost("B", setOf("A"), null))
+    }
+    @Test
+    fun gamepadEntryRequiresAcknowledgementRegardlessOfEntryPoint() {
+        assertTrue(shouldShowGamepadGuide(InputMode.GAMEPAD.id, guideSeen = false))
+        assertFalse(shouldShowGamepadGuide(InputMode.GAMEPAD.id, guideSeen = true))
+        assertFalse(shouldShowGamepadGuide(InputMode.KEYBOARD.id, guideSeen = false))
+        assertFalse(shouldShowGamepadGuide(InputMode.TOUCHPAD.id, guideSeen = false))
+    }
+
     @Test
     fun launchControlsAreHiddenForBlockingBluetoothStates() {
         assertTrue(BluetoothState.InitializingCapabilities.blocksInputLaunch())

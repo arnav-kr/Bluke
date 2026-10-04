@@ -28,6 +28,7 @@ internal fun LazyListScope.DeviceListSection(
     bluetoothState: BluetoothState,
     statusMessage: String,
     connectedDevice: BluetoothDevice?,
+    connectionTargetAddress: String?,
     bondedDevices: List<BluetoothDevice>,
     scannedDevices: List<BluetoothDevice>,
     isScanning: Boolean,
@@ -61,8 +62,8 @@ internal fun LazyListScope.DeviceListSection(
             }
         }
     } else {
-        val activeDeviceAttempt = bondedDevices.firstOrNull {
-            (it.name != null && statusMessage.contains(it.name)) || statusMessage.contains(it.address)
+        val activeDeviceAttempt = (bondedDevices + scannedDevices).firstOrNull {
+            it.address == connectionTargetAddress
         }
         if (activeDeviceAttempt != null && statusMessage.isNotEmpty() && statusMessage != "Disconnected") {
             item {
@@ -85,7 +86,7 @@ internal fun LazyListScope.DeviceListSection(
     }
 
     val activeDeviceMac = currentlyConnectedState?.address
-        ?: bondedDevices.firstOrNull { statusMessage.contains(it.name ?: "------") }?.address
+        ?: connectionTargetAddress
     val idleBonded = bondedDevices.filter { device ->
         device.address != activeDeviceMac &&
             (!hideUnknownDevices || !device.name.isNullOrBlank()) &&
@@ -100,7 +101,7 @@ internal fun LazyListScope.DeviceListSection(
                 if (isPairedExpanded) {
                     Column(verticalArrangement = Arrangement.spacedBy(2.dp), modifier = Modifier.fillMaxWidth()) {
                         idleBonded.forEachIndexed { index, device ->
-                            val deviceMsg = if ((device.name != null && statusMessage.contains(device.name)) || statusMessage.contains(device.address)) statusMessage else null
+                            val deviceMsg = if (device.address == connectionTargetAddress) statusMessage else null
                             DeviceRow(
                                 name = device.name ?: "Unknown Host",
                                 address = device.address,
@@ -131,9 +132,9 @@ internal fun LazyListScope.DeviceListSection(
         }
     }
 
-    val nonBondedDevices = scannedDevices.filter { device ->
-        device.bondState != BluetoothDevice.BOND_BONDED &&
-            device.address != activeDeviceMac &&
+    val bondedAddresses = bondedDevices.map { it.address }.toSet()
+    val nonBondedDevices = scannedDevices.distinctBy { it.address }.filter { device ->
+        shouldShowDiscoveredHost(device.address, bondedAddresses, activeDeviceMac) &&
             (!hideUnknownDevices || !device.name.isNullOrBlank()) &&
             (!hideUnsupportedDevices || classifyDevice(device.name, device).isSupported)
     }
@@ -146,7 +147,7 @@ internal fun LazyListScope.DeviceListSection(
                 if (isDiscoveredExpanded) {
                     Column(verticalArrangement = Arrangement.spacedBy(2.dp), modifier = Modifier.fillMaxWidth()) {
                         nonBondedDevices.forEachIndexed { index, device ->
-                            val deviceMsg = if ((device.name != null && statusMessage.contains(device.name)) || statusMessage.contains(device.address)) statusMessage else null
+                            val deviceMsg = if (device.address == connectionTargetAddress) statusMessage else null
                             DeviceRow(
                                 name = device.name ?: "Unnamed Device",
                                 address = device.address,

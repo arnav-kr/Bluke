@@ -1,6 +1,8 @@
 package dev.arnv.bluke.bluetooth
 
 import kotlinx.coroutines.awaitCancellation
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.test.advanceTimeBy
 import kotlinx.coroutines.test.runCurrent
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
@@ -8,6 +10,24 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class LatestRequestProcessorTest {
+    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+    @Test
+    fun manualHostSelectionCancelsDelayedLaunchReconnect() = runTest {
+        val connected = mutableListOf<String>()
+        val processor = LatestRequestProcessor<String>(backgroundScope) { host ->
+            if (host == "saved-host") delay(600)
+            connected += host
+        }
+        processor.submit("saved-host")
+        runCurrent()
+        advanceTimeBy(200)
+        processor.submit("manual-host")
+        runCurrent()
+        advanceTimeBy(1_000)
+        runCurrent()
+        assertEquals(listOf("manual-host"), connected)
+    }
+
     @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
     @Test
     fun newerRequestCancelsInFlightWorkAndCompletesLatest() = runTest {

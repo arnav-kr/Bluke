@@ -214,7 +214,7 @@ fun TouchpadView(
                     // Connection status
                     val connectedDevNow by btManager.connectedDevice.collectAsState()
                     val isConnected = connectedDevNow != null
-                    val deviceName = connectedDevNow?.name ?: "No Host"
+                    val deviceName = (connectedDevNow ?: btManager.getReconnectTarget())?.name ?: "No Host"
                     val statusLedColor = if (isConnected) Color(0xFF39FF14) else Color(0xFFFF9800)
                     Box(
                         modifier = Modifier
@@ -230,6 +230,8 @@ fun TouchpadView(
                         fontFamily = FontFamily.SansSerif
                     )
                 }
+
+                ReconnectHostButton(btManager, iconOnly = true)
 
                 // Right side configurations: Trackpad Button layout, Numpad LED toggle, Case Color, Sensitivity, Vibration haptics
                 Row(

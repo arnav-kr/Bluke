@@ -108,11 +108,12 @@ class GamepadReportTest {
     }
 
     @Test
-    fun outputModeNext_togglesBetweenNativeAndWeb() {
+    fun outputModeNext_cyclesNativeAndroidAndWeb() {
         assertEquals(
-            GamepadDpadOutputMode.WEB_BUTTONS,
+            GamepadDpadOutputMode.ANDROID,
             GamepadDpadOutputMode.NATIVE_HAT.next(),
         )
+        assertEquals(GamepadDpadOutputMode.WEB_BUTTONS, GamepadDpadOutputMode.ANDROID.next())
         assertEquals(
             GamepadDpadOutputMode.NATIVE_HAT,
             GamepadDpadOutputMode.WEB_BUTTONS.next(),
@@ -142,5 +143,56 @@ class GamepadReportTest {
         assertEquals(18, GAMEPAD_TOUCHPAD_BUTTON_INDEX)
         assertEquals(24, GAMEPAD_BUTTON_COUNT + GAMEPAD_BUTTON_PADDING_BITS)
         assertEquals(12, GAMEPAD_REPORT_SIZE_BYTES)
+    }
+
+    @Test
+    fun androidMode_mapsEveryStandardButtonWithoutCollisions() {
+        val destinations = listOf(0, 1, 3, 4, 6, 7, 8, 9, 10, 11, 13, 14)
+        destinations.forEachIndexed { source, destination ->
+            assertEquals(1 shl destination, androidGamepadButtonMask(1 shl source))
+        }
+        assertEquals(1 shl 12, androidGamepadButtonMask(1 shl GAMEPAD_GUIDE_BUTTON_INDEX))
+        assertEquals(12, destinations.distinct().size)
+    }
+
+    @Test
+    fun nativeAndWeb_keepTheirExistingButtonOrdering() {
+        val native = buildGamepadReport(-1, 0x09, 0f, 0f, 0f, 0f)
+        val web = buildGamepadReport(-1, 0x09, 0f, 0f, 0f, 0f, GamepadDpadOutputMode.WEB_BUTTONS)
+        assertArrayEquals(byteArrayOf(0xFF.toByte(), 0x0F, 0x07, 0x01), native.copyOfRange(0, 4))
+        assertArrayEquals(byteArrayOf(0xFF.toByte(), 0x9F.toByte(), 0x07, 0x0F), web.copyOfRange(0, 4))
+    }
+
+    @Test
+    fun androidMode_usesHatEvenWhenStickClickAndGuideOccupyWebDpadSlots() {
+        val report = buildGamepadReport(
+            (1 shl 10) or (1 shl 11) or (1 shl GAMEPAD_GUIDE_BUTTON_INDEX),
+            0x09, 0f, 0f, 0f, 0f, GamepadDpadOutputMode.ANDROID,
+        )
+        assertEquals(0x70, report[1].toInt() and 0xFF)
+        assertEquals(0, report[2].toInt() and 0xFF)
+        assertEquals(1, report[3].toInt() and 0xFF)
+    }
+
+    @Test
+    fun androidMode_preservesExtrasAndIgnoresReservedAndOverflowInputBits() {
+        assertEquals((1 shl 17) or (1 shl 18), androidGamepadButtonMask((1 shl 17) or (1 shl 18)))
+        assertEquals(0, androidGamepadButtonMask((0xF shl 12) or (1 shl 25)))
+        val report = buildGamepadReport(-1, 0, 0f, 0f, 0f, 0f, GamepadDpadOutputMode.ANDROID)
+        assertEquals(0xDB, report[0].toInt() and 0xFF)
+        assertEquals(0x7F, report[1].toInt() and 0xFF)
+        assertEquals(0x06, report[2].toInt() and 0xFF)
+        assertEquals(GAMEPAD_REPORT_SIZE_BYTES, report.size)
+    }
+
+    @Test
+    fun allModes_shareNeutralPacketAndUnchangedAxisEncoding() {
+        val nativeNeutral = buildGamepadReport(0, 0, 0f, 0f, 0f, 0f)
+        val nativeAxes = buildGamepadReport(0, 0, -1f, 1f, 0.5f, -0.5f).copyOfRange(4, 12)
+        GamepadDpadOutputMode.entries.forEach { mode ->
+            assertArrayEquals(nativeNeutral, buildGamepadReport(0, 0, 0f, 0f, 0f, 0f, mode))
+            assertArrayEquals(nativeAxes, buildGamepadReport(0, 0, -1f, 1f, 0.5f, -0.5f, mode).copyOfRange(4, 12))
+            assertEquals(mode, GamepadDpadOutputMode.fromPreference(mode.preferenceValue))
+        }
     }
 }

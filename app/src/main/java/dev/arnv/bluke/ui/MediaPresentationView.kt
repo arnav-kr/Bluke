@@ -23,7 +23,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
@@ -248,7 +247,6 @@ internal fun MediaPresentationView(
     val rootModifier = Modifier
         .fillMaxSize()
         .background(RemoteCanvasColor)
-        .safeDrawingPadding()
         .testTag("media_presentation_view_root")
 
     if (resolvedPosture == MultimediaPosture.LANDSCAPE) {
@@ -279,6 +277,7 @@ internal fun MediaPresentationView(
     } else {
         Row(modifier = rootModifier) {
             MultimediaUprightBar(
+                btManager = btManager,
                 onClose = onClose,
                 onModeChange = cycleMode,
                 isConnected = isConnected,
@@ -753,6 +752,7 @@ private val portraitHeldMediaRows = listOf(
 
 @Composable
 private fun MultimediaUprightBar(
+    btManager: BluetoothKeyboardManager,
     onClose: () -> Unit,
     onModeChange: () -> Unit,
     isConnected: Boolean,
@@ -787,6 +787,7 @@ private fun MultimediaUprightBar(
                     contentDescription = if (isConnected) "Host connected" else "Host offline"
                 },
         )
+        ReconnectHostButton(btManager, iconOnly = true)
         Spacer(Modifier.weight(1f))
         UprightToolbarButton("Pointer sensitivity ${sensitivity}x", onSensitivityChange) {
             Row(
@@ -862,7 +863,7 @@ private fun MultimediaTopBar(
     val context = LocalContext.current
     val connectedDevice by btManager.connectedDevice.collectAsState()
     val hostLabel = try {
-        connectedDevice?.name ?: "No Host"
+        (connectedDevice ?: btManager.getReconnectTarget())?.name ?: "No Host"
     } catch (_: SecurityException) {
         if (isConnected) "Host" else "No Host"
     }
@@ -908,6 +909,7 @@ private fun MultimediaTopBar(
                     },
             )
             Text(hostLabel, color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+            ReconnectHostButton(btManager, iconOnly = true)
             if (!isConnected) {
                 Text("[offline]", color = Color.White.copy(alpha = 0.45f), fontSize = 9.sp)
             }

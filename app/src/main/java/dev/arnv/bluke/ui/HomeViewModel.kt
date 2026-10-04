@@ -19,6 +19,7 @@ data class HomeUiState(
     val scannedDevices: List<BluetoothDevice> = emptyList(),
     val isScanning: Boolean = false,
     val connectedDevice: BluetoothDevice? = null,
+    val connectionTargetAddress: String? = null,
     val capsLock: Boolean = false,
     val numLock: Boolean = true,
     val scrollLock: Boolean = false,
@@ -59,7 +60,8 @@ class HomeViewModel(manager: BluetoothKeyboardManager) : ViewModel() {
             manager.lifecycleState,
             ::ConnectionState,
         ),
-    ) { discovery, connection ->
+        manager.connectionTargetAddress,
+    ) { discovery, connection, targetAddress ->
         HomeUiState(
             bluetoothState = discovery.bluetoothState,
             statusMessage = discovery.statusMessage,
@@ -67,6 +69,7 @@ class HomeViewModel(manager: BluetoothKeyboardManager) : ViewModel() {
             scannedDevices = discovery.scannedDevices,
             isScanning = discovery.isScanning,
             connectedDevice = connection.connectedDevice,
+            connectionTargetAddress = targetAddress,
             capsLock = connection.capsLock,
             numLock = connection.numLock,
             scrollLock = connection.scrollLock,
@@ -82,6 +85,7 @@ class HomeViewModel(manager: BluetoothKeyboardManager) : ViewModel() {
             scannedDevices = manager.scannedDevices.value,
             isScanning = manager.isScanning.value,
             connectedDevice = manager.connectedDevice.value,
+            connectionTargetAddress = manager.connectionTargetAddress.value,
             capsLock = manager.capsLockState.value,
             numLock = manager.numLockState.value,
             scrollLock = manager.scrollLockState.value,

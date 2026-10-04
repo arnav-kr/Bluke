@@ -2,6 +2,12 @@ package dev.arnv.bluke.ui
 
 import dev.arnv.bluke.bluetooth.BluetoothState
 
+internal fun shouldShowDiscoveredHost(address: String, bondedAddresses: Set<String>, activeAddress: String?): Boolean =
+    address !in bondedAddresses && address != activeAddress
+
+internal fun shouldShowGamepadGuide(mode: Int, guideSeen: Boolean): Boolean =
+    mode == InputMode.GAMEPAD.id && !guideSeen
+
 internal fun BluetoothState.blocksInputLaunch(): Boolean =
     this is BluetoothState.InitializingCapabilities ||
         this is BluetoothState.CheckingCapabilities ||

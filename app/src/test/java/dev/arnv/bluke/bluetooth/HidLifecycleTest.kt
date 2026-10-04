@@ -12,6 +12,17 @@ import org.junit.Test
 
 class HidLifecycleTest {
     @Test
+    fun recoveryRejectionsDoNotInvalidateProvenSupport() {
+        for (failure in HidFailure.entries) {
+            assertFalse(shouldDiagnoseHidIncompatibility(failure, previouslyRegistered = true, appInForeground = true))
+            assertFalse(shouldDiagnoseHidIncompatibility(failure, previouslyRegistered = false, appInForeground = false))
+        }
+        assertTrue(shouldDiagnoseHidIncompatibility(HidFailure.REGISTRATION_REJECTED, false, true))
+        assertTrue(shouldDiagnoseHidIncompatibility(HidFailure.BINDING_REJECTED, false, true))
+        assertFalse(shouldDiagnoseHidIncompatibility(HidFailure.REGISTRATION_TIMEOUT, false, true))
+    }
+
+    @Test
     fun positiveRegistrationCallbackRequiresAcceptedCommand() {
         assertFalse(isRegistrationCallbackActionable(registered = true, registrationCommandAccepted = false))
         assertTrue(isRegistrationCallbackActionable(registered = true, registrationCommandAccepted = true))

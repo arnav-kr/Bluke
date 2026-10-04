@@ -1,3 +1,5 @@
 <resources>
     <string name="app_name">Bluke</string>
+    <string name="bluetooth_session_channel">Bluetooth connection</string>
+    <string name="bluetooth_session_notification">Keeps your Bluetooth controls connected when you switch apps.</string>
 </resources>
