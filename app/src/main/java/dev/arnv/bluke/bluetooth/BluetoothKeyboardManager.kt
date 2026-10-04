@@ -263,141 +263,15 @@ class BluetoothKeyboardManager(private val context: Context) {
     }
 
     // Composite Keyboard, Mouse/Trackpad, Gamepad & Consumer Control HID Descriptor definition
-    private val hidDescriptor = byteArrayOf(
-        0x05.toByte(), 0x01.toByte(),         // USAGE_PAGE (Generic Desktop)
-        0x09.toByte(), 0x06.toByte(),         // USAGE (Keyboard)
-        0xa1.toByte(), 0x01.toByte(),         // COLLECTION (Application)
-        0x85.toByte(), 0x01.toByte(),         //   REPORT_ID (1)
-        0x05.toByte(), 0x07.toByte(),         //   USAGE_PAGE (Keyboard)
-        0x19.toByte(), 0xe0.toByte(),         //   USAGE_MINIMUM (Keyboard LeftControl)
-        0x29.toByte(), 0xe7.toByte(),         //   USAGE_MAXIMUM (Keyboard Right GUI)
-        0x15.toByte(), 0x00.toByte(),         //   LOGICAL_MINIMUM (0)
-        0x25.toByte(), 0x01.toByte(),         //   LOGICAL_MAXIMUM (1)
-        0x75.toByte(), 0x01.toByte(),         //   REPORT_SIZE (1)
-        0x95.toByte(), 0x08.toByte(),         //   REPORT_COUNT (8)
-        0x81.toByte(), 0x02.toByte(),         //   INPUT (Data,Var,Abs) - Modifier byte
-        0x95.toByte(), 0x01.toByte(),         //   REPORT_COUNT (1)
-        0x75.toByte(), 0x08.toByte(),         //   REPORT_SIZE (8)
-        0x81.toByte(), 0x03.toByte(),         //   INPUT (Cnst,Var,Abs) - Reserved byte
-        0x95.toByte(), 0x05.toByte(),         //   REPORT_COUNT (5)
-        0x75.toByte(), 0x01.toByte(),         //   REPORT_SIZE (1)
-        0x05.toByte(), 0x08.toByte(),         //   USAGE_PAGE (LEDs)
-        0x19.toByte(), 0x01.toByte(),         //   USAGE_MINIMUM (Num Lock)
-        0x29.toByte(), 0x05.toByte(),         //   USAGE_MAXIMUM (Kana)
-        0x91.toByte(), 0x02.toByte(),         //   OUTPUT (Data,Var,Abs) - LED report
-        0x95.toByte(), 0x01.toByte(),         //   REPORT_COUNT (1)
-        0x75.toByte(), 0x03.toByte(),         //   REPORT_SIZE (3)
-        0x91.toByte(), 0x03.toByte(),         //   OUTPUT (Cnst,Var,Abs) - LED report padding
-        0x95.toByte(), 0x06.toByte(),         //   REPORT_COUNT (6)
-        0x75.toByte(), 0x08.toByte(),         //   REPORT_SIZE (8)
-        0x15.toByte(), 0x00.toByte(),         //   LOGICAL_MINIMUM (0)
-        0x25.toByte(), 0x65.toByte(),         //   LOGICAL_MAXIMUM (101)
-        0x05.toByte(), 0x07.toByte(),         //   USAGE_PAGE (Keyboard)
-        0x19.toByte(), 0x00.toByte(),         //   USAGE_MINIMUM (Reserved)
-        0x29.toByte(), 0x65.toByte(),         //   USAGE_MAXIMUM (Keyboard Application)
-        0x81.toByte(), 0x00.toByte(),         //   INPUT (Data,Ary,Abs) - Keycodes (6 bytes)
-        0xc0.toByte(),                        // END_COLLECTION
 
-        // Mouse/Trackpad (Report ID 2)
-        0x05.toByte(), 0x01.toByte(),         // USAGE_PAGE (Generic Desktop)
-        0x09.toByte(), 0x02.toByte(),         // USAGE (Mouse)
-        0xa1.toByte(), 0x01.toByte(),         // COLLECTION (Application)
-        0x85.toByte(), 0x02.toByte(),         //   REPORT_ID (2)
-        0x09.toByte(), 0x01.toByte(),         //   USAGE (Pointer)
-        0xa1.toByte(), 0x00.toByte(),         //   COLLECTION (Physical)
-        0x05.toByte(), 0x09.toByte(),         //     USAGE_PAGE (Button)
-        0x19.toByte(), 0x01.toByte(),         //     USAGE_MINIMUM (Button 1)
-        0x29.toByte(), 0x03.toByte(),         //     USAGE_MAXIMUM (Button 3)
-        0x15.toByte(), 0x00.toByte(),         //     LOGICAL_MINIMUM (0)
-        0x25.toByte(), 0x01.toByte(),         //     LOGICAL_MAXIMUM (1)
-        0x95.toByte(), 0x03.toByte(),         //     REPORT_COUNT (3)
-        0x75.toByte(), 0x01.toByte(),         //     REPORT_SIZE (1)
-        0x81.toByte(), 0x02.toByte(),         //     INPUT (Data,Var,Abs) - L, R, M clicks
-        0x95.toByte(), 0x01.toByte(),         //     REPORT_COUNT (1)
-        0x75.toByte(), 0x05.toByte(),         //     REPORT_SIZE (5)
-        0x81.toByte(), 0x03.toByte(),         //     INPUT (Cnst,Var,Abs) - padding
-        0x05.toByte(), 0x01.toByte(),         //     USAGE_PAGE (Generic Desktop)
-        0x09.toByte(), 0x30.toByte(),         //     USAGE (X)
-        0x09.toByte(), 0x31.toByte(),         //     USAGE (Y)
-        0x15.toByte(), 0x81.toByte(),         //     LOGICAL_MINIMUM (-127)
-        0x25.toByte(), 0x7f.toByte(),         //     LOGICAL_MAXIMUM (127)
-        0x75.toByte(), 0x08.toByte(),         //     REPORT_SIZE (8)
-        0x95.toByte(), 0x02.toByte(),         //     REPORT_COUNT (2)
-        0x81.toByte(), 0x06.toByte(),         //     INPUT (Data,Var,Rel) - delta X and Y movement
-        0x09.toByte(), 0x38.toByte(),         //     USAGE (Wheel)
-        0x15.toByte(), 0x81.toByte(),         //     LOGICAL_MINIMUM (-127)
-        0x25.toByte(), 0x7f.toByte(),         //     LOGICAL_MAXIMUM (127)
-        0x75.toByte(), 0x08.toByte(),         //     REPORT_SIZE (8)
-        0x95.toByte(), 0x01.toByte(),         //     REPORT_COUNT (1)
-        0x81.toByte(), 0x06.toByte(),         //     INPUT (Data,Var,Rel) - scroll wheel
-        0xc0.toByte(),                        //   END_COLLECTION
-        0xc0.toByte(),                        // END_COLLECTION
-
-        // Gamepad (Report ID 3)
-        0x05.toByte(), 0x01.toByte(),         // USAGE_PAGE (Generic Desktop)
-        0x09.toByte(), 0x05.toByte(),         // USAGE (Gamepad)
-        0xa1.toByte(), 0x01.toByte(),         // COLLECTION (Application)
-        0x85.toByte(), 0x03.toByte(),         //   REPORT_ID (3)
-        0x05.toByte(), 0x09.toByte(),         //   USAGE_PAGE (Button)
-        0x19.toByte(), 0x01.toByte(),         //     USAGE_MINIMUM (Button 1)
-        0x29.toByte(), GAMEPAD_BUTTON_COUNT.toByte(), // USAGE_MAXIMUM (Button 19)
-        0x15.toByte(), 0x00.toByte(),         //     LOGICAL_MINIMUM (0)
-        0x25.toByte(), 0x01.toByte(),         //     LOGICAL_MAXIMUM (1)
-        0x75.toByte(), 0x01.toByte(),         //     REPORT_SIZE (1)
-        0x95.toByte(), GAMEPAD_BUTTON_COUNT.toByte(), // REPORT_COUNT (19)
-        0x81.toByte(), 0x02.toByte(),         //     INPUT (Data,Var,Abs) - 19 Buttons
-        0x75.toByte(), 0x01.toByte(),         //     REPORT_SIZE (1)
-        0x95.toByte(), GAMEPAD_BUTTON_PADDING_BITS.toByte(), // REPORT_COUNT (5)
-        0x81.toByte(), 0x03.toByte(),         //     INPUT (Cnst,Var,Abs) - button padding
-        0x05.toByte(), 0x01.toByte(),         //     USAGE_PAGE (Generic Desktop)
-        0x09.toByte(), 0x39.toByte(),         //     USAGE (Hat Switch)
-        0x15.toByte(), 0x00.toByte(),         //     LOGICAL_MINIMUM (0)
-        0x25.toByte(), 0x07.toByte(),         //     LOGICAL_MAXIMUM (7)
-        0x35.toByte(), 0x00.toByte(),         //     PHYSICAL_MINIMUM (0)
-        0x46.toByte(), 0x3b.toByte(), 0x01.toByte(), // PHYSICAL_MAXIMUM (315)
-        0x65.toByte(), 0x14.toByte(),         //     UNIT (English Rotation, degrees)
-        0x75.toByte(), 0x04.toByte(),         //     REPORT_SIZE (4)
-        0x95.toByte(), 0x01.toByte(),         //     REPORT_COUNT (1)
-        0x81.toByte(), 0x42.toByte(),         //     INPUT (Data,Var,Abs,Null)
-        0x65.toByte(), 0x00.toByte(),         //     UNIT (None)
-        0x75.toByte(), 0x04.toByte(),         //     REPORT_SIZE (4)
-        0x95.toByte(), 0x01.toByte(),         //     REPORT_COUNT (1)
-        0x81.toByte(), 0x03.toByte(),         //     INPUT (Cnst,Var,Abs) - byte padding
-        0x05.toByte(), 0x01.toByte(),         //     USAGE_PAGE (Generic Desktop)
-        0x09.toByte(), 0x30.toByte(),         //     USAGE (X) - Left Stick X
-        0x09.toByte(), 0x31.toByte(),         //     USAGE (Y) - Left Stick Y
-        0x09.toByte(), 0x32.toByte(),         //     USAGE (Z) - Right Stick X
-        0x09.toByte(), 0x33.toByte(),         //     USAGE (Rx) - Right Stick Y
-        0x15.toByte(), 0x00.toByte(),         //     LOGICAL_MINIMUM (0)
-        0x27.toByte(), 0xff.toByte(), 0xff.toByte(), 0x00.toByte(), 0x00.toByte(), // LOGICAL_MAXIMUM (65535)
-        0x75.toByte(), 0x10.toByte(),         //     REPORT_SIZE (16)
-        0x95.toByte(), 0x04.toByte(),         //     REPORT_COUNT (4)
-        0x81.toByte(), 0x02.toByte(),         //     INPUT (Data,Var,Abs) - 4 16-bit Axes (X, Y, Z, Rx)
-        0xc0.toByte(),                        // END_COLLECTION (Application)
-
-        // Consumer controls (Report ID 4)
-        0x05.toByte(), 0x0c.toByte(),         // USAGE_PAGE (Consumer)
-        0x09.toByte(), 0x01.toByte(),         // USAGE (Consumer Control)
-        0xa1.toByte(), 0x01.toByte(),         // COLLECTION (Application)
-        0x85.toByte(), 0x04.toByte(),         //   REPORT_ID (4)
-        0x15.toByte(), 0x00.toByte(),         //   LOGICAL_MINIMUM (0)
-        0x26.toByte(), 0xff.toByte(), 0x03.toByte(), // LOGICAL_MAXIMUM (1023)
-        0x19.toByte(), 0x00.toByte(),         //   USAGE_MINIMUM (Unassigned)
-        0x2a.toByte(), 0xff.toByte(), 0x03.toByte(), // USAGE_MAXIMUM (1023)
-        0x75.toByte(), 0x10.toByte(),         //   REPORT_SIZE (16)
-        0x95.toByte(), 0x01.toByte(),         //   REPORT_COUNT (1)
-        0x81.toByte(), 0x00.toByte(),         //   INPUT (Data,Ary,Abs)
-        0xc0.toByte()                         // END_COLLECTION (Application)
-    )
-
-    private val sdpSettings: BluetoothHidDeviceAppSdpSettings? by lazy {
-        try {
+    private fun sdpSettings(mode: GamepadDpadOutputMode): BluetoothHidDeviceAppSdpSettings? {
+        return try {
             BluetoothHidDeviceAppSdpSettings(
                 "Bluke",                         // Name
                 "Wireless Controller Combo",    // Description
                 "Bluke",                         // Provider
                 BluetoothHidDevice.SUBCLASS1_COMBO, // Subclass
-                hidDescriptor                    // Descriptor
+                hidDescriptorForMode(mode)       // Descriptor (Android-only Z/Rz axes)
             )
         } catch (e: Throwable) {
             Log.e("BlukeBT", "Failed to create BluetoothHidDeviceAppSdpSettings", e)
@@ -411,6 +285,12 @@ class BluetoothKeyboardManager(private val context: Context) {
     private var gamepadDpadOutputMode = GamepadDpadOutputMode.fromPreference(
         appPreferences.getString(GAMEPAD_DPAD_MODE_PREFERENCE, null),
     )
+    @Volatile
+    private var registeredGamepadMode: GamepadDpadOutputMode? = null
+    @Volatile
+    private var gamepadDescriptorSwitchJob: Job? = null
+    @Volatile
+    private var switchingGamepadDescriptor = false
     private val behaviorPreferenceListener =
         android.content.SharedPreferences.OnSharedPreferenceChangeListener { preferences, key ->
             if (key == GAMEPAD_DPAD_MODE_PREFERENCE) {
@@ -418,6 +298,7 @@ class BluetoothKeyboardManager(private val context: Context) {
                     preferences.getString(GAMEPAD_DPAD_MODE_PREFERENCE, null),
                 )
                 if (newMode != gamepadDpadOutputMode) {
+                    val descriptorChanged = requiresGamepadDescriptorRestart(gamepadDpadOutputMode, newMode)
                     _connectedDevice.value?.let { device ->
                         submitReport(
                             device,
@@ -426,6 +307,10 @@ class BluetoothKeyboardManager(private val context: Context) {
                         )
                     }
                     gamepadDpadOutputMode = newMode
+                    if (descriptorChanged) {
+                        switchGamepadDescriptor()
+                        return@OnSharedPreferenceChangeListener
+                    }
                     _connectedDevice.value?.let { device ->
                         submitReport(
                             device,
@@ -552,6 +437,7 @@ class BluetoothKeyboardManager(private val context: Context) {
             return
         }
         if (!bluetoothAdapter.isEnabled) {
+            gamepadDescriptorSwitchJob?.cancel()
             synchronized(capabilityCheckLock) {
                 capabilityCheckGeneration.incrementAndGet()
                 capabilityCheckJob?.cancel()
@@ -601,6 +487,8 @@ class BluetoothKeyboardManager(private val context: Context) {
                 ?: "This device appears incompatible with the Bluetooth HID Device role."
             return
         }
+
+        if (switchingGamepadDescriptor) return
 
         if (isCapabilityCheckRunning()) {
             return
@@ -1155,6 +1043,7 @@ class BluetoothKeyboardManager(private val context: Context) {
             if (registered) recordSupportedFirmware()
             if (!registered) registrationCommandAccepted = false
             if (registered) {
+                if (switchingGamepadDescriptor) return
                 if (isCapabilityCheckRunning()) return
                 if (
                     _serviceState.value is BluetoothState.PairingMode ||
@@ -1259,9 +1148,12 @@ class BluetoothKeyboardManager(private val context: Context) {
     private suspend fun ensureRegistered(hid: BluetoothHidDevice, forceReset: Boolean = false): Boolean =
         registrationMutex.withLock {
             if (closed || incompatibleVerdictLatched || (!appInForeground && !_hasPendingConnection.value)) return@withLock false
-            if (appRegistrationState.value && !forceReset) return@withLock true
+            if (appRegistrationState.value && !forceReset && registeredGamepadMode?.let {
+                    !requiresGamepadDescriptorRestart(it, gamepadDpadOutputMode)
+                } == true) return@withLock true
             lastRegistrationFailure = null
-            val settings = sdpSettings
+            val registrationMode = gamepadDpadOutputMode
+            val settings = sdpSettings(registrationMode)
             if (settings == null) {
                 confirmIncompatibleVerdict(
                     "Bluetooth HID Device role is not supported on this device.",
@@ -1284,6 +1176,7 @@ class BluetoothKeyboardManager(private val context: Context) {
 
                 override fun registerApp(): Boolean {
                     registrationCommandAccepted = false
+                    registeredGamepadMode = registrationMode
                     val accepted = try {
                         hid.registerApp(settings, null, null, executor, hidCallback)
                     } catch (e: Exception) {
@@ -1351,6 +1244,51 @@ class BluetoothKeyboardManager(private val context: Context) {
             val hid = bindHidProxy() ?: return@launch
             ensureRegistered(hid, forceReset = true)
         }
+    }
+
+    /** Mode changes never navigate or run the startup compatibility screen. */
+    @SuppressLint("MissingPermission")
+    private fun switchGamepadDescriptor(): Unit = synchronized(connectionSelectionLock) {
+        if (closed || incompatibleVerdictLatched || gamepadDescriptorSwitchJob?.isActive == true) return
+        val host = _connectedDevice.value ?: connectRequestProcessor.pending.value?.device
+        switchingGamepadDescriptor = true
+        connectRequestProcessor.clear()
+        _hasPendingConnection.value = host != null
+        connectionEpoch.incrementAndGet()
+        _connectedDevice.value = null
+        var registeredSuccessfully = false
+        val job = managerScope.launch(start = CoroutineStart.LAZY) {
+            try {
+                val hid = bindHidProxy() ?: return@launch
+                // Coalesce rapid toggles; each completed registration must match the latest choice.
+                if (!registerLatestGamepadDescriptor(
+                        selectedMode = { gamepadDpadOutputMode },
+                        registeredMode = { registeredGamepadMode },
+                        register = { ensureRegistered(hid, forceReset = true) },
+                    )) return@launch
+                registeredSuccessfully = true
+                if (host != null && !suppressIncomingConnection &&
+                    _connectionTargetAddress.value.let { it == null || it == host.address }) {
+                    _hasPendingConnection.value = false
+                    connectDevice(host)
+                } else {
+                    if (connectRequestProcessor.pending.value == null) _hasPendingConnection.value = false
+                    publishRegisteredUiState(scheduleReconnect = false)
+                }
+            } finally {
+                switchingGamepadDescriptor = false
+                if (connectRequestProcessor.pending.value == null) _hasPendingConnection.value = false
+            }
+        }
+        gamepadDescriptorSwitchJob = job
+        job.invokeOnCompletion {
+            // A toggle can race the last comparison and job completion; don't lose it.
+            if (registeredSuccessfully && !closed && registeredGamepadMode?.let {
+                    requiresGamepadDescriptorRestart(it, gamepadDpadOutputMode)
+                } == true) switchGamepadDescriptor()
+        }
+        job.start()
+        Unit
     }
 
     @SuppressLint("MissingPermission")
@@ -1445,6 +1383,11 @@ class BluetoothKeyboardManager(private val context: Context) {
         rightXFloat: Float,
         rightYFloat: Float
     ) {
+        // Never encode Android buttons against a desktop descriptor while switching profiles.
+        if (switchingGamepadDescriptor) return
+        if (registeredGamepadMode?.let {
+                requiresGamepadDescriptorRestart(it, gamepadDpadOutputMode)
+            } != false) return
         val dev = _connectedDevice.value
         if (dev != null) {
             val report = buildGamepadReport(

@@ -576,7 +576,7 @@ fun GamepadView(
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     // Output profile selector. All profiles share one descriptor, so
-                    // changing this preference takes effect immediately without re-pairing.
+                    // Native/Web switch live; crossing Android also changes the registered descriptor.
                     Row(
                         modifier = Modifier
                             .height(28.dp)

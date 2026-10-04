@@ -1339,3 +1339,83 @@ Final JUnit XML totals remain 129 tests, zero failures/errors/skipped. No Kotlin
 14. On phones with left- and right-side display cutouts, are Multimedia's controls usable with the same fullscreen fitting as the other input modes, in both postures?
 15. Which presentation hosts should define the compatibility target for F5, `B`, Home/End, and Page Up/Down: PowerPoint, Google Slides, LibreOffice Impress, Keynote, or all four?
 16. After this relative-touchpad fix, does tap once, then touch again within 300 ms and keep the second contact down while moving reliably drag icons on both Windows and Linux?
+
+## October 4: Android-only right-stick descriptor and background mode switching
+
+Android's documented right-stick axes are Z/Rz, whereas Bluke declared Z/Rx. The Android profile now changes only the vertical-axis usage byte from `0x33` to `0x35`. Report ID 3, its 12-byte payload, all button mappings, hat bits, unsigned 16-bit ranges, and field offsets are unchanged. Native and Web retain the original 237-byte composite descriptor, SHA-256 `6A99D5607B74B803329498B709761B898616A6F7905527456FDCD5A3BBD2DB62`. The array was mechanically extracted into a pure Kotlin file for byte-level regression tests.
+
+Sources: [Android controller input](https://developer.android.com/games/sdk/game-controller/controller-input), [Chromium Windows raw-input axes](https://github.com/chromium/chromium/blob/main/device/gamepad/raw_input_gamepad_device_win.cc), [SDL Linux axis enumeration](https://github.com/libsdl-org/SDL/blob/main/src/joystick/linux/SDL_sysjoystick.c). Chromium's Windows raw path indexes axes by usage minus `0x30`: changing Rx to Rz moves raw axis index 3 to 5. ASSUMPTION: PC games bound to the old usage/index can regress under a shared descriptor. Consequently no shared descriptor migration was implemented.
+
+Entering/leaving Android uses a dedicated background registration operation, not the Home/startup compatibility flow or the general Restart HID command. The current gamepad page and its local UI state remain mounted. Registration callbacks do not trigger the usual launch auto-reconnect while this operation is active. The current connected/pending host is retained for reconnect independently of the Reconnect on Launch setting, unless a different host is selected or explicit disconnect suppresses reconnection. Rapid toggles are coalesced to the latest descriptor choice; gamepad transmission is paused during the operation. Native/Web switching still uses the existing live button-map change.
+
+This does not promise an invisible Bluetooth interruption: unregistering may disconnect the host. ASSUMPTION: a host may retain its old descriptor despite re-registration. Existing Android-mode users should forget Bluke on the host and pair again after updating; later cross-profile switches may also require a cache refresh. No bonds are deleted automatically, no new permission/dependency/SDK/version/signing change is made, and Share behavior is outside this patch.
+
+Verification failures encountered and corrected:
+
+```text
+java.lang.AssertionError: expected:<234> but was:<237>
+```
+
+The initial baseline hash extraction omitted three symbolic descriptor bytes (button counts/padding), not a source change. Re-extracting the original HEAD array including these constants produced the 237-byte hash above.
+
+```text
+e: BluetoothKeyboardManager.kt:1249:99 Return type mismatch: expected 'Boolean', actual 'Unit'.
+> Task :app:compileDebugKotlin FAILED
+BUILD FAILED in 45s
+```
+
+The background helper's expression-body inferred `Job.start()`'s Boolean return; its intended Unit return is now explicit.
+
+Executed verification (offline caches; workspace-specific Gradle/Android user homes):
+
+```text
+./gradlew.bat assembleDebug testDebugUnitTest lintDebug --offline --console=plain
+BUILD SUCCESSFUL in 4m 42s
+56 actionable tasks: 16 executed, 40 up-to-date
+tests=137 failures=0 errors=0
+0 errors, 6 warnings
+```
+
+The eight new tests cover original Native/Web descriptor SHA/length, exactly one Android usage-byte change, independent descriptor copies, independent 16-bit right-stick fields, registration-boundary selection, latest-mode changes during registration, Native/Web coalescing, and stopping on a failed bounded registration. Existing tests remain unchanged. A final rerun follows the resume guard, which suppresses competing compatibility checks only during this operation, leaving Bluetooth-off and permission checks intact.
+
+Final logic verification after the resume/completion-race guards:
+
+```text
+./gradlew.bat assembleDebug testDebugUnitTest lintDebug --offline --console=plain
+BUILD SUCCESSFUL in 4m 27s
+56 actionable tasks: 16 executed, 40 up-to-date
+Configuration cache entry reused.
+tests=137 failures=0 errors=0
+0 errors, 6 warnings
+```
+
+APK metadata/signature output before the final settings/help wording correction:
+
+```text
+package: name='dev.arnv.bluke' versionCode='10' versionName='1.1'
+Verifies
+Verified using v2 scheme (APK Signature Scheme v2): true
+Signer #1 certificate SHA-256 digest: 9291dd7e23491dd3ab2e6498cb7c0faef2083e32520acbe2bf946d2d5f46a5e0
+APK SHA256: 75413E31F930B36F7BF2A7C0F07F006CA1C7E5B0A54E6CD843A74DE53B3A83AD
+```
+
+Final text-only packaging verification:
+
+```text
+./gradlew.bat assembleDebug --offline --console=plain
+BUILD SUCCESSFUL in 1m 36s
+38 actionable tasks: 4 executed, 34 up-to-date
+Configuration cache entry reused.
+Final APK SHA256: 0D61DDD50E9AB71F8FA1AC226F9121D26CCB910F7928A4D0F539BABA23B0D4E4
+adb devices
+List of devices attached
+```
+
+No physical device was attached; no hardware result is claimed. The final APK is copied to `app/build/outputs/apk/debug/bluke-1.1-android-right-stick.apk` to distinguish it from the saved rollback/revived builds.
+
+Physical checks still required:
+
+1. On Android Minecraft and an Android Chromium tester, re-pair in Android mode and verify both right-stick axes, diagonals, D-pad and existing buttons.
+2. Toggle Android/Native/Web rapidly while keeping the gamepad page open; confirm the final selection reconnects and reports correctly, including with Reconnect on Launch off.
+3. Verify explicit disconnect or selection of another host during a switch is not undone by the retained-host reconnect.
+4. Retest Windows/Linux Native and Web; desktop descriptor identity is proven by tests, but host cache behavior and uninterrupted gameplay are not hardware-verified.

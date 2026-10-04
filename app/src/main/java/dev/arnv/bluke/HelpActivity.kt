@@ -137,7 +137,7 @@ class HelpActivity : ComponentActivity() {
                             isWarning = true,
                             steps = listOf(
                                 "Choose Native for Windows/Linux games, Android for Android games, or Web when a browser game ignores directions.",
-                                "Tap the controller mode button to cycle Native / Android / Web. Hold it to open Controller compatibility settings. Switching does not require pairing again.",
+                                "Tap the controller mode button to cycle Native / Android / Web. Hold it to open Controller compatibility settings. Native ↔ Web needs no re-pairing. Entering or leaving Android restarts HID registration; forget Bluke on the host and pair again if it caches the previous axes. Existing Android-mode users should re-pair after this update.",
                                 "For Steam, enable the controller in Steam Input and verify it in Steam's controller test or the operating system's game-controller panel.",
                                 "Bluke is a generic HID gamepad, not an Xbox XInput device. Some newer Windows games accept only XInput without a compatibility layer."
                             )
