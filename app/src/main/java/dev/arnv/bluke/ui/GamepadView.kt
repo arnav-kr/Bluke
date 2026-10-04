@@ -54,6 +54,7 @@ import dev.arnv.bluke.bluetooth.GAMEPAD_GUIDE_BUTTON_INDEX
 import dev.arnv.bluke.bluetooth.GAMEPAD_SHARE_BUTTON_INDEX
 import dev.arnv.bluke.bluetooth.GAMEPAD_TOUCHPAD_BUTTON_INDEX
 import dev.arnv.bluke.bluetooth.GamepadDpadOutputMode
+import dev.arnv.bluke.bluetooth.GamepadModeSwitchState
 import dev.arnv.bluke.data.LayoutRepository
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
@@ -420,6 +421,33 @@ fun GamepadView(
     }
 
     val connectedDevNow by btManager.connectedDevice.collectAsState()
+    val modeSwitchState by btManager.gamepadModeSwitchState.collectAsState()
+    val modeSwitchBusy = modeSwitchState != GamepadModeSwitchState.IDLE
+    if (modeSwitchBusy) {
+        androidx.compose.ui.window.Dialog(
+            onDismissRequest = {},
+            properties = androidx.compose.ui.window.DialogProperties(
+                dismissOnBackPress = false,
+                dismissOnClickOutside = false,
+            ),
+        ) {
+            Surface(shape = MaterialTheme.shapes.extraLarge, tonalElevation = 6.dp) {
+                Column(
+                    modifier = Modifier.padding(28.dp).testTag("gamepad_mode_switch_loading"),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(16.dp),
+                ) {
+                    CircularProgressIndicator()
+                    Text(
+                        if (modeSwitchState == GamepadModeSwitchState.REGISTERING)
+                            "Changing controller mode…" else "Reconnecting to device…",
+                        style = MaterialTheme.typography.titleMedium,
+                        textAlign = TextAlign.Center,
+                    )
+                }
+            }
+        }
+    }
     val isConnected = connectedDevNow != null
     val deviceName = (connectedDevNow ?: btManager.getReconnectTarget())?.name ?: "No Host"
 
@@ -431,6 +459,17 @@ fun GamepadView(
     var leftStickY by remember { mutableFloatStateOf(0f) }
     var rightStickX by remember { mutableFloatStateOf(0f) }
     var rightStickY by remember { mutableFloatStateOf(0f) }
+    LaunchedEffect(modeSwitchBusy) {
+        if (modeSwitchBusy) {
+            buttonMask = 0
+            dpadMask = 0
+            leftStickX = 0f
+            leftStickY = 0f
+            rightStickX = 0f
+            rightStickY = 0f
+            isGamepadDirty = false
+        }
+    }
 
     val transmitGamepadState = { force: Boolean ->
         if (force) {
@@ -583,15 +622,12 @@ fun GamepadView(
                             .clip(RoundedCornerShape(6.dp))
                             .background(Color.White.copy(alpha = 0.15f))
                             .combinedClickable(
+                                enabled = !modeSwitchBusy,
                                 onClickLabel = "Switch controller compatibility",
                                 onLongClickLabel = "Configure controller compatibility",
                                 onClick = {
                                     val newMode = dpadOutputMode.next()
-                                    dpadOutputMode = newMode
-                                    sharedPrefs.edit {
-                                        putString(GAMEPAD_DPAD_MODE_PREFERENCE, newMode.preferenceValue)
-                                    }
-                                    triggerVibration(15)
+                                    if (btManager.changeGamepadMode(newMode)) triggerVibration(15)
                                 },
                                 onLongClick = {
                                     context.startActivity(Intent(context, ControllerSettingsActivity::class.java))

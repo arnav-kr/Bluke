@@ -291,6 +291,14 @@ class BluetoothKeyboardManager(private val context: Context) {
     private var gamepadDescriptorSwitchJob: Job? = null
     @Volatile
     private var switchingGamepadDescriptor = false
+    private val _gamepadModeSwitchState = MutableStateFlow(GamepadModeSwitchState.IDLE)
+    internal val gamepadModeSwitchState: StateFlow<GamepadModeSwitchState> = _gamepadModeSwitchState
+
+    internal fun changeGamepadMode(mode: GamepadDpadOutputMode): Boolean = synchronized(connectionSelectionLock) {
+        if (closed || !canChangeGamepadMode(_gamepadModeSwitchState.value)) return false
+        appPreferences.edit { putString(GAMEPAD_DPAD_MODE_PREFERENCE, mode.preferenceValue) }
+        true
+    }
     private val behaviorPreferenceListener =
         android.content.SharedPreferences.OnSharedPreferenceChangeListener { preferences, key ->
             if (key == GAMEPAD_DPAD_MODE_PREFERENCE) {
@@ -298,6 +306,11 @@ class BluetoothKeyboardManager(private val context: Context) {
                     preferences.getString(GAMEPAD_DPAD_MODE_PREFERENCE, null),
                 )
                 if (newMode != gamepadDpadOutputMode) {
+                    if (!canChangeGamepadMode(_gamepadModeSwitchState.value)) {
+                        // Settings/preference writes must not bypass the same single-flight UI guard.
+                        preferences.edit { putString(GAMEPAD_DPAD_MODE_PREFERENCE, gamepadDpadOutputMode.preferenceValue) }
+                        return@OnSharedPreferenceChangeListener
+                    }
                     val descriptorChanged = requiresGamepadDescriptorRestart(gamepadDpadOutputMode, newMode)
                     _connectedDevice.value?.let { device ->
                         submitReport(
@@ -1252,6 +1265,7 @@ class BluetoothKeyboardManager(private val context: Context) {
         if (closed || incompatibleVerdictLatched || gamepadDescriptorSwitchJob?.isActive == true) return
         val host = _connectedDevice.value ?: connectRequestProcessor.pending.value?.device
         switchingGamepadDescriptor = true
+        _gamepadModeSwitchState.value = GamepadModeSwitchState.REGISTERING
         connectRequestProcessor.clear()
         _hasPendingConnection.value = host != null
         connectionEpoch.incrementAndGet()
@@ -1270,13 +1284,26 @@ class BluetoothKeyboardManager(private val context: Context) {
                 if (host != null && !suppressIncomingConnection &&
                     _connectionTargetAddress.value.let { it == null || it == host.address }) {
                     _hasPendingConnection.value = false
+                    _gamepadModeSwitchState.value = GamepadModeSwitchState.RECONNECTING
                     connectDevice(host)
+                    val request = connectRequestProcessor.pending.value
+                    val completed = awaitGamepadModeReconnect(connectRequestProcessor.pending, request)
+                    if (!completed) {
+                        synchronized(connectionSelectionLock) {
+                            if (request != null && connectRequestProcessor.pending.value?.sequence == request.sequence) {
+                                connectRequestProcessor.clear()
+                                _hasPendingConnection.value = false
+                                _statusMessage.value = "Mode changed, but reconnect timed out. Try reconnecting."
+                            }
+                        }
+                    }
                 } else {
                     if (connectRequestProcessor.pending.value == null) _hasPendingConnection.value = false
                     publishRegisteredUiState(scheduleReconnect = false)
                 }
             } finally {
                 switchingGamepadDescriptor = false
+                _gamepadModeSwitchState.value = GamepadModeSwitchState.IDLE
                 if (connectRequestProcessor.pending.value == null) _hasPendingConnection.value = false
             }
         }

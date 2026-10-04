@@ -1419,3 +1419,40 @@ Physical checks still required:
 2. Toggle Android/Native/Web rapidly while keeping the gamepad page open; confirm the final selection reconnects and reports correctly, including with Reconnect on Launch off.
 3. Verify explicit disconnect or selection of another host during a switch is not undone by the retained-host reconnect.
 4. Retest Windows/Linux Native and Web; desktop descriptor identity is proven by tests, but host cache behavior and uninterrupted gameplay are not hardware-verified.
+
+## October 5: loading feedback and mode-switch single flight
+
+The gamepad now observes a dedicated switch-state flow (Idle/Registering/Reconnecting). A Material loading dialog overlays the still-mounted gamepad during registration and retained-host reconnect. Outside taps/back do not dismiss it or reach underlying controls. The toolbar mode control disables both tap and hold while busy, and preference/API changes are guarded in the manager as well: attempts to change modes mid-operation are rejected/restored, rather than starting another registration or replacing the reconnect target.
+
+Previously the descriptor job ended immediately after queuing reconnect, leaving the mode toggle available during the physical handshake. The job now waits for its reconnect request to complete, fail, or be replaced. A 60-second watchdog is a fallback above the existing three 10-second connect attempts and 3-second disconnect wait; it releases the overlay and reports a reconnect timeout rather than locking the UI indefinitely. Cleanup only cancels the original request if it is still current. Bluetooth-off, manager close and cancellation also release the busy state. Native/Web descriptors, reports, version and dependencies are unchanged.
+
+ASSUMPTION: the reported repeated-toggle autoreconnect failure is consistent with profile changes overlapping a queued handshake; no device log or physical reproduction was supplied. The guard addresses that overlap, not unrelated firmware/cache failures. Physical retest must confirm reconnect and loading behavior.
+
+The completion waiter handles both a null captured request (already finished) and completion before subscription without waiting for the watchdog. Tests use fake pending-request flows and virtual time for busy-state gating, delayed completion, instant completion, request replacement and timeout. Held gamepad inputs are cleared locally when the overlay opens, so dismissing it cannot revive a pre-switch held stick/button state. No descriptor change is part of this follow-up.
+
+First verification pass:
+
+```text
+./gradlew.bat assembleDebug testDebugUnitTest lintDebug --offline --console=plain
+BUILD SUCCESSFUL in 4m 58s
+56 actionable tasks: 18 executed, 38 up-to-date
+Configuration cache entry reused.
+tests=138 failures=0
+0 errors, 6 warnings
+```
+
+Final verification including completion-race tests:
+
+```text
+./gradlew.bat assembleDebug testDebugUnitTest lintDebug --offline --console=plain
+BUILD SUCCESSFUL in 4m 52s
+56 actionable tasks: 16 executed, 40 up-to-date
+Configuration cache entry reused.
+tests=142 failures=0 errors=0
+0 errors, 6 warnings
+Verifies
+Verified using v2 scheme (APK Signature Scheme v2): true
+APK SHA256: FE4DE9AEBD782D5594F9B497437509A48322F68CC76D2F16AB5BDFE32CAA6CE7
+```
+
+APK: `app/build/outputs/apk/debug/bluke-1.1-mode-switch-loading.apk`. Physical checks remain unverified: spam the mode toggle through registration and reconnect, test a refused/unreachable host, and confirm loading ends with usable controls on both success and failure. No push or merge is part of this change.
