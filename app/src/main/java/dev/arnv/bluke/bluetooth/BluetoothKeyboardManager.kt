@@ -62,24 +62,33 @@ class BluetoothKeyboardManager(private val context: Context) {
         }, "bt-report-sender")
     }
 
+    private val reportDiagnostics = HidReportDiagnostics()
+
     @SuppressLint("MissingPermission")
     private fun submitReport(dev: BluetoothDevice, reportId: Int, report: ByteArray) {
         val hid = hidDeviceProfile
         val epoch = connectionEpoch.get()
+        val reportMode = registeredGamepadMode
         if (hid != null && !closed) {
             try {
             reportExecutor.submit {
                 if (closed || epoch != connectionEpoch.get() || hid !== hidDeviceProfile ||
                     _connectedDevice.value?.address != dev.address) return@submit
                 try {
-                    DeveloperLogManager.log(
-                        "BluetoothKeyboard",
-                        "sendReport ID=0x${reportId.toString(16)} Data=[${report.joinToString(" ") { String.format("%02X", it) }}]",
-                        LogType.BLUETOOTH_PACKET
-                    )
-                    hid.sendReport(dev, reportId, report)
+                    val accepted = hid.sendReport(dev, reportId, report)
+                    if (DeveloperLogManager.isEnabled) {
+                        reportDiagnostics.record(reportId, accepted, android.os.SystemClock.elapsedRealtime())?.let { summary ->
+                            val axes = if (reportId == 3) gamepadAxisDiagnostic(report) else ""
+                            val message = "sendReport ID=0x${reportId.toString(16)} $summary " +
+                                "mode=$reportMode epoch=$epoch $axes " +
+                                "Data=[${report.joinToString(" ") { String.format("%02X", it) }}]"
+                            Log.d("BlukeHID", message)
+                            DeveloperLogManager.log("BlukeHID", message, LogType.BLUETOOTH_PACKET)
+                        }
+                    }
                 } catch (e: Exception) {
                     Log.e("BluetoothKeyboard", "Error transmitting HID report ID $reportId", e)
+                    DeveloperLogManager.log("BlukeHID", "sendReport ID=$reportId exception=${e.javaClass.simpleName}", LogType.ERROR)
                 }
             }
             } catch (_: java.util.concurrent.RejectedExecutionException) {

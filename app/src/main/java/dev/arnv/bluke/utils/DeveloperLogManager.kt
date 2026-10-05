@@ -33,6 +33,9 @@ object DeveloperLogManager {
     private var prefs: SharedPreferences? = null
     private var autoSaveFile: File? = null
 
+    val isEnabled: Boolean
+        get() = prefs?.getBoolean("is_developer_mode", false) ?: false
+
     // Call this once on app startup or in AboutActivity when toggled
     fun init(context: Context) {
         prefs = context.getSharedPreferences("app_prefs", Context.MODE_PRIVATE)
@@ -55,8 +58,7 @@ object DeveloperLogManager {
 
     fun log(tag: String, message: String, type: LogType = LogType.INFO) {
         // Zero-cost abstraction for normal users
-        val isDevMode = prefs?.getBoolean("is_developer_mode", false) ?: false
-        if (!isDevMode) return
+        if (!isEnabled) return
 
         val entry = LogEntry(tag = tag, message = message, type = type)
         
