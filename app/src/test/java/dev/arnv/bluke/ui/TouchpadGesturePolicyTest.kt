@@ -13,14 +13,14 @@ class TouchpadGesturePolicyTest {
     }
 
     @Test
-    fun secondTapUsesTheSameThreeHundredMillisecondWindowThatUiPromises() {
+    fun secondTapTimeEligibilityIsBounded() {
         assertTrue(TouchpadGesturePolicy.isSecondTap(300))
         assertFalse(TouchpadGesturePolicy.isSecondTap(301))
         assertFalse(TouchpadGesturePolicy.isSecondTap(-1))
     }
 
     @Test
-    fun secondTapOnRelativeTouchpadDoesNotDependOnFingerLandingPosition() {
+    fun timingHelperAcceptsAQuickSecondTap() {
         assertTrue(
             TouchpadGesturePolicy.isSecondTap(elapsedSinceReleaseMillis = 120)
         )

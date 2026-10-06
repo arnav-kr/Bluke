@@ -760,9 +760,13 @@ fun TouchGestureLayer(
     // Tap tracking
     val pointerDownInfo = remember { mutableMapOf<PointerId, Pair<Long, Offset>>() }
     var maxPointersInTap by remember { mutableIntStateOf(0) }
-    var lastTapReleaseTime by remember { mutableLongStateOf(0L) }
-    var isDoubleTapDragging by remember { mutableStateOf(false) }
-    var hasMovedDuringDrag by remember { mutableStateOf(false) }
+    val gestureScope = rememberCoroutineScope()
+    val currentVibration by rememberUpdatedState(triggerVibration)
+    val tapDrag = remember(btManager, sensitivity, scrollSensitivity, buttonMode, showNumpadLed) {
+        TouchpadTapDragGesture(gestureScope,
+            sendButton = { btManager.sendMouseReport(it, 0, 0, 0) },
+            vibrate = { currentVibration(it) })
+    }
 
     // Rate limiting to prevent Bluetooth L2CAP packet flooding
     var lastReportTime by remember { mutableLongStateOf(0L) }
@@ -773,8 +777,9 @@ fun TouchGestureLayer(
     var touchCount by remember { mutableIntStateOf(0) }
     var activeMouseButton by remember { mutableStateOf<Byte>(0) }
 
-    DisposableEffect(btManager) {
+    DisposableEffect(btManager, tapDrag) {
         onDispose {
+            tapDrag.cancel()
             // Pointer cancellation (mode change, rotation, backgrounding) must never strand a host button down.
             btManager.sendMouseReport(0, 0, 0, 0)
         }
@@ -797,6 +802,7 @@ fun TouchGestureLayer(
             .fillMaxSize()
             .pointerInput(sensitivity, scrollSensitivity, buttonMode, showNumpadLed) {
                 val tapSlopPx = TouchpadGesturePolicy.TAP_SLOP_DP.dp.toPx()
+                try {
                 awaitPointerEventScope {
                     while (true) {
                         val event = awaitPointerEvent()
@@ -823,17 +829,10 @@ fun TouchGestureLayer(
                             if (change.pressed && !change.previousPressed) {
                                 pointerDownInfo[change.id] = change.uptimeMillis to change.position
                                 
-                                // Check for double tap drag gesture start
-                                val nowUptime = change.uptimeMillis
-                                val lastRelease = lastTapReleaseTime
-                                if (pointerDownInfo.size == 1 && lastRelease != 0L) {
-                                    if (TouchpadGesturePolicy.isSecondTap(nowUptime - lastRelease)) {
-                                        isDoubleTapDragging = true
-                                        hasMovedDuringDrag = false
-                                        activeMouseButton = 1
-                                        btManager.sendMouseReport(1, 0, 0, 0)
-                                        triggerVibration(15)
-                                    }
+                                if (pointerDownInfo.size == 1) {
+                                    tapDrag.down(change.uptimeMillis, change.position.x, change.position.y)
+                                } else {
+                                    tapDrag.cancel()
                                 }
                             }
                         }
@@ -859,8 +858,7 @@ fun TouchGestureLayer(
                                     val sendY = accumulatedY.roundToInt().coerceIn(-127, 127)
 
                                     if (sendX != 0 || sendY != 0) {
-                                        if (isDoubleTapDragging) {
-                                            hasMovedDuringDrag = true
+                                        if (tapDrag.move()) {
                                             btManager.sendMouseReport(1, sendX.toByte(), sendY.toByte(), 0)
                                         } else {
                                             btManager.sendMouseReport(activeMouseButton, sendX.toByte(), sendY.toByte(), 0)
@@ -881,7 +879,7 @@ fun TouchGestureLayer(
                                 val height = size.height
                                 val width = size.width
 
-                                if (touchYVal > height * 0.82f) {
+                                if (touchYVal > height * 0.82f && !tapDrag.isArmed) {
                                     triggerVibration(25)
                                     val btnMask = when (buttonMode) {
                                         TrackpadButtonMode.TWO_BUTTONS -> {
@@ -930,8 +928,7 @@ fun TouchGestureLayer(
                             val sendX = accumulatedX.roundToInt().coerceIn(-127, 127)
                             val sendY = accumulatedY.roundToInt().coerceIn(-127, 127)
                             if (sendX != 0 || sendY != 0) {
-                                if (isDoubleTapDragging) {
-                                    hasMovedDuringDrag = true
+                                if (tapDrag.move()) {
                                     btManager.sendMouseReport(1, sendX.toByte(), sendY.toByte(), 0)
                                 } else {
                                     btManager.sendMouseReport(activeMouseButton, sendX.toByte(), sendY.toByte(), 0)
@@ -950,15 +947,8 @@ fun TouchGestureLayer(
                         changes.forEach { change ->
                             if (change.changedToUp()) {
                                 val downInfo = pointerDownInfo.remove(change.id)
-                                if (isDoubleTapDragging) {
-                                    isDoubleTapDragging = false
-                                    // The second tap sent button-down immediately. Releasing it completes
-                                    // either a double-click or a click-and-hold drag.
+                                if (tapDrag.release()) {
                                     activeMouseButton = 0
-                                    btManager.sendMouseReport(0, 0, 0, 0)
-                                    triggerVibration(if (hasMovedDuringDrag) 15 else 20)
-                                    hasMovedDuringDrag = false
-                                    lastTapReleaseTime = 0L
                                 } else if (downInfo != null) {
                                     val height = size.height
                                     val touchYStart = downInfo.second.y
@@ -984,11 +974,9 @@ fun TouchGestureLayer(
                                                 val clickButton = if (maxPointersInTap >= 3) 4 else if (maxPointersInTap == 2) 2 else 1
                                                 
                                                 if (clickButton == 1) {
-                                                    // Send the first click immediately. A qualifying second tap
-                                                    // will hold button 1 down until its release.
-                                                    btManager.sendMouseReport(1, 0, 0, 0)
-                                                    btManager.sendMouseReport(0, 0, 0, 0)
-                                                    lastTapReleaseTime = change.uptimeMillis
+                                                    // Match main: defer the click so tap-then-drag holds a
+                                                    // single press instead of starting with a double-click.
+                                                    tapDrag.queueClick(change.uptimeMillis, change.position.x, change.position.y)
                                                 } else {
                                                     // Multi-finger click (Right/Middle click): send immediately
                                                     btManager.sendMouseReport(clickButton.toByte(), 0, 0, 0)
@@ -1005,6 +993,23 @@ fun TouchGestureLayer(
                             maxPointersInTap = 0
                         }
                     }
+                }
+                } finally {
+                    // A cancelled pointer handler may remain composed (for example after
+                    // changing sensitivity). Never leave a delayed click or held button behind.
+                    tapDrag.cancel()
+                    btManager.sendMouseReport(0, 0, 0, 0)
+                    activeMouseButton = 0
+                    pointerDownInfo.clear()
+                    lastActivePointerId = null
+                    maxPointersInTap = 0
+                    accumulatedX = 0f
+                    accumulatedY = 0f
+                    accumulatedScrollY = 0f
+                    isTwoFingerActive = false
+                    isTouchActive = false
+                    touchCount = 0
+                    activeTouchPoints = emptyList()
                 }
             }
     ) {

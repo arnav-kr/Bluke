@@ -9,8 +9,7 @@ object TouchpadGesturePolicy {
         durationMillis in 0 until TAP_TIMEOUT_MILLIS &&
             distanceSquaredPx <= tapSlopPx * tapSlopPx
 
-    // Finger coordinates on an indirect, relative touchpad do not map to host-screen coordinates.
-    // A second landing elsewhere on the surface must therefore remain eligible for tap-drag.
+    // Time eligibility only; the tap-drag sequencer also checks main's landing tolerance.
     fun isSecondTap(elapsedSinceReleaseMillis: Long): Boolean =
         elapsedSinceReleaseMillis in 0..DOUBLE_TAP_TIMEOUT_MILLIS
 }

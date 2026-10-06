@@ -1685,3 +1685,38 @@ denied`; the permitted host-side retry succeeded and returned an empty
 `List of devices attached`. No physical OEM/host matrix was executed here.
 The new installable artifact is `bluke-1.1-connection-recovery.apk`; the previous
 `bluke-1.1-shared-descriptor-test.apk` remains available for comparison/rollback.
+
+## 2026-10-06 — Restore main's tap-and-drag sequence
+
+Fetched `origin/main` from `https://github.com/arnav-kr/Bluke.git`; its HEAD was
+`ec01041` (2026-08-31). Inspected `TouchGestureLayer` in that revision, rather than
+assuming the earlier behavior. Main defers a single click for 180 ms, cancels it
+on a nearby second landing, presses left when that touch starts moving, maintains
+left in movement reports and releases on lift. With no movement it sends two
+clicks. It is a **tap, then touch-and-drag** gesture, not a single long press.
+
+Restored that sequence through a small testable `TouchpadTapDragGesture`, including
+main's 100 px second-landing tolerance. The current 12 dp initial-tap tolerance,
+scrolling, sensitivity, button partitions, visual design and report transport are
+preserved. Safety differences from main: an unrelated second landing does not
+silently lose the first click; extra fingers cancel an armed drag; handler
+cancellation/disposal cancels the delayed click and releases held buttons. An
+armed drag cannot be overridden by entering a right/middle-button partition.
+
+The replaced implementation sent the first click immediately, followed by a
+second button-down. ASSUMPTION: that double-click-and-hold sequence contributed
+to the reported host drag failure. Restoring main does not establish the exact
+physical host failure without retesting.
+
+Seven new tests cover delayed single clicks, tap-hold-drag report ordering,
+double-clicks, expired/distant second landings, cancellation and ordinary motion.
+Focused `testDebugUnitTest --tests '*Touchpad*Test' assembleDebug` output:
+
+```text
+BUILD SUCCESSFUL in 2m 30s
+47 actionable tasks: 8 executed, 39 up-to-date
+Configuration cache entry stored.
+```
+
+No Bluetooth connection logic or HID descriptor changes are included in this
+gesture repair. Physical icon/text-selection dragging still needs host testing.
