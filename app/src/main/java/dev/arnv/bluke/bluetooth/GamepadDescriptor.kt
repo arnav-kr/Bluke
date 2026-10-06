@@ -1,6 +1,6 @@
 package dev.arnv.bluke.bluetooth
 
-internal val DESKTOP_HID_DESCRIPTOR = byteArrayOf(
+internal val SHARED_HID_DESCRIPTOR = byteArrayOf(
     0x05.toByte(), 0x01.toByte(),         // USAGE_PAGE (Generic Desktop)
     0x09.toByte(), 0x06.toByte(),         // USAGE (Keyboard)
     0xa1.toByte(), 0x01.toByte(),         // COLLECTION (Application)
@@ -105,11 +105,12 @@ internal val DESKTOP_HID_DESCRIPTOR = byteArrayOf(
     0x09.toByte(), 0x31.toByte(),         //     USAGE (Y) - Left Stick Y
     0x09.toByte(), 0x32.toByte(),         //     USAGE (Z) - Right Stick X
     0x09.toByte(), 0x33.toByte(),         //     USAGE (Rx) - Right Stick Y
+    0x09.toByte(), 0x35.toByte(),         //     USAGE (Rz) - Android Right Stick Y
     0x15.toByte(), 0x00.toByte(),         //     LOGICAL_MINIMUM (0)
     0x27.toByte(), 0xff.toByte(), 0xff.toByte(), 0x00.toByte(), 0x00.toByte(), // LOGICAL_MAXIMUM (65535)
     0x75.toByte(), 0x10.toByte(),         //     REPORT_SIZE (16)
-    0x95.toByte(), 0x04.toByte(),         //     REPORT_COUNT (4)
-    0x81.toByte(), 0x02.toByte(),         //     INPUT (Data,Var,Abs) - 4 16-bit Axes (X, Y, Z, Rx)
+    0x95.toByte(), 0x05.toByte(),         //     REPORT_COUNT (5)
+    0x81.toByte(), 0x02.toByte(),         //     INPUT (Data,Var,Abs) - X, Y, Z, Rx, Rz
     0xc0.toByte(),                        // END_COLLECTION (Application)
 
     // Consumer controls (Report ID 4)
@@ -127,24 +128,18 @@ internal val DESKTOP_HID_DESCRIPTOR = byteArrayOf(
     0xc0.toByte()                         // END_COLLECTION (Application)
 )
 
-// Android expects right-stick Z/Rz; preserve every other usage and report bit.
+// All modes advertise the same fields, even on cold launch. Receivers may cache SDP
+// across reconnects, so mode changes must only change the values inside these fields.
+@Suppress("UNUSED_PARAMETER")
 internal fun hidDescriptorForMode(mode: GamepadDpadOutputMode): ByteArray {
-    val descriptor = DESKTOP_HID_DESCRIPTOR.copyOf()
-    if (mode != GamepadDpadOutputMode.ANDROID) return descriptor
-    val axes = byteArrayOf(0x09, 0x30, 0x09, 0x31, 0x09, 0x32, 0x09, 0x33)
-    val offsets = (0..descriptor.size - axes.size).filter { offset ->
-        axes.indices.all { descriptor[offset + it] == axes[it] }
-    }
-    check(offsets.size == 1) { "Expected exactly one gamepad axis usage sequence" }
-    descriptor[offsets.single() + axes.lastIndex] = 0x35 // Rz (Android AXIS_RZ)
-    return descriptor
+    return SHARED_HID_DESCRIPTOR.copyOf()
 }
 
+@Suppress("UNUSED_PARAMETER")
 internal fun requiresGamepadDescriptorRestart(
     previous: GamepadDpadOutputMode,
     next: GamepadDpadOutputMode,
-): Boolean = (previous == GamepadDpadOutputMode.ANDROID) !=
-    (next == GamepadDpadOutputMode.ANDROID)
+): Boolean = false
 
 /** Wait for the latest descriptor choice without cancelling a registration already in flight. */
 internal suspend fun registerLatestGamepadDescriptor(

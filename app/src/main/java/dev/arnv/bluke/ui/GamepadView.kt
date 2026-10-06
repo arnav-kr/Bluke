@@ -629,7 +629,7 @@ fun GamepadView(
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     // Output profile selector. All profiles share one descriptor, so
-                    // Native/Web switch live; crossing Android also changes the registered descriptor.
+                    // Native, Android and Web switch live without HID re-registration.
                     Row(
                         modifier = Modifier
                             .height(28.dp)

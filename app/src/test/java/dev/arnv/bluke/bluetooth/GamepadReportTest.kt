@@ -44,6 +44,7 @@ class GamepadReportTest {
                 0xFF.toByte(), 0x7F,
                 0xFF.toByte(), 0xFF.toByte(),
                 0xFF.toByte(), 0x7F,
+                0xFF.toByte(), 0x7F,
             ),
             report,
         )
@@ -131,6 +132,7 @@ class GamepadReportTest {
                 0xFF.toByte(), 0x7F,
                 0xFF.toByte(), 0x7F,
                 0xFF.toByte(), 0x7F,
+                0xFF.toByte(), 0x7F,
             ),
             report,
         )
@@ -142,7 +144,7 @@ class GamepadReportTest {
         assertEquals(17, GAMEPAD_SHARE_BUTTON_INDEX)
         assertEquals(18, GAMEPAD_TOUCHPAD_BUTTON_INDEX)
         assertEquals(24, GAMEPAD_BUTTON_COUNT + GAMEPAD_BUTTON_PADDING_BITS)
-        assertEquals(12, GAMEPAD_REPORT_SIZE_BYTES)
+        assertEquals(14, GAMEPAD_REPORT_SIZE_BYTES)
     }
 
     @Test
@@ -186,13 +188,42 @@ class GamepadReportTest {
     }
 
     @Test
-    fun allModes_shareNeutralPacketAndUnchangedAxisEncoding() {
+    fun allModes_shareNeutralPacketAndDesktopAxisEncodingIsUnchanged() {
         val nativeNeutral = buildGamepadReport(0, 0, 0f, 0f, 0f, 0f)
         val nativeAxes = buildGamepadReport(0, 0, -1f, 1f, 0.5f, -0.5f).copyOfRange(4, 12)
         GamepadDpadOutputMode.entries.forEach { mode ->
             assertArrayEquals(nativeNeutral, buildGamepadReport(0, 0, 0f, 0f, 0f, 0f, mode))
-            assertArrayEquals(nativeAxes, buildGamepadReport(0, 0, -1f, 1f, 0.5f, -0.5f, mode).copyOfRange(4, 12))
+            if (mode != GamepadDpadOutputMode.ANDROID) {
+                assertArrayEquals(nativeAxes, buildGamepadReport(0, 0, -1f, 1f, 0.5f, -0.5f, mode).copyOfRange(4, 12))
+            }
             assertEquals(mode, GamepadDpadOutputMode.fromPreference(mode.preferenceValue))
+        }
+    }
+
+    @Test fun androidSupportsBothGameAndBrowserRightStickAxisSelections() {
+        for (x in listOf(-1f, 0f, 1f)) for (y in listOf(-1f, 0f, 1f)) {
+            val report = buildGamepadReport(0, 0, 0f, 0f, x, y, GamepadDpadOutputMode.ANDROID)
+            fun axis(offset: Int) = (report[offset].toInt() and 255) or
+                ((report[offset + 1].toInt() and 255) shl 8)
+            val expectedX = ((x + 1f) * 32767.5f).toInt()
+            val expectedY = ((y + 1f) * 32767.5f).toInt()
+            assertEquals(expectedX, axis(8))
+            assertEquals(expectedX, axis(10))
+            assertEquals(expectedY, axis(12))
+        }
+    }
+
+    @Test fun desktopExtraAxisIsCenteredAndNeutralReleasesEveryMode() {
+        for (mode in GamepadDpadOutputMode.entries) {
+            val active = buildGamepadReport(-1, 9, -1f, 1f, 1f, -1f, mode)
+            if (mode != GamepadDpadOutputMode.ANDROID) {
+                assertArrayEquals(byteArrayOf(0xff.toByte(), 0x7f), active.copyOfRange(12, 14))
+            }
+            val neutral = buildGamepadReport(0, 0, 0f, 0f, 0f, 0f, mode)
+            assertArrayEquals(byteArrayOf(0, 0, 0, 15), neutral.copyOfRange(0, 4))
+            for (offset in 4 until 14 step 2) {
+                assertArrayEquals(byteArrayOf(0xff.toByte(), 0x7f), neutral.copyOfRange(offset, offset + 2))
+            }
         }
     }
 }

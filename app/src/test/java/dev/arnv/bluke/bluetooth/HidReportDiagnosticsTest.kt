@@ -32,7 +32,7 @@ class HidReportDiagnosticsTest {
     @Test
     fun decodesUnsignedLittleEndianAxesFromActualPayload() {
         val report = buildGamepadReport(0, 0, -1f, 0f, 1f, -1f)
-        assertEquals("leftX=0 leftY=32767 rightX=65535 rightY=0", gamepadAxisDiagnostic(report))
+        assertEquals("X=0 Y=32767 Z=65535 Rx=0 Rz=32767", gamepadAxisDiagnostic(report))
         assertEquals("unexpectedLength=0", gamepadAxisDiagnostic(byteArrayOf()))
     }
 }

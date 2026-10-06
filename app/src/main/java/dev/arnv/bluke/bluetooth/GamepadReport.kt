@@ -8,7 +8,7 @@ internal const val GAMEPAD_SHARE_BUTTON_INDEX = 17
 internal const val GAMEPAD_TOUCHPAD_BUTTON_INDEX = 18
 internal const val GAMEPAD_BUTTON_COUNT = 19
 internal const val GAMEPAD_BUTTON_PADDING_BITS = 5
-internal const val GAMEPAD_REPORT_SIZE_BYTES = 12
+internal const val GAMEPAD_REPORT_SIZE_BYTES = 14
 private const val GAMEPAD_DPAD_BUTTON_MASK = 0x0F shl GAMEPAD_DPAD_FIRST_BUTTON_INDEX
 
 internal enum class GamepadDpadOutputMode(
@@ -17,7 +17,7 @@ internal enum class GamepadDpadOutputMode(
     val description: String,
 ) {
     NATIVE_HAT("native_hat", "Native", "Windows/Linux games · standard HID hat"),
-    ANDROID("android", "Android", "Android games · Z/Rz right stick, Android buttons and HID hat. Changes HID registration; forget Bluke on the host and pair again after updating or switching if controls are incorrect."),
+    ANDROID("android", "Android", "Android games · Z/Rz right stick, Android buttons and HID hat. Switches live without reconnecting."),
     WEB_BUTTONS("web_buttons", "Web", "Browser games · D-pad buttons 12–15");
 
     fun next(): GamepadDpadOutputMode = entries[(ordinal + 1) % entries.size]
@@ -81,7 +81,12 @@ internal fun buildGamepadReport(
         GamepadDpadOutputMode.WEB_BUTTONS -> GAMEPAD_HAT_NEUTRAL.toByte()
     }
 
-    listOf(leftX, leftY, rightX, rightY).forEachIndexed { index, value ->
+    // Keep Native/Web's original X/Y/Z/Rx values and offsets. Android games use
+    // Z/Rz; Chromium on Android can prefer Rx over Z, so mirror right X to Rx.
+    // The extra Rz field stays centered on desktop to avoid unintended input.
+    val android = dpadOutputMode == GamepadDpadOutputMode.ANDROID
+    listOf(leftX, leftY, rightX, if (android) rightX else rightY,
+        if (android) rightY else 0f).forEachIndexed { index, value ->
         val axis = ((value.coerceIn(-1f, 1f) + 1f) * 32767.5f)
             .toInt()
             .coerceIn(0, 65535)

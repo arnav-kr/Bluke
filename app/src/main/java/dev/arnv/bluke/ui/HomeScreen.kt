@@ -274,10 +274,10 @@ fun HomeScreen(
             text = {
                 Text(
                     if (descriptorRefreshRequired) {
-                        "Bluke's HID descriptor changed to add corrected gamepad mappings and media controls, " +
+                        "Bluke now uses one shared HID descriptor for Native, Android and Web, " +
                             "but Bluetooth hosts cache the old layout. To use the new controls, forget the host on this phone, " +
                             "remove Bluke on the host, then pair again once. Reinstalling the app alone is not enough. " +
-                            "Native/Web switching and Fn shortcuts need no re-pairing. Android mode uses different right-stick axes; forget Bluke on the host and pair again if it caches the previous descriptor."
+                            "After this one-time refresh, all controller modes switch live without reconnecting or re-pairing."
                     } else {
                         "We've added new features and made significant underlying changes to the controller!\n" +
                             "For detailed information, see the changelog."

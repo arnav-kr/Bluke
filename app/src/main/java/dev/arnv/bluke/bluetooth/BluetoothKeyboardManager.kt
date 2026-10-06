@@ -81,7 +81,7 @@ class BluetoothKeyboardManager(private val context: Context) {
     private fun submitReport(dev: BluetoothDevice, reportId: Int, report: ByteArray) {
         val hid = hidDeviceProfile
         val epoch = connectionEpoch.get()
-        val reportMode = registeredGamepadMode
+        val reportMode = gamepadDpadOutputMode
         if (hid != null && !closed) {
             try {
             reportExecutor.submit {
@@ -297,7 +297,7 @@ class BluetoothKeyboardManager(private val context: Context) {
                 "Wireless Controller Combo",    // Description
                 "Bluke",                         // Provider
                 BluetoothHidDevice.SUBCLASS1_COMBO, // Subclass
-                hidDescriptorForMode(mode)       // Descriptor (Android-only Z/Rz axes)
+                hidDescriptorForMode(mode)       // One descriptor for every report mapping
             )
         } catch (e: Throwable) {
             Log.e("BlukeBT", "Failed to create BluetoothHidDeviceAppSdpSettings", e)

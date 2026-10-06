@@ -1529,3 +1529,44 @@ Configuration cache entry reused.
 JUnit XML: 155 tests, 0 failures/errors/skips. Thirteen new tests replace four
 obsolete pending-request spinner tests. Descriptor/report source files have no
 diff. `git diff --check` passes. Physical host/firmware testing remains pending.
+
+## 2026-10-06 — Shared descriptor experiment after receiver-cache reproduction
+
+The confirmed-teardown fix above did not resolve the user's device test. The
+user then confirmed that re-pairing while Bluke remained running in Android mode
+restored the right stick. We must not equate sender registration success with
+receiver descriptor refresh.
+
+Before modifications, committed checkpoint `9a5c132` and local tag
+`checkpoint/native-web-before-shared-descriptor`; its code matches `526c4fa`.
+Checkpoint `assembleDebug` output: `BUILD SUCCESSFUL in 4s`,
+`38 actionable tasks: 38 up-to-date`.
+
+Implemented a stable X/Y/Z/Rx/Rz descriptor across all modes, report-only mode
+switches, revision-5 pairing-refresh notice, and updated help/diagnostics. Native
+and Web retain their first 12 payload bytes; the appended Rz stays centered.
+Android reports right X on Z and Rx, and right Y on Rz. Registration/callback
+recovery code is retained, with all mode-pair restart policy checks now false.
+No SDK, dependency, signing or unrelated UI changes.
+
+See [design, primary-source research, risks and physical test matrix](SHARED-DESCRIPTOR.md).
+In particular, a plain Z/Rz-only descriptor risks Windows browser axis indices;
+the extra axis preserves existing Z/Rx desktop fields instead. ASSUMPTION:
+individual desktop games tolerate the additional centered axis. This is not yet
+hardware-verified or release-ready.
+
+Executed verification:
+
+```text
+gradlew.bat assembleDebug testDebugUnitTest lintDebug --console=plain
+BUILD SUCCESSFUL in 4m 4s
+56 actionable tasks: 16 executed, 40 up-to-date
+Configuration cache entry reused.
+```
+
+JUnit XML: 158 tests, 0 failures, 0 errors, 0 skipped. Regression checks cover
+all mode-pair descriptor equality/restart decisions, legacy descriptor fields
+(original SHA-256 after removing only the extension), parsed input bit lengths,
+Android Z/Rz and Rx/Rz values, preserved desktop mappings and neutral reports.
+Physical Android, Windows and Linux host verification remains required; unit
+tests and Robolectric API tests do not substitute for those devices.

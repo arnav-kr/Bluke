@@ -1,7 +1,6 @@
 # Right-stick send diagnostics
 
-This diagnostic build does not change HID descriptors, mappings, registration,
-connection handling, or report cadence. It records the Boolean returned by
+The diagnostics record the Boolean returned by
 `BluetoothHidDevice.sendReport()` after the call, rather than logging only the
 attempted payload. A true result is not proof of delivery or host interpretation.
 
@@ -22,9 +21,11 @@ count calls since the previous emitted sample, while `Data` and axes describe
 only the current sample. Brief movements can fall between samples, hence the
 two-second holds. Logging is disabled when developer mode is off.
 
-Report ID 3 contains unsigned little-endian axes: left X/Y at bytes 4–7 and
-right X/Y at bytes 8–11. Center is 32767; extremes are 0 and 65535. Each log
-includes the requested registered mode and connection epoch. These are app-side
+Descriptor revision 5 uses a 14-byte report ID 3: unsigned little-endian X/Y at
+bytes 4–7, Z at 8–9, Rx at 10–11, and Rz at 12–13. Native/Web put right X/Y in
+Z/Rx and center Rz. Android puts right X in both Z and Rx, and right Y in Rz.
+Center is 32767; extremes are 0 and 65535. Each report log
+includes the selected output mapping and connection epoch. These are app-side
 metadata, not evidence of the descriptor cached by the receiving device.
 
 Interpretation:
