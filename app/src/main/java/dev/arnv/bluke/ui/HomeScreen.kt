@@ -310,6 +310,11 @@ fun HomeScreen(
 
     // Connection helper declared at outer scope
     val isConnected = btState is BluetoothState.Connected
+    val offerSettingsPairingHelp = shouldOfferSettingsPairingHelp(btState, homeUiState.hidLifecycleState)
+
+    LaunchedEffect(offerSettingsPairingHelp) {
+        if (offerSettingsPairingHelp) showTroubleshootingNudge = true
+    }
 
     LaunchedEffect(isConnected) {
         val previousState = previousConnectionState
@@ -330,6 +335,7 @@ fun HomeScreen(
         previousConnectionState = isConnected
         if (isConnected) {
             connectionAttempts = 0
+            showTroubleshootingNudge = false
         }
     }
 
@@ -1192,6 +1198,8 @@ fun HomeScreen(
                             if (showTroubleshootingNudge) {
                                 item {
                                     TroubleshootingNudgeCard(
+                                        offerSettingsPairingHelp = offerSettingsPairingHelp,
+                                        onScan = { btManager.startScanning() },
                                         onOpenHelp = {
                                             context.startActivity(Intent(context, HelpActivity::class.java))
                                         },
@@ -1328,6 +1336,8 @@ fun HomeScreen(
 
 @Composable
 private fun TroubleshootingNudgeCard(
+    offerSettingsPairingHelp: Boolean,
+    onScan: () -> Unit,
     onOpenHelp: () -> Unit,
     onDismiss: () -> Unit,
 ) {
@@ -1348,12 +1358,21 @@ private fun TroubleshootingNudgeCard(
             Column(modifier = Modifier.weight(1f)) {
                 Text("Having trouble connecting?", style = MaterialTheme.typography.titleMedium)
                 Text(
-                    "Check both pairing prompts or follow the safe repair steps. A slow attempt does not automatically mean this phone is incompatible.",
+                    if (offerSettingsPairingHelp) {
+                        "If you paired through Bluetooth settings, forget the pairing on both devices, then use Scan in Bluke to pair and connect again."
+                    } else {
+                        "Check both pairing prompts or follow the safe repair steps. A slow attempt does not automatically mean this phone is incompatible."
+                    },
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSecondaryContainer,
                 )
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    if (offerSettingsPairingHelp) {
+                        TextButton(onClick = onScan) { Text("Scan") }
+                    }
+                    TextButton(onClick = onOpenHelp) { Text("Help") }
+                }
             }
-            TextButton(onClick = onOpenHelp) { Text("Help") }
             IconButton(onClick = onDismiss) {
                 Icon(Icons.Default.Close, contentDescription = "Dismiss")
             }

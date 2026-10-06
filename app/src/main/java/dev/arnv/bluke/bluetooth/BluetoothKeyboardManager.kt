@@ -1219,11 +1219,31 @@ class BluetoothKeyboardManager(private val context: Context) {
             DeveloperLogManager.log("BluetoothKeyboard", "connection device=${device.address} state=$linkState target=${_connectionTargetAddress.value}")
             if (incompatibleVerdictLatched) return
             when (state) {
+                BluetoothProfile.STATE_CONNECTING -> {
+                    synchronized(connectionSelectionLock) {
+                        // Observe Settings/host-initiated attempts without issuing any command
+                        // or taking ownership away from an explicit in-app request.
+                        if (!_hasPendingConnection.value && !suppressIncomingConnection &&
+                            appRegistrationState.value && _connectedDevice.value == null &&
+                            hidDeviceProfile?.getConnectionState(device) == BluetoothProfile.STATE_CONNECTING) {
+                            _lifecycleState.value = HidLifecycleState.Connecting(device.address)
+                            _statusMessage.value = "Connecting to '${device.name ?: device.address}'..."
+                        }
+                    }
+                }
                 BluetoothProfile.STATE_CONNECTED -> {
                     publishConnectedHost(device)
                 }
                 BluetoothProfile.STATE_DISCONNECTED -> {
                     synchronized(connectionSelectionLock) {
+                    if (_connectedDevice.value == null && !_hasPendingConnection.value &&
+                        !suppressIncomingConnection && appRegistrationState.value &&
+                        _lifecycleState.value == HidLifecycleState.Connecting(device.address) &&
+                        hidDeviceProfile?.getConnectionState(device) == BluetoothProfile.STATE_DISCONNECTED) {
+                        _lifecycleState.value = HidLifecycleState.Error(HidFailure.CONNECTION_REJECTED)
+                        _statusMessage.value = "The incoming connection did not complete. See the connection help below."
+                        return
+                    }
                     if (!shouldClearConnectedHost(_connectedDevice.value?.address, device.address)) return
                     connectionEpoch.incrementAndGet()
                     _connectedDevice.value = null

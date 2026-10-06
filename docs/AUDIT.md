@@ -1720,3 +1720,50 @@ Configuration cache entry stored.
 
 No Bluetooth connection logic or HID descriptor changes are included in this
 gesture repair. Physical icon/text-selection dragging still needs host testing.
+
+## 2026-10-06 — Settings-pairing troubleshooting suggestion
+
+The existing Home troubleshooting card now offers: "If you paired through
+Bluetooth settings, forget the pairing on both devices, then use Scan in Bluke
+to pair and connect again." It includes Scan and Help actions; forgetting remains
+a deliberate user action. This is a conditional suggestion, not a claim that
+Settings pairing always fails or that a descriptor-registration failure was proven.
+
+Show the new advice after a host-connection error, not normal Connecting, HID
+registration failure, Bluetooth Off or a successful connection. The old stall/
+churn advice remains available. A successful connection dismisses the nudge.
+Settings-initiated CONNECTING then DISCONNECTED callbacks are observed passively
+when no explicit request or teardown owns the session; an unrelated old host's
+callback cannot fail the currently observed handshake. This adds no connection,
+disconnect or registration commands. Missing OEM callbacks still cannot reveal
+a failure that Android never reports to Bluke.
+
+A production-manager fake-HID test verifies that incoming failure is surfaced
+without issuing commands, and a UI-policy test covers the advice's visibility.
+The gesture repair and connection-help change are separate rollback commits.
+
+An intermediate lint run hit an internal FIR analyzer error while source edits
+were in flight and was interrupted (exit 1), rather than accepted as verification:
+
+```text
+> Task :app:lintAnalyzeDebug
+ERROR: unexpected element of type: no element found
+org.jetbrains.kotlin.analysis.low.level.api.fir.api.InvalidFirElementTypeException:
+unexpected element of type: no element found
+```
+
+Reran with a fresh Gradle process and no source edits during verification:
+
+```text
+> .\gradlew.bat assembleDebug testDebugUnitTest lintDebug --console=plain --no-daemon
+BUILD SUCCESSFUL in 4m 49s
+56 actionable tasks: 16 executed, 40 up-to-date
+Configuration cache entry reused.
+
+JUnit XML: 183 tests, 0 failures, 0 errors, 0 skipped.
+Lint XML: 0 errors, 22 warnings.
+```
+
+No descriptor, report encoding, SDK, dependency or background-service policy
+change. Installable artifact: `bluke-1.1-touchpad-drag.apk`; prior named APKs remain
+untouched. Physical touchpad dragging and Settings-first pairing need device tests.

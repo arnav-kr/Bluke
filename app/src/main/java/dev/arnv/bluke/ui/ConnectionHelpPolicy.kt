@@ -1,5 +1,13 @@
 package dev.arnv.bluke.ui
 
+import dev.arnv.bluke.bluetooth.BluetoothState
+import dev.arnv.bluke.bluetooth.HidFailure
+import dev.arnv.bluke.bluetooth.HidLifecycleState
+
+internal fun shouldOfferSettingsPairingHelp(state: BluetoothState, lifecycle: HidLifecycleState): Boolean =
+    (state is BluetoothState.PairingMode || state is BluetoothState.ReadyDisconnected) &&
+        lifecycle == HidLifecycleState.Error(HidFailure.CONNECTION_REJECTED)
+
 internal const val CONNECTION_HELP_ATTEMPT_LIMIT = 3
 internal const val CONNECTION_HELP_STALL_MILLIS = 12_000L
 internal const val CONNECTION_HELP_CHURN_LIMIT = 4

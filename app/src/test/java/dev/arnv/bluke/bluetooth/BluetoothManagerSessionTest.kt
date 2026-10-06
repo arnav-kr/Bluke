@@ -146,6 +146,24 @@ class BluetoothManagerSessionTest {
         assertTrue(manager.serviceState.value is BluetoothState.Connected)
     }
 
+    @Test fun failedSettingsHandshakeExposesHelpWithoutIssuingConnectionCommands() {
+        manager.disconnectDevice()
+        awaitIdle()
+        val other = adapter.getRemoteDevice("00:11:22:33:44:66")
+        HidShadow.states[other] = BluetoothProfile.STATE_CONNECTING
+        HidShadow.callback!!.onConnectionStateChanged(other, BluetoothProfile.STATE_CONNECTING)
+        assertEquals(HidLifecycleState.Connecting(other.address), manager.lifecycleState.value)
+        // An unrelated old host's disconnect must not fail this handshake.
+        HidShadow.callback!!.onConnectionStateChanged(device, BluetoothProfile.STATE_DISCONNECTED)
+        assertEquals(HidLifecycleState.Connecting(other.address), manager.lifecycleState.value)
+        HidShadow.states[other] = BluetoothProfile.STATE_DISCONNECTED
+        HidShadow.callback!!.onConnectionStateChanged(other, BluetoothProfile.STATE_DISCONNECTED)
+        assertEquals(HidLifecycleState.Error(HidFailure.CONNECTION_REJECTED), manager.lifecycleState.value)
+        assertEquals(0, HidShadow.connectCalls.get())
+        assertEquals(1, HidShadow.disconnectCalls.get()) // Only the explicit setup disconnect.
+        assertEquals(0, HidShadow.unregisterCalls.get())
+    }
+
     @Test fun connectTapAdoptsExistingSettingsLinkWithoutRestartOrDuplicateConnect() = runBlocking {
         manager.connectDevice(device)
         withTimeout(5_000) { while (manager.hasPendingConnection.value) delay(10) }
