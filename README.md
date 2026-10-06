@@ -26,6 +26,9 @@ Bluke turns your Android phone into a Bluetooth keyboard, touchpad, gamepad, and
 - Multimedia remote with presentation controls, touchpad, and phone volume button forwarding
 - Built for peak UX with haptic feedback, OLED black mode, and Material You dynamic theming
 
+
+[Usage & troubleshooting guide](docs/USAGE.md) · [Changelog](CHANGELOG.md)
+
 ## Requirements
 
 - **Android 9 (API level 28) or higher** with firmware supporting the Bluetooth HID Device profile. Profile availability depends on device chipset and OEM ROM.

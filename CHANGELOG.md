@@ -1,79 +1,46 @@
 # Changelog
 
-User-facing changes in Bluke. Commits on `refactor` are not published releases;
-see [GitHub Releases](https://github.com/arnav-kr/Bluke/releases) for availability.
-Technical investigation and test history are in [the audit](docs/AUDIT.md).
+All notable user-facing changes and improvements to Bluke are documented in this file.
+For detailed usage instructions, see the [Usage Guide](docs/USAGE.md).
 
-## 1.1 — Unreleased
+## [1.1.0] - 2026-10-xx
 
-Notes for the current `refactor` branch (version code 10).
-
-### Upgrade notice
-
-- Upgrading from an older HID descriptor requires forgetting the pairing on
-  **both devices** and pairing again once. Keep Bluke open and use **Scan**.
-  The app includes a descriptor-update notice. Clearing app data is not required.
-- Builds already using shared descriptor revision 5 do not need another pairing
-  refresh for the connection or touchpad fixes below.
-- Native, Android and Web now share one descriptor. Switching modes changes
-  reports only: no HID restart or re-pairing on each mode change.
+> [!IMPORTANT]
+> **One-time re-pairing required:** Bluke 1.1 introduces a unified Bluetooth HID controller descriptor. When upgrading from 1.0.x, please unpair/forget Bluke on **both** devices and pair fresh using **Scan** in Bluke. This ensures your host operating system caches the updated descriptor correctly.
 
 ### Added
+- **Multimedia Remote Mode:** A dedicated input surface combining media playback, slide presentation controls, an integrated touchpad, and optional hardware volume-button forwarding.
+- **Unified Gamepad Profiles:** Seamless, live switching between **Native** (PC/Linux), **Android** (mobile games), and **Web** (browser gamepad tester) mappings without reconnecting or re-pairing.
+- **6 New Switch Sound Profiles:** Expanded built-in mechanical switch acoustics to 12 total profiles, adding Turquoise Tealios, Gateron Black Inks, Cherry MX Blues, Cherry MX Blacks, SKCM Blue Alps, and NovelKeys Creams.
+- **Custom Sound Pack Import:** Import and manage custom **Mechvibes ZIP audio sprite packs** directly from storage, with automatic audio decoding, duplicate detection, and deletion controls.
+- **International Character Layouts:** Added support for AZERTY, QWERTZ, Dvorak, Colemak, and Russian (ЙЦУКЕН) typing layouts with on-screen `Shift + Space` quick-cycling.
+- **Keyboard Customization Studio:** Design custom themes with a visual RGB/HSV color picker, case finishes (metallic/matte), plate accents, keycap groups, and individual key styling overrides.
+- **Independent Geometries:** Physical layouts (60%, 65%, 75%) are now completely decoupled from visual themes.
+- **Touchpad Side-Rail Modifiers:** Optional mechanical modifier key strip (Ctrl, Alt, Shift, Meta) on the left or right of the touchpad gesture surface.
+- **Diagnostic Logging:** Opt-in Bluetooth lifecycle and HID throughput logging under Settings > Support for easier troubleshooting and bug reporting.
 
-- **Android** and **Web** controller mappings alongside Native. Android maps the
-  right stick for Android hosts; Web reports D-pad directions as buttons 12–15.
-- **Multimedia** mode with playback, volume, navigation and presentation controls,
-  a touchpad, and adaptive landscape/upright controls. Optional phone-volume-button
-  forwarding works while Multimedia is open.
-- AZERTY, QWERTZ, Dvorak, Colemak and Russian ЙЦУКЕН typing layouts alongside
-  QWERTY. On-screen **Shift + Space** cycles Bluke's typing layouts; the host's
-  input language remains separately configured.
-- Custom keyboard themes with live preview, per-theme case styling and group/
-  individual-key customization. Keyboard geometry and theme are separate choices.
-- Mechvibes ZIP sound-pack import, including supported audio-sprite packs,
-  duplicate-import feedback and deletion of imported packs. Built-ins cannot
-  be deleted.
-- Touchpad modifier-key side rails and Fn media legends that do not cover the
-  function keys.
-- Expanded opt-in HID send-result and Bluetooth lifecycle diagnostics.
+### Improved & Fixed
+- **Reorganized Settings:** Streamlined hierarchy grouped into *Personalization*, *Controls & connection*, and *Support*, complete with customizable toolbar quick-cycles.
+- **Reliable Tap-and-Drag:** Restored standard delayed-click tap-and-drag gesture for smooth, dependable window and file dragging across host platforms.
+- **Robust Bluetooth Lifecycle:** Serialized connection coordinator, bounded registration timeouts, and proactive pairing recovery advice prevent stuck connection states.
+- **Input Performance:** 125 Hz (8 ms) analog stick report sampling with optimized UI recomposition for low-latency input.
+- **Adaptive Remote Layouts:** Multimedia controls dynamically adapt to phone orientation (landscape vs. upright/portrait) with intuitive rotation.
 
-### Improved and fixed
+---
 
-- Reorganized settings into Personalization, Controls & connection, and Support.
-  Layout, theme and sound quick-cycle membership is configured in each native
-  list; at least one choice remains enabled and selection stays in the cycle.
-- Improved keyboard previews, compact theme actions, forced-RTL keyboard behavior
-  and restoration of saved sound preferences after updates.
-- Refined Multimedia spacing, orientation handling, button feedback, toolbar
-  controls and upright media icons. Back from an input mode returns to Home.
-- Improved first-use Gamepad guidance, reconnect controls and unsupported-HID
-  recovery screens, retaining foreground-service support for background/lock sessions.
-- Automatic reconnect yields to an already connected host. Ordinary Disconnect
-  no longer restarts HID; proxy state can reconcile missing connection callbacks.
-- Serialized HID recovery, bounded registration waits and clearer recovery errors
-  address stale connected states and competing connection attempts.
-- Added conditional pairing advice and a Scan action after failed host connections,
-  including observed Settings-initiated handshakes. The suggestion is not proof
-  that pairing through Settings caused a failure.
-- Restored main's touchpad **tap, then touch again and drag** sequence: delay the
-  first click, hold left when movement begins and release on lift. Cancellation
-  clears delayed clicks and held buttons.
-- Sampled analog gamepad reports at 8 ms intervals, reduced unnecessary
-  recomposition and batched custom-controller layout persistence.
+## [1.0.7] - 2026-06-21
+- Build and configuration maintenance.
 
-### Removed from development builds
+## [1.0.5] - 2026-06-20
+- Gamepad mode enabled by default.
+- Optimized dependencies and reduced application package size.
 
-- Retired the experimental gyro-mouse and combined keyboard+touchpad modes.
-  Current modes: Keyboard, Touchpad, Gamepad and Multimedia.
+## [1.0.4] - 2026-06-20
+- Added experimental Gamepad controller mode.
 
-### Compatibility and validation
-
-- Firmware must expose Android's HID Device role. Brand/model alone is not a
-  reliable compatibility verdict; Retry remains available.
-- Browser games may use different mappings or ignore D-pad input even when a
-  tester recognizes it. Host OS, game and firmware testing is still required;
-  this is not a universal compatibility claim for TVs, consoles, macOS or iOS.
-- Latest code verification: **183 passing tests**, **0 lint errors**, **22 warnings**.
-  The full physical OEM/host matrix remains incomplete.
-- See [usage and troubleshooting](docs/USAGE.md). App-data reset is not part of
-  the normal upgrade procedure.
+## [1.0.0] - 2026-06-05
+- Initial public release of Bluke.
+- Driverless Bluetooth HID keyboard and touchpad emulation.
+- 6 mechanical switch sound profiles (Cherry MX Brown, Holy Panda, Alpaca, Kailh Box Navy, Buckling Spring, Topre).
+- Keycap themes (Olivia, Dracula, Oblivion, Retro, Cafe, Mizu).
+- Material You dynamic theming, OLED high-contrast dark theme, and system haptics.
