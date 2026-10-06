@@ -21,7 +21,7 @@ Source reviewed: `Bluke Improvements.pdf` (13 pages). The document is treated as
 | IMP-05 | 1 | Context-aware troubleshooting nudges | Offer Help after three connection actions, a 12-second unsuccessful attempt, or four connection-state transitions within two minutes, without claiming a device is unsupported. |
 | IMP-06 | 2 | Material Expressive custom key sounds | Present sound packs as one connected list with a distinct selected state and a clear import action. |
 | IMP-07 | 3 | Material Expressive keyboard theme library | Use connected theme rows, section context instead of redundant labels, selected-container feedback, and distinct Create/Copy/Edit actions. |
-| IMP-08 | 4 | Remove D-pad jargon | Rename the choices to Native games and Browser games, with plain-language guidance. |
+| IMP-08 | 4 | Remove D-pad jargon | Current choices are Native, Android and Web, with host-oriented guidance. All share descriptor revision 5; mode changes no longer restart HID. |
 | IMP-09 | 5 | Remove repeated typing-layout descriptions | Use one settings row that opens a single-choice layout dialog and explains the host-layout requirement once. |
 | IMP-10 | 6 | Clarify host audio routing | Rename it to Keep audio on this phone and describe the Linux-focused, best-effort behavior. |
 | IMP-11 | 7 | Redesign quick-cycle configuration | Configure layout, theme, and sound membership in their native lists; keep the remaining Quick-cycle screen for input modes only. Custom themes and imported sounds remain eligible. |
@@ -59,10 +59,21 @@ Source reviewed: `Bluke Improvements.pdf` (13 pages). The document is treated as
 | UX-03 | Sound-pack hit target ignored the rounded card shape | Use Material's clickable `Surface` so clipping, ripple, and interaction shape share the same rounded outline. |
 | UX-04 | Import loader looked malformed and the action lacked hierarchy | Moved import to an extended FAB with a bounded 20 dp progress indicator and Snackbar result feedback. |
 | UX-05 | Imported key sounds were isolated from built-in choices | Unified built-in and imported profiles into one selectable list, persisted the built-in selection, and included imported profiles in toolbar cycling. |
-| UX-06 | Typing layout choices repeated country names | Shortened visible choices to QWERTY, AZERTY, QWERTZ, Dvorak, and Colemak while retaining host-layout metadata internally. |
+| UX-06 | Typing layout choices repeated country names | Shortened visible choices to QWERTY, AZERTY, QWERTZ, Dvorak, Colemak and Russian ЙЦУКЕН while retaining host-layout metadata internally. |
 | UX-07 | Host filtering and device address used the same icon | Assigned distinct filter-off and fingerprint icons. |
 | UX-08 | The non-metallic Black case appeared as a gray-black gradient | Render non-metallic case colors as their exact solid color; reserve gradients for metallic finishes. |
 | UX-09 | Upright controls and pointer surface had mismatched widths and off-center margins | Give the control and pointer decks equal width, center the complete upright composition, and distribute the added width across buttons and gaps. |
 | UX-10 | Settings mixed keyboard/controller options into connection behavior | Split Personalization into Look & Feel, Keyboard, and Controller, leaving Controls & connection focused on host discovery and remote behavior. |
 | UX-11 | Quick-cycle configuration duplicated layout, theme, and sound lists | Put protected cycle-membership checkboxes directly in each native list; the last enabled choice cannot be removed. |
 | UX-12 | Keyboard case color was a competing global cycle | Store case color and metallic finish in each keyboard theme, with backward-compatible defaults for existing custom themes. |
+
+## Current behavior follow-up
+
+- Restored main's delayed-click tap-and-drag sequence, with cancellation cleanup.
+  See [gesture instructions](USAGE.md#touchpad-dragging); this is not single-long-press dragging.
+- Connection-failure advice now conditionally suggests refreshing a Settings-made
+  pairing through Bluke's Scan, without claiming a proven descriptor failure.
+- Current input modes are Keyboard, Touchpad, Gamepad and Multimedia; experimental
+  gyro and combined keyboard+touchpad modes were retired.
+- The complete host/OEM matrix remains open. User-reported successes and automated
+  checks must not be described as universal compatibility. See [the changelog](../CHANGELOG.md).

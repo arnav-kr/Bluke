@@ -1,11 +1,19 @@
-# Shared controller descriptor experiment — 2026-10-06
+# Shared controller descriptor — 2026-10-06
+
+## Current status
+
+Revision 5 is implemented on `refactor` in `936c3d8`, with subsequent connection
+and touchpad fixes. The user reported controls working on their respective tested
+hosts after this change; that is not a complete OEM/OS/game matrix. See
+[release notes](../CHANGELOG.md) and [upgrade instructions](USAGE.md#updating-and-pairing-caches).
 
 ## Rollback
 
 The original Native/Web implementation is preserved in commit `9a5c132`, tagged
 `checkpoint/native-web-before-shared-descriptor`. Its executable source is the
 same as `526c4fa`. See [checkpoint instructions](NATIVE-WEB-CHECKPOINT.md).
-Neither the tag nor these changes have been pushed.
+The checkpoint commit and shared-descriptor implementation have been pushed to
+`refactor`. The checkpoint tag is local; use the commit ID in other clones.
 
 ## Evidence and decision
 
@@ -48,9 +56,10 @@ recovery machinery is retained rather than rewritten in this experiment.
 ## Migration and risks
 
 Descriptor revision advances from 4 to 5 using the existing update notice. Users
-must forget both devices and pair again once after installing this build. No
+upgrading from an older descriptor must forget both devices and pair again once. No
 app-data reset is needed. Subsequent mode changes advertise no different bytes.
-Rolling back also changes the descriptor, so refresh pairing again on rollback.
+Later revision-5 connection/touchpad updates need no additional pairing refresh.
+Rolling back to a different descriptor requires another pairing refresh.
 
 ASSUMPTION: retaining the original desktop usages/offsets preserves the intended
 desktop controls. Games may enumerate or auto-bind the added axis differently;

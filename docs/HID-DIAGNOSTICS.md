@@ -1,5 +1,9 @@
 # Right-stick send diagnostics
 
+For ordinary setup and pairing recovery, start with [the usage guide](USAGE.md).
+Historical verification sections below retain the results for their respective
+patches; [the audit](AUDIT.md) records the latest code verification (183 tests).
+
 The diagnostics record the Boolean returned by
 `BluetoothHidDevice.sendReport()` after the call, rather than logging only the
 attempted payload. A true result is not proof of delivery or host interpretation.
@@ -58,6 +62,24 @@ sensitive. Disable diagnostics and delete exports after debugging.
 
 The supplied working/failing logs used different receiving phones. They cannot
 isolate sender behavior without repeating against the same receiver.
+
+### Connection/disconnection reproduction
+
+Record whether the attempt started from Bluke's Scan/Connect or the OS Bluetooth
+settings. Keep the same receiver when comparing senders. Capture one sequence:
+connect, background/lock and resume, explicit Disconnect, then reconnect. If two
+previously paired hosts are nearby, include that detail in the report.
+
+Current request logs include `automatic=true/false`. Use it to distinguish
+automatic reconnect from an explicit request; do not infer request origin solely
+from its position after registration. Preserve command results, callbacks and
+recovery messages together. A successful send or connect command Boolean is not
+proof that the remote host completed or interpreted it successfully.
+
+For touchpad reports (ID 2), button bit 0 is left. A tap-drag should press left
+before movement, keep it in movement reports and release on lift. Sampled logs
+can omit these short transitions: their absence is not proof of a missing report.
+Use a host event capture or targeted automated tests to check exact ordering.
 
 ## Receiver-side capture
 
