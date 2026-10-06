@@ -84,7 +84,7 @@ class DeveloperLogsActivity : ComponentActivity() {
                                 }
                                 IconButton(onClick = {
                                     val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                                    val logText = filteredLogs.joinToString("\n") { "[${it.tag}] ${it.message}" }
+                                    val logText = filteredLogs.joinToString("\n") { "[${it.timestamp}] [${it.type}] [${it.tag}] ${it.message}" }
                                     val clip = ClipData.newPlainText("Developer Logs", logText)
                                     clipboard.setPrimaryClip(clip)
                                     Toast.makeText(context, "Copied to clipboard", Toast.LENGTH_SHORT).show()
@@ -97,7 +97,7 @@ class DeveloperLogsActivity : ComponentActivity() {
                                             val downloadsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
                                             val timeStamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
                                             val file = File(downloadsDir, "bluke_logs_$timeStamp.txt")
-                                            val logText = filteredLogs.joinToString("\n") { "[${it.tag}] ${it.message}" }
+                                            val logText = filteredLogs.joinToString("\n") { "[${it.timestamp}] [${it.type}] [${it.tag}] ${it.message}" }
                                             FileWriter(file).use { it.write(logText) }
                                             Toast.makeText(context, "Saved to Downloads: ${file.name}", Toast.LENGTH_LONG).show()
                                         } catch (e: Exception) {
