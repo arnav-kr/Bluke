@@ -4,8 +4,7 @@
 
 # Bluke
 
-Bluke turns a compatible Android phone into a Bluetooth keyboard, touchpad,
-gamepad and multimedia remote.
+Bluke turns your Android phone into a Bluetooth keyboard, touchpad, gamepad, and multimedia remote without needing any host companion software.
 
 [![Android](https://img.shields.io/badge/Android-3DDC84?style=for-the-badge&logo=android&logoColor=white)](https://developer.android.com)
 [![Kotlin](https://img.shields.io/badge/kotlin-%237F52FF.svg?style=for-the-badge&logo=kotlin&logoColor=white)](https://kotlinlang.org)
@@ -18,26 +17,25 @@ gamepad and multimedia remote.
 
 ## Features
 
-* **No host app required**: Connect directly using Android's Bluetooth HID Device API.
-* **Four input modes**: Keyboard, Touchpad, Gamepad and Multimedia, with Native/Android/Web controller mappings.
-* **Switch sound synthesis**: Generates mechanical switch acoustics (Cherry MX Brown, Holy Panda, Alpaca, Kailh Box Navy, Buckling Spring, and Topre) in real-time.
-* **Keyboard themes**: Includes built-in presets and editable custom themes with per-theme case, plate, keycap, and legend colors.
-* **System integration**: Supports system haptics, OLED black mode, and Material You dynamic color schemes.
-* **Custom sounds and layouts**: Import supported Mechvibes packs and choose typing layouts independently of keyboard geometry and theme.
+- Direct Bluetooth HID connection with no companion apps or server software running on the host
+- Four input modes: Keyboard, Touchpad, Gamepad, and Multimedia remote
+- 12 mechanical switch sound profiles, plus support for importing custom Mechvibes sound packs
+- Multiple typing layouts (QWERTY, AZERTY, QWERTZ, Dvorak, Colemak, Russian ЙЦУКЕН) with `Shift + Space` cycling
+- Multiple keyboard geometries (60%, 65%, 75%) and custom themes with case, plate, and keycap styling
+- Gamepad controller with live switching between Native, Android, and Web mappings
+- Multimedia remote with presentation controls, touchpad, and phone volume button forwarding
+- Built for peak UX with haptic feedback, OLED black mode, and Material You dynamic theming
 
-[Changelog](CHANGELOG.md) · [Usage & troubleshooting](docs/USAGE.md)
+## Requirements
 
-## Requirement
-
-- **Android 9 (API level 28) or higher** with firmware supporting [Bluetooth HID Device](https://developer.android.com/reference/android/bluetooth/BluetoothHidDevice).
-- A compatible Bluetooth host. Support varies by firmware, receiving OS and app; not all phones, TVs or consoles are supported.
-
+- **Android 9 (API level 28) or higher** with firmware supporting the Bluetooth HID Device profile. Profile availability depends on device chipset and OEM ROM.
+- A compatible Bluetooth host (Windows, Linux, Android, ChromeOS). Apple and macOS devices are currently unsupported / future scope.
 
 ## Build and Installation
 
 ### Prerequisites
 
-- Android Studio/JDK compatible with the project's pinned Android Gradle Plugin.
+- Android Studio / JDK compatible with the project's Android Gradle Plugin.
 - Android SDK 36.1, as configured in `app/build.gradle.kts`.
 - The included Gradle Wrapper.
 
@@ -51,26 +49,40 @@ gamepad and multimedia remote.
 
 2. **Build with Gradle**:
    ```bash
-   ./gradlew assembleDebug
+   ./gradlew assembleDebug      # Linux / macOS
+   .\gradlew.bat assembleDebug  # Windows PowerShell
    ```
 
 3. **Install on device**:
-   Enable USB Debugging on your Android phone and install the app via Android Studio or run:
+   Enable USB Debugging on your Android phone and run:
    ```bash
-    ./gradlew installDebug
-    ```
+   ./gradlew installDebug
+   ```
 
-On Windows PowerShell, use `.\gradlew.bat` instead of `./gradlew`. The debug APK
-is at `app/build/outputs/apk/debug/app-debug.apk`.
+The debug APK is output to `app/build/outputs/apk/debug/app-debug.apk`.
+
+## Star History
+
+<a href="https://www.star-history.com/?repos=arnav-kr%2FBluke&type=date&legend=top-left">
+ <picture>
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=arnav-kr/Bluke&type=date&theme=dark&legend=top-left" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=arnav-kr/Bluke&type=date&legend=top-left" />
+   <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=arnav-kr/Bluke&type=date&legend=top-left" />
+ </picture>
+</a>
 
 ## License
 
-This project is licensed under the [AGPL-3.0](LICENSE)
+This project is licensed under the [AGPL-3.0](LICENSE).
 
 ## Credits
 
-* **[kbsim](https://github.com/tplai/kbsim)**: The user interface design is inspired by their web keyboard simulator ([kbs.im](https://kbs.im)), and the mechanical switch audio assets are sourced from their project.
+* **[kbsim](https://github.com/tplai/kbsim)**: Part of mechanical switch audio assets are sourced from [kbs.im](https://kbs.im).
 
-## Author
+## Contributors
 
-- **Arnav Kumar** ([@arnav-kr](https://github.com/arnav-kr))
+<a href="https://github.com/arnav-kr/Bluke/graphs/contributors">
+  <img src="https://contrib.rocks/image?repo=arnav-kr/Bluke" alt="Bluke Contributors" />
+</a>
+
+ See the [full contributor graph](https://github.com/arnav-kr/Bluke/graphs/contributors).
