@@ -1,13 +1,15 @@
-Bluke lets you use your Android phone as a wireless keyboard, mouse trackpad, and game controller.
+Bluke lets you use your Android phone as a wireless keyboard, mouse trackpad, game controller, and media remote.
 
 It utilizes your phone's built-in Bluetooth HID profile and acts like how a typical input device would work.
 
 No installing server apps or background clients, just pair, connect and it works.
 
 Features:
-* Keyboard mode with real mechanical keyboard feel (Holy Panda, Alpaca, Gateron Black Ink, Cherry MX, Topre, Blue Alps, and more).
-* Trackpad mode along with numpad to control your devices.
-* Gamepad mode with customizable layouts and toggles for Xbox and PS5 button styles.
-* Material You Dynamic Theme, Customizations and much more.
+* Keyboard mode with real mechanical typing sounds (12 built-in switches, custom Mechvibes pack import, Fn media shortcuts, and international layouts).
+* Trackpad mode with smooth cursor control, natural two-finger scrolling, tap-and-drag, and an LED numpad overlay.
+* Gamepad mode with dual analog sticks, Xbox/PS5 button styles, stick inversion, and Native/Web/Android controller profiles.
+* Multimedia remote mode for media playback and slideshow presentations, with optional phone volume rocker control.
+* Stays connected in the background and with the screen locked while in use.
+* Material You dynamic themes, custom color palettes, adjustable haptic feedback, and auto-reconnect on launch.
 
 Bluke is 100% offline, everything stays local, no tracking, and it is fully open source. Source code can be accessed at: https://github.com/arnav-kr/Bluke
