@@ -1456,3 +1456,76 @@ APK SHA256: FE4DE9AEBD782D5594F9B497437509A48322F68CC76D2F16AB5BDFE32CAA6CE7
 ```
 
 APK: `app/build/outputs/apk/debug/bluke-1.1-mode-switch-loading.apk`. Physical checks remain unverified: spam the mode toggle through registration and reconnect, test a refused/unreachable host, and confirm loading ends with usable controls on both success and failure. No push or merge is part of this change.
+
+## 2026-10-06 — Confirmed descriptor-switch lifecycle
+
+The user reproduced a useful distinction: Android mode works when selected at
+startup, but the right stick fails after switching from Native/Web to Android,
+despite the loading dialog completing. Previous outgoing logs contain changing
+right X/Y bytes and successful send requests. ASSUMPTION: the live switch left
+the old registration/link or receiving-side descriptor effective; the received
+SDP bytes have not yet been captured.
+
+Confirmed code defects: the active mode was assigned before registration
+confirmation; all attempts reused one callback; cleanup used a 300 ms sleep
+without waiting for unregister confirmation; reconnect could reuse a connected
+link; and clearing a pending request was treated as completion even on failure.
+
+Changes:
+
+- Give every registration its own attempt and callback. Serialize register
+  commands on the same single-thread executor used for callbacks, so a callback
+  cannot run before command acceptance is recorded. Publish the active mode only
+  on that attempt's successful registration callback. Reject success during
+  teardown, success after rejection/unregistration, and callbacks from replaced
+  attempts. Preserve passive late success for the final still-pending attempt.
+- During descriptor changes, disconnect existing links and wait for physical
+  teardown; require unregister confirmation for an accepted app registration,
+  bounded by the existing 8-second callback timeout. Check for connections again
+  after unregistration. A rejected or unconfirmed teardown stops the switch.
+  The existing cold-process stale-record cleanup/backoff remains available when
+  there is no accepted registration callback to await.
+- Own reconnect inside the switch coroutine and inspect its actual result.
+  Require fresh connection setup after registration; handle a host that already
+  auto-reconnected during the switch. Normal pairing/connect calls retain their
+  existing behavior of joining an active handshake.
+- Block competing connect/pair/restart commands during the switch, cancel a
+  competing capability check, and cancel the switch when Bluetooth/proxy goes
+  away or the user explicitly disconnects. Backgrounding preserves the pending
+  retained-host transaction. Retain the host for a failed-switch retry.
+- Keep the existing gamepad/loading view, disable mode changes while busy, and
+  show a retryable error rather than treating request completion as success.
+  Remove the obsolete pending-request-based spinner completion helper/tests.
+
+Neither descriptor byte array nor HID report encoding was changed. Native/Web
+descriptor identity remains protected by the existing SHA-256 regression test.
+The registration callback isolation applies to the shared Bluetooth layer, so
+cold startup and existing fake API 28/31/36 contracts are included in verification.
+
+New regression coverage: accepted command without confirmation, rejected and
+retired attempts, old success during teardown, accepted registration with no
+callback, delayed/rejected/missing physical disconnect, cancellation during
+disconnect, host auto-reconnect during registration, and cleanup ordering/failure.
+These are deterministic fake-Bluetooth tests, not OEM hardware certification.
+
+Physical acceptance remains necessary: start Native and switch Android on the
+same paired Android host; test both right-stick axes; switch back and repeat;
+repeat from Web; try spam taps, lock/unlock, Bluetooth off, unavailable host, and
+Retry after interruption. Check cold Android startup and normal desktop pairing.
+Android's public API cannot confirm that a host re-read SDP or expose its axis
+mapping. If strict switching still fails, compare received SDP/HCI captures as
+described in `docs/HID-DIAGNOSTICS.md`; do not claim a successful callback proves
+the remote descriptor changed. No descriptor migration or data reset is added.
+
+Verification:
+
+```text
+gradlew.bat assembleDebug testDebugUnitTest lintDebug --console=plain
+BUILD SUCCESSFUL in 4m 13s
+56 actionable tasks: 16 executed, 40 up-to-date
+Configuration cache entry reused.
+```
+
+JUnit XML: 155 tests, 0 failures/errors/skips. Thirteen new tests replace four
+obsolete pending-request spinner tests. Descriptor/report source files have no
+diff. `git diff --check` passes. Physical host/firmware testing remains pending.

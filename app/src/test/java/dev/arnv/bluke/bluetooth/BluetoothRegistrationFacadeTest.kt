@@ -31,12 +31,13 @@ private class FakeBluetoothRegistrationFacade(
     var unregisterCalls = 0
         private set
 
-    override fun unregisterApp() {
+    override suspend fun unregisterApp(): Boolean {
         unregisterCalls++
         registrationState.value = false
+        return true
     }
 
-    override fun registerApp(): Boolean {
+    override suspend fun registerApp(): Boolean {
         registerCalls++
         return when (remainingBehaviors.removeFirst()) {
             RegistrationBehavior.REJECT_COMMAND -> false

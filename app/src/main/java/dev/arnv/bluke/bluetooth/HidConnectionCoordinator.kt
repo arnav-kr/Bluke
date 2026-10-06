@@ -41,7 +41,28 @@ internal class HidConnectionCoordinator(
                 .getValue(address).state
         }
 
-    suspend fun connect(address: String, onAttempt: (Int) -> Unit = {}): ConnectionResult = transactionMutex.withLock {
+    /** Descriptor changes must finish physical teardown before touching registration. */
+    suspend fun disconnectAll(): Boolean = transactionMutex.withLock { disconnectAllLocked() }
+
+    private suspend fun disconnectAllLocked(): Boolean {
+        for (address in facade.busyAddresses()) {
+            val before = events.value[address]?.revision ?: 0
+            if (facade.state(address) == HostLinkState.DISCONNECTED) continue
+            if (facade.state(address) != HostLinkState.DISCONNECTING && !facade.disconnect(address)) {
+                if (facade.state(address) != HostLinkState.DISCONNECTED) return false
+            }
+            if (facade.state(address) != HostLinkState.DISCONNECTED &&
+                awaitEvent(address, before, disconnectTimeoutMillis, setOf(HostLinkState.DISCONNECTED)) == null
+            ) return false
+            if (facade.state(address) != HostLinkState.DISCONNECTED) return false
+        }
+        return facade.busyAddresses().isEmpty()
+    }
+
+    suspend fun connect(address: String, requireFreshConnection: Boolean = false, onAttempt: (Int) -> Unit = {}): ConnectionResult = transactionMutex.withLock {
+        // A host can auto-reconnect while registration is being replaced. Mode switches
+        // require a new physical connect command after the new registration is confirmed.
+        if (requireFreshConnection && !disconnectAllLocked()) return@withLock ConnectionResult.DISCONNECT_TIMED_OUT
         var result = ConnectionResult.COMMAND_REJECTED
         for (attempt in 1..maxAttempts) {
             if (facade.state(address) == HostLinkState.CONNECTED) return@withLock ConnectionResult.CONNECTED

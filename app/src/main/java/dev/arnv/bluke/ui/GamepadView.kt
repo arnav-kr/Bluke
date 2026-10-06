@@ -422,7 +422,21 @@ fun GamepadView(
 
     val connectedDevNow by btManager.connectedDevice.collectAsState()
     val modeSwitchState by btManager.gamepadModeSwitchState.collectAsState()
+    val modeSwitchError by btManager.gamepadModeSwitchError.collectAsState()
     val modeSwitchBusy = modeSwitchState != GamepadModeSwitchState.IDLE
+    if (!modeSwitchBusy && modeSwitchError != null) {
+        AlertDialog(
+            onDismissRequest = { btManager.dismissGamepadModeSwitchError() },
+            title = { Text("Controller mode change interrupted") },
+            text = { Text(modeSwitchError.orEmpty()) },
+            confirmButton = {
+                TextButton(onClick = { btManager.retryGamepadModeSwitch() }) { Text("Retry") }
+            },
+            dismissButton = {
+                TextButton(onClick = { btManager.dismissGamepadModeSwitchError() }) { Text("Close") }
+            },
+        )
+    }
     if (modeSwitchBusy) {
         androidx.compose.ui.window.Dialog(
             onDismissRequest = {},

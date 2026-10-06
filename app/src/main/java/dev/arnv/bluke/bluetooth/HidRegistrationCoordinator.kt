@@ -10,15 +10,16 @@ import kotlin.random.Random
 internal interface BluetoothRegistrationFacade {
     val registrationState: StateFlow<Boolean>
 
-    fun unregisterApp()
+    suspend fun unregisterApp(): Boolean
 
-    fun registerApp(): Boolean
+    suspend fun registerApp(): Boolean
 }
 
 internal sealed interface RegistrationResult {
     data class Registered(val attempts: Int) : RegistrationResult
     data class Rejected(val attempts: Int) : RegistrationResult
     data class TimedOut(val attempts: Int, val timeoutMillis: Long) : RegistrationResult
+    data object TeardownFailed : RegistrationResult
 }
 
 internal class HidRegistrationCoordinator(
@@ -38,15 +39,11 @@ internal class HidRegistrationCoordinator(
             return RegistrationResult.Registered(attempts = 0)
         }
 
-        facade.unregisterApp()
+        if (!facade.unregisterApp()) return RegistrationResult.TeardownFailed
         sleep(initialCleanupDelayMillis)
 
         var lastResult: RegistrationResult = RegistrationResult.Rejected(attempts = 0)
         for (attempt in 1..retryPolicy.maxAttempts) {
-            if (facade.registrationState.value) {
-                return RegistrationResult.Registered(attempts = attempt - 1)
-            }
-
             onAttempt(attempt)
             if (!facade.registerApp()) {
                 lastResult = RegistrationResult.Rejected(attempt)
@@ -61,7 +58,7 @@ internal class HidRegistrationCoordinator(
             }
 
             if (attempt < retryPolicy.maxAttempts) {
-                facade.unregisterApp()
+                if (!facade.unregisterApp()) return RegistrationResult.TeardownFailed
                 sleep(retryPolicy.delayMillis(attempt, jitter()))
             }
         }

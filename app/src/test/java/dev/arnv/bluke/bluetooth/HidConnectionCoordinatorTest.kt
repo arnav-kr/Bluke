@@ -34,6 +34,69 @@ class HidConnectionCoordinatorTest {
         assertTrue(fake.commands.isEmpty())
     }
 
+    @Test fun descriptorSwitchDisconnectsBeforeSameHostCanReconnect() = runTest {
+        val fake = FakeBluetooth()
+        val coordinator = fake.prepare()
+        fake.emit("A", HostLinkState.CONNECTED)
+        assertTrue(coordinator.disconnectAll())
+        assertEquals(ConnectionResult.CONNECTED, coordinator.connect("A"))
+        assertEquals(listOf("disconnect:A", "connect:A"), fake.commands)
+    }
+
+    @Test fun freshConnectCannotReuseHostAutoReconnectDuringRegistration() = runTest {
+        val fake = FakeBluetooth()
+        val coordinator = fake.prepare()
+        fake.emit("A", HostLinkState.CONNECTED)
+        assertEquals(ConnectionResult.CONNECTED, coordinator.connect("A", requireFreshConnection = true))
+        assertEquals(listOf("disconnect:A", "connect:A"), fake.commands)
+    }
+
+    @Test fun freshConnectFailsIfOldLinkCannotBeRemoved() = runTest {
+        val fake = FakeBluetooth()
+        val coordinator = fake.prepare()
+        fake.emit("A", HostLinkState.CONNECTED)
+        fake.onDisconnect = { false }
+        assertEquals(ConnectionResult.DISCONNECT_TIMED_OUT, coordinator.connect("A", requireFreshConnection = true))
+        assertEquals(listOf("disconnect:A"), fake.commands)
+    }
+
+    @Test fun descriptorTeardownWaitsForDelayedPhysicalDisconnect() = runTest {
+        val fake = FakeBluetooth()
+        val coordinator = fake.prepare()
+        fake.emit("A", HostLinkState.CONNECTED)
+        fake.onDisconnect = { fake.emit(it, HostLinkState.DISCONNECTING); true }
+        val teardown = async { coordinator.disconnectAll() }
+        runCurrent()
+        assertFalse(teardown.isCompleted)
+        fake.emit("A", HostLinkState.DISCONNECTED)
+        assertTrue(teardown.await())
+    }
+
+    @Test fun rejectedOrMissingDisconnectDoesNotPretendTeardownSucceeded() = runTest {
+        val fake = FakeBluetooth()
+        val coordinator = fake.prepare()
+        fake.emit("A", HostLinkState.CONNECTED)
+        fake.onDisconnect = { false }
+        assertFalse(coordinator.disconnectAll())
+        fake.onDisconnect = { true }
+        assertFalse(coordinator.disconnectAll())
+        assertFalse(fake.commands.any { it.startsWith("connect:") })
+    }
+
+    @Test fun cancellationReleasesTeardownLockWithoutIssuingConnect() = runTest {
+        val fake = FakeBluetooth()
+        val coordinator = fake.prepare()
+        fake.emit("A", HostLinkState.CONNECTED)
+        fake.onDisconnect = { true }
+        val teardown = async { coordinator.disconnectAll() }
+        runCurrent()
+        teardown.cancel()
+        teardown.join()
+        fake.emit("A", HostLinkState.DISCONNECTED)
+        assertTrue(coordinator.disconnectAll())
+        assertEquals(listOf("disconnect:A"), fake.commands)
+    }
+
     @Test fun synchronousConnectCallbackIsNotLostBeforeWaitStarts() = runTest {
         val fake = FakeBluetooth()
         assertEquals(ConnectionResult.CONNECTED, fake.prepare().connect("A"))
