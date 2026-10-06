@@ -9,6 +9,49 @@ import org.junit.Test
 
 @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
 class HidConnectionCoordinatorTest {
+    @Test fun automaticReconnectNeverDisconnectsSystemConnectedHost() = runTest {
+        val fake = FakeBluetooth()
+        val coordinator = fake.prepare()
+        fake.emit("settings-host", HostLinkState.CONNECTED)
+        assertEquals(ConnectionResult.HOST_ALREADY_CONNECTED,
+            coordinator.connect("remembered-host", allowHostSwitch = false))
+        assertTrue(fake.commands.isEmpty())
+    }
+
+    @Test fun automaticRetryYieldsWhenAnotherHostConnectsBetweenAttempts() = runTest {
+        val fake = FakeBluetooth()
+        val coordinator = fake.prepare()
+        fake.onConnect = {
+            fake.emit(it, HostLinkState.DISCONNECTED)
+            fake.emit("settings-host", HostLinkState.CONNECTED)
+            true
+        }
+        assertEquals(ConnectionResult.HOST_ALREADY_CONNECTED,
+            coordinator.connect("remembered-host", allowHostSwitch = false))
+        assertEquals(listOf("connect:remembered-host"), fake.commands)
+    }
+
+    @Test fun proxyStateCanConfirmDisconnectWithoutCallback() = runTest {
+        val fake = FakeBluetooth()
+        val coordinator = fake.prepare()
+        fake.emit("A", HostLinkState.CONNECTED)
+        fake.onDisconnect = { address ->
+            launch { kotlinx.coroutines.delay(50); fake.states[address] = HostLinkState.DISCONNECTED }
+            true
+        }
+        assertTrue(coordinator.disconnectAll())
+    }
+
+    @Test fun proxyStateCanConfirmConnectWithoutCallback() = runTest {
+        val fake = FakeBluetooth()
+        val coordinator = fake.prepare()
+        fake.onConnect = { address ->
+            launch { kotlinx.coroutines.delay(25); fake.states[address] = HostLinkState.CONNECTED }
+            true
+        }
+        assertEquals(ConnectionResult.CONNECTED, coordinator.connect("A"))
+        assertEquals(listOf("connect:A"), fake.commands)
+    }
     private class FakeBluetooth : BluetoothConnectionFacade {
         val states = mutableMapOf<String, HostLinkState>()
         val commands = mutableListOf<String>()

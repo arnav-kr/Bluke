@@ -2,13 +2,12 @@ package dev.arnv.bluke.bluetooth
 
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withTimeoutOrNull
 
 internal enum class HostLinkState { DISCONNECTED, CONNECTING, CONNECTED, DISCONNECTING }
-internal enum class ConnectionResult { CONNECTED, COMMAND_REJECTED, TIMED_OUT, DISCONNECT_TIMED_OUT }
+internal enum class ConnectionResult { CONNECTED, COMMAND_REJECTED, TIMED_OUT, DISCONNECT_TIMED_OUT, HOST_ALREADY_CONNECTED }
 
 internal interface BluetoothConnectionFacade {
     fun state(address: String): HostLinkState
@@ -37,8 +36,18 @@ internal class HidConnectionCoordinator(
 
     private suspend fun awaitEvent(address: String, after: Long, timeout: Long, states: Set<HostLinkState>): HostLinkState? =
         withTimeoutOrNull(timeout) {
-            events.first { map -> map[address]?.let { it.revision > after && it.state in states } == true }
-                .getValue(address).state
+            // Some firmware updates the proxy but omits a callback. Reconcile while
+            // waiting as well as at the boundary; a command's Boolean is not completion.
+            while (true) {
+                val event = events.value[address]
+                if (event != null && event.revision > after && event.state in states) return@withTimeoutOrNull event.state
+                val actual = facade.state(address)
+                if (actual == HostLinkState.CONNECTED && actual in states) return@withTimeoutOrNull actual
+                if (states == setOf(HostLinkState.DISCONNECTED) && actual in states) return@withTimeoutOrNull actual
+                delay(50)
+            }
+            @Suppress("UNREACHABLE_CODE")
+            null
         }
 
     /** Descriptor changes must finish physical teardown before touching registration. */
@@ -52,14 +61,15 @@ internal class HidConnectionCoordinator(
                 if (facade.state(address) != HostLinkState.DISCONNECTED) return false
             }
             if (facade.state(address) != HostLinkState.DISCONNECTED &&
-                awaitEvent(address, before, disconnectTimeoutMillis, setOf(HostLinkState.DISCONNECTED)) == null
+                awaitEvent(address, before, disconnectTimeoutMillis, setOf(HostLinkState.DISCONNECTED)) == null &&
+                facade.state(address) != HostLinkState.DISCONNECTED
             ) return false
             if (facade.state(address) != HostLinkState.DISCONNECTED) return false
         }
         return facade.busyAddresses().isEmpty()
     }
 
-    suspend fun connect(address: String, requireFreshConnection: Boolean = false, onAttempt: (Int) -> Unit = {}): ConnectionResult = transactionMutex.withLock {
+    suspend fun connect(address: String, requireFreshConnection: Boolean = false, allowHostSwitch: Boolean = true, onAttempt: (Int) -> Unit = {}): ConnectionResult = transactionMutex.withLock {
         // A host can auto-reconnect while registration is being replaced. Mode switches
         // require a new physical connect command after the new registration is confirmed.
         if (requireFreshConnection && !disconnectAllLocked()) return@withLock ConnectionResult.DISCONNECT_TIMED_OUT
@@ -69,18 +79,21 @@ internal class HidConnectionCoordinator(
             onAttempt(attempt)
             // A cancelled older request may still be connecting in the Bluetooth stack.
             for (other in facade.busyAddresses().filter { it != address }) {
+                if (!allowHostSwitch) return@withLock ConnectionResult.HOST_ALREADY_CONNECTED
                 val before = events.value[other]?.revision ?: 0
                 if (facade.state(other) != HostLinkState.DISCONNECTED) {
                     if (facade.state(other) != HostLinkState.DISCONNECTING) facade.disconnect(other)
                     if (facade.state(other) != HostLinkState.DISCONNECTED &&
-                        awaitEvent(other, before, disconnectTimeoutMillis, setOf(HostLinkState.DISCONNECTED)) == null
+                        awaitEvent(other, before, disconnectTimeoutMillis, setOf(HostLinkState.DISCONNECTED)) == null &&
+                        facade.state(other) != HostLinkState.DISCONNECTED
                     ) return@withLock ConnectionResult.DISCONNECT_TIMED_OUT
                 }
             }
             if (facade.state(address) == HostLinkState.DISCONNECTING) {
                 val before = events.value[address]?.revision ?: 0
                 if (facade.state(address) != HostLinkState.DISCONNECTED &&
-                    awaitEvent(address, before, disconnectTimeoutMillis, setOf(HostLinkState.DISCONNECTED)) == null
+                    awaitEvent(address, before, disconnectTimeoutMillis, setOf(HostLinkState.DISCONNECTED)) == null &&
+                    facade.state(address) != HostLinkState.DISCONNECTED
                 ) return@withLock ConnectionResult.DISCONNECT_TIMED_OUT
             }
 
@@ -94,7 +107,7 @@ internal class HidConnectionCoordinator(
             if (accepted) {
                 val state = awaitEvent(address, before, connectionTimeoutMillis,
                     setOf(HostLinkState.CONNECTED, HostLinkState.DISCONNECTED))
-                if (state == HostLinkState.CONNECTED) return@withLock ConnectionResult.CONNECTED
+                if (state == HostLinkState.CONNECTED || facade.state(address) == HostLinkState.CONNECTED) return@withLock ConnectionResult.CONNECTED
                 result = ConnectionResult.TIMED_OUT
             } else {
                 result = ConnectionResult.COMMAND_REJECTED

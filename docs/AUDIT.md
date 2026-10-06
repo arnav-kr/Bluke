@@ -1570,3 +1570,118 @@ all mode-pair descriptor equality/restart decisions, legacy descriptor fields
 Android Z/Rz and Rx/Rz values, preserved desktop mappings and neutral reports.
 Physical Android, Windows and Linux host verification remains required; unit
 tests and Robolectric API tests do not substitute for those devices.
+
+## 2026-10-06 — Connection/disconnection recovery after shared-descriptor validation
+
+The user reports all three controller modes work on their intended hosts. Preserve
+the shared descriptor, report mappings, input-release logic and foreground session
+service. These files are unchanged in this patch; no descriptor revision increase
+or pairing migration is required from the shared-descriptor test build.
+
+### Supplied oscillation evidence
+
+The supplied older log shows request 1 trying host A twice, a different host B
+becoming CONNECTED, then host B transitioning through DISCONNECTING/DISCONNECTED
+as request 1 attempts A again. Request 2 subsequently selects host C, which connects
+and accepts input reports. This log predates the shared descriptor (12-byte gamepad
+payloads). It contains neither timestamps nor disconnect reason codes.
+
+ASSUMPTION: request 1 was automatic reconnect, based on its position following
+registration. The log does not encode request origin, so this cannot be proven.
+The coordinator's old policy does explicitly disconnect other hosts during retry.
+New diagnostic messages record whether a request is automatic. Do not describe
+this excerpt as proof of a perpetual timed loop or a specific radio/HCI cause.
+
+### Repairs
+
+- Ordinary Disconnect now runs the connection coordinator's bounded disconnect
+  operation, without unregistering HID. Final UI state is reconciled against the
+  proxy even if the disconnect callback is absent. Failure preserves the actual
+  connection and allows another attempt rather than claiming success.
+- Disconnect and Restart are single-flight operations. Recovery cancels/joins
+  startup registration before proceeding. Connect/Pair cannot launch competing
+  work during recovery, and a cancelled old Connect cannot issue a command for
+  a target that is no longer selected.
+- Known accepted registration attempts must confirm unregistration for **all**
+  recovery paths, not only descriptor switches. Callback ownership is retained
+  until confirmation. Unknown/dead-process registrations retain the existing
+  best-effort cleanup because no callback owned by this process exists for them.
+- The unlimited post-timeout registration wait is removed. A timeout releases
+  the pending request and presents recovery. A late registration callback can
+  restore readiness, but no foreground service is held indefinitely waiting for
+  that callback. Manual Connect remains available after recovery.
+- Automatic reconnect cannot disconnect another busy host and yields to an
+  incoming established connection. Manual host selection still takes precedence
+  while its request is pending; completed selections no longer reject later
+  connections made through Android Settings. Auto-reconnect is bounded per
+  foreground interval instead of being repeatedly scheduled by status callbacks.
+- Proxy/registration loss clears stale connected UI and publishes a recoverable
+  error. Expected cleanup callbacks do not briefly publish unrelated Idle errors.
+  The header distinguishes Starting HID/Connecting from Offline and exposes
+  Restart for HID failures.
+- Bounded connect/disconnect waits reconcile proxy state as well as callbacks,
+  including a final check at timeout. A Boolean command result is not treated as
+  completion.
+
+The service and its background/lock-screen retention policy remain unchanged;
+bounded pending-state cleanup prevents failed requests keeping it alive forever.
+No pairing PIN bypass, hidden pairing API, SDK/dependency/signing change or
+controller mapping change was made. A PIN-entry prompt can be a valid OS pairing
+variant, and this log supplies no evidence to diagnose a specific prompt failure.
+
+### Verification and limits
+
+New fake-HID Robolectric tests invoke the production manager rather than only
+coordinator helpers: Settings-first Connect, missing disconnect callbacks,
+rejected Disconnect followed by retry, Settings reconnection after Disconnect,
+rejected registration cleanup, repeated Restart during delayed cleanup, and
+unexpected registration loss. Policy/coordinator tests cover automatic reconnect
+yielding to another host and missing-callback proxy reconciliation.
+
+An initial regression test exposed the timeout-boundary case:
+
+```text
+HidConnectionCoordinatorTest > proxyStateCanConfirmDisconnectWithoutCallback FAILED
+167 tests completed, 1 failed
+BUILD FAILED in 2m 58s
+```
+
+The boundary was repaired by rechecking actual proxy state after the wait expires.
+The first manager-test compile also caught incorrect use of a generic argument
+on Robolectric's non-generic getApplication API; that test setup was corrected.
+The focused manager/coordinator run then passed:
+
+```text
+BUILD SUCCESSFUL in 2m 37s
+30 actionable tasks: 5 executed, 25 up-to-date
+```
+
+Physical verification remains required: connect from Bluetooth Settings then
+tap Connect in Bluke; connect through Scan; disconnect repeatedly; reconnect
+another host; interrupt pairing; lose/recover registration; background/lock and
+resume. Keep two previously paired hosts nearby to retest the supplied conflict.
+Firmware that never acknowledges unregistration can still require a Bluetooth
+toggle; the app must show a bounded recoverable error, not silently claim success.
+
+Final verification against the completed production changes:
+
+```text
+> .\gradlew.bat assembleDebug testDebugUnitTest lintDebug --console=plain
+BUILD SUCCESSFUL in 5m 4s
+56 actionable tasks: 14 executed, 42 up-to-date
+Configuration cache entry reused.
+
+JUnit XML totals: 174 tests, 0 failures, 0 errors, 0 skipped.
+Lint XML: 0 errors, 22 warnings.
+```
+
+Lint warning IDs/counts: AndroidGradlePluginVersion (1), GradleDependency (10),
+NewerVersionAvailable (8), ObsoleteSdkInt (1), OldTargetApi (1), UseKtx (1).
+No new Kotlin compiler warning was emitted by the final run. No dependency or
+SDK upgrade was included in this connection repair.
+
+The initial sandboxed ADB probe failed with `Cannot mkdir '\.android': Permission
+denied`; the permitted host-side retry succeeded and returned an empty
+`List of devices attached`. No physical OEM/host matrix was executed here.
+The new installable artifact is `bluke-1.1-connection-recovery.apk`; the previous
+`bluke-1.1-shared-descriptor-test.apk` remains available for comparison/rollback.

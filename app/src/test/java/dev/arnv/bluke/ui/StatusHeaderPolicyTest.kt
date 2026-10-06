@@ -4,9 +4,17 @@ import dev.arnv.bluke.bluetooth.HidFailure
 import dev.arnv.bluke.bluetooth.HidLifecycleState
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
+import org.junit.Assert.assertEquals
+import dev.arnv.bluke.bluetooth.BluetoothState
 import org.junit.Test
 
 class StatusHeaderPolicyTest {
+    @Test fun recoveryIsNotLabelledOfflineUntilItActuallyFails() {
+        assertEquals("Starting HID", hidStatusLabel(BluetoothState.ReadyDisconnected, HidLifecycleState.Registering(1)))
+        val failure = HidLifecycleState.Error(HidFailure.REGISTRATION_TIMEOUT)
+        assertEquals("Offline", hidStatusLabel(BluetoothState.Connected("stale"), failure))
+        assertTrue(shouldOfferHidRestart(failure))
+    }
     @Test
     fun restartIsHiddenForNormalAndTransientLifecycleStates() {
         assertFalse(shouldOfferHidRestart(HidLifecycleState.Idle))

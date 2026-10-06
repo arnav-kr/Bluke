@@ -46,6 +46,18 @@ internal fun shouldOfferHidRestart(state: HidLifecycleState): Boolean =
         HidFailure.CONNECTION_REJECTED -> false
     }
 
+internal fun hidStatusLabel(state: BluetoothState, lifecycle: HidLifecycleState): String = when {
+    state is BluetoothState.PermissionRequired -> "Permission Denied"
+    state is BluetoothState.BluetoothOff -> "Bluetooth Off"
+    lifecycle is HidLifecycleState.BindingProxy -> "Starting HID"
+    lifecycle is HidLifecycleState.Registering -> "Starting HID"
+    lifecycle is HidLifecycleState.Connecting -> "Connecting"
+    shouldOfferHidRestart(lifecycle) -> "Offline"
+    state is BluetoothState.Connected -> "Connected"
+    state is BluetoothState.PairingMode -> "Ready"
+    else -> "Offline"
+}
+
 @Composable
 internal fun StatusHeaderCard(
     bluetoothState: BluetoothState,
@@ -103,12 +115,7 @@ internal fun StatusHeaderCard(
                         Box(modifier = Modifier.size(8.dp).clip(CircleShape).background(statusColor))
                         Spacer(modifier = Modifier.width(8.dp))
                         Text(
-                            text = when (bluetoothState) {
-                                is BluetoothState.Connected -> "Connected"
-                                is BluetoothState.PairingMode -> "Ready"
-                                is BluetoothState.PermissionRequired -> "Permission Denied"
-                                else -> "Offline"
-                            },
+                            text = hidStatusLabel(bluetoothState, hidLifecycleState),
                             style = MaterialTheme.typography.labelMedium,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.onSurface
