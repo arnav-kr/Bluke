@@ -3,7 +3,7 @@
 All notable user-facing changes and improvements to Bluke are documented in this file.
 For detailed usage instructions, see the [Usage Guide](docs/USAGE.md).
 
-## [1.1.0] - 2026-10-xx
+## [1.1.0] - 2026-10-09
 
 > [!IMPORTANT]
 > **One-time re-pairing required:** Bluke 1.1 introduces a unified Bluetooth HID controller descriptor. When upgrading from 1.0.x, please unpair/forget Bluke on **both** devices and pair fresh using **Scan** in Bluke. This ensures your host operating system caches the updated descriptor correctly.
