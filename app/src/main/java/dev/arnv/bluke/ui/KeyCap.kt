@@ -13,6 +13,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
@@ -25,6 +26,8 @@ fun KeyCap(
     isPressed: Boolean,
     keyBgColor: Color,
     legendColor: Color,
+    legendScale: Float = 1f,
+    isSelected: Boolean = false,
     baseUnitWidth: androidx.compose.ui.unit.Dp,
     modifier: Modifier = Modifier,
     glowColor: Color? = null
@@ -46,6 +49,10 @@ fun KeyCap(
             .height(height)
             .testTag("key_$legend")
             .padding(1.dp)
+            .then(
+                if (isSelected) Modifier.border(2.dp, Color(0xFF00BCD4), RoundedCornerShape(outerRadius))
+                else Modifier
+            )
     ) {
         // Underglow if active
         if (glowColor != null && glowColor != Color.Transparent) {
@@ -83,22 +90,42 @@ fun KeyCap(
                 .border(1.dp, Color.Black.copy(alpha = 0.15f), RoundedCornerShape(innerRadius)),
             contentAlignment = Alignment.Center
         ) {
-            val mainFontSize = (baseUnitWidth.value * 0.24f).coerceIn(7f, 13f).sp
-            val shiftFontSize = (baseUnitWidth.value * 0.17f).coerceIn(5f, 9f).sp
+            val keyWidthRatio = (width.value / baseUnitWidth.value).coerceAtLeast(1f)
+            val normalizedLegendLength = legend.length / keyWidthRatio
+            val legendLengthScale = when {
+                normalizedLegendLength >= 8f -> 0.62f
+                normalizedLegendLength >= 6f -> 0.74f
+                normalizedLegendLength >= 4.5f -> 0.88f
+                else -> 1f
+            }
+            val shiftedLengthScale = when {
+                shiftedLegend.length >= 4 -> 0.72f
+                else -> 1f
+            }
+            val mainFontSize = (
+                (baseUnitWidth.value * 0.24f).coerceIn(3f, 13f) *
+                    legendScale * legendLengthScale
+                ).sp
+            val shiftFontSize = (
+                (baseUnitWidth.value * 0.17f).coerceIn(2.5f, 9f) *
+                    legendScale * shiftedLengthScale
+                ).sp
 
             if (shiftedLegend.isNotEmpty()) {
                 // Stack legends inside a column so the secondary text sits exactly slightly above the primary with perfect alignment
                 Column(
                     modifier = Modifier
                         .fillMaxSize()
-                        .offset(y = 3.dp)
+                        .offset(y = (baseUnitWidth.value * 0.055f).coerceAtMost(3f).dp)
                         .padding(
                             start = (baseUnitWidth.value * 0.08f).dp,
                             end = (baseUnitWidth.value * 0.08f).dp,
                             top = 0.dp,
                             bottom = 0.dp
                         ),
-                    verticalArrangement = Arrangement.spacedBy(2.dp),
+                    verticalArrangement = Arrangement.spacedBy(
+                        (baseUnitWidth.value * 0.03f).coerceAtMost(2f).dp,
+                    ),
                     horizontalAlignment = Alignment.Start
                 ) {
                     Text(
@@ -107,6 +134,9 @@ fun KeyCap(
                         color = legendColor.copy(alpha = 0.82f),
                         fontWeight = FontWeight.Bold,
                         fontFamily = FontFamily.SansSerif,
+                        maxLines = 1,
+                        softWrap = false,
+                        overflow = TextOverflow.Clip,
                         style = androidx.compose.ui.text.TextStyle(
                             platformStyle = androidx.compose.ui.text.PlatformTextStyle(includeFontPadding = false)
                         )
@@ -117,6 +147,9 @@ fun KeyCap(
                         color = legendColor,
                         fontWeight = FontWeight.Bold,
                         fontFamily = FontFamily.SansSerif,
+                        maxLines = 1,
+                        softWrap = false,
+                        overflow = TextOverflow.Clip,
                         style = androidx.compose.ui.text.TextStyle(
                             platformStyle = androidx.compose.ui.text.PlatformTextStyle(includeFontPadding = false)
                         )
@@ -126,11 +159,16 @@ fun KeyCap(
                 // Alphabetical or single legend, centered
                 Text(
                     text = legend,
-                    fontSize = if (legend.length > 3) (mainFontSize.value * 0.82f).sp else mainFontSize,
+                    fontSize = mainFontSize,
                     color = legendColor,
                     fontWeight = FontWeight.Bold,
                     fontFamily = FontFamily.SansSerif,
-                    modifier = Modifier.padding(2.dp)
+                    maxLines = 1,
+                    softWrap = false,
+                    overflow = TextOverflow.Clip,
+                    modifier = Modifier.padding(
+                        (baseUnitWidth.value * 0.04f).coerceIn(0.5f, 2f).dp,
+                    ),
                 )
             }
         }

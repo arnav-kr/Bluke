@@ -1,0 +1,7 @@
+• New Multimedia remote mode with presentation and volume controls
+• Live Native, Android, and Web gamepad profile switching
+• 6 new switch sounds + custom Mechvibes ZIP pack import
+• Added AZERTY, QWERTZ, Dvorak, Colemak, and Russian layouts
+• Custom keyboard theme editor with RGB color picker
+• Restored reliable touchpad tap-and-drag
+• Note: Please forget and re-pair devices once after updating

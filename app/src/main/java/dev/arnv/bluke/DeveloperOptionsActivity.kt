@@ -20,6 +20,7 @@ import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.core.net.toUri
+import androidx.core.content.edit
 import dev.arnv.bluke.ui.SettingsCardGroup
 import dev.arnv.bluke.ui.SettingsItemData
 import dev.arnv.bluke.ui.theme.MyApplicationTheme
@@ -39,6 +40,8 @@ class DeveloperOptionsActivity : ComponentActivity() {
                 var mockUpdatePopup by remember { mutableStateOf(sharedPrefs.getBoolean("mock_update_popup", false)) }
                 var mockBtDisabled by remember { mutableStateOf(sharedPrefs.getBoolean("mock_bt_disabled", false)) }
                 var mockUnsupported by remember { mutableStateOf(sharedPrefs.getBoolean("mock_device_unsupported", false)) }
+                var mockGamepadGuide by remember { mutableStateOf(sharedPrefs.getBoolean("mock_gamepad_guide", false)) }
+                var mockTroubleshootingNudge by remember { mutableStateOf(sharedPrefs.getBoolean("mock_troubleshooting_nudge", false)) }
 
                 // Easter egg states
                 val catEmojis = listOf("🐱", "😹", "😼")
@@ -113,15 +116,17 @@ class DeveloperOptionsActivity : ComponentActivity() {
                                 checked = isDevMode,
                                 onCheckedChange = { 
                                     isDevMode = it
-                                    sharedPrefs.edit().putBoolean("is_developer_mode", it).apply()
+                                    sharedPrefs.edit { putBoolean("is_developer_mode", it) }
                                     if (!it) {
                                         // Auto turn off all mocks if dev mode disabled
-                                        sharedPrefs.edit()
-                                            .putBoolean("mock_update_popup", false)
-                                            .putBoolean("mock_bt_disabled", false)
-                                            .putBoolean("mock_device_unsupported", false)
-                                            .putBoolean("mock_hid_unsupported", false)
-                                            .apply()
+                                        sharedPrefs.edit {
+                                            putBoolean("mock_update_popup", false)
+                                            putBoolean("mock_bt_disabled", false)
+                                            putBoolean("mock_device_unsupported", false)
+                                            putBoolean("mock_hid_unsupported", false)
+                                            putBoolean("mock_gamepad_guide", false)
+                                            putBoolean("mock_troubleshooting_nudge", false)
+                                        }
                                         finish() // Exit screen
                                     }
                                 }
@@ -149,10 +154,36 @@ class DeveloperOptionsActivity : ComponentActivity() {
                                             checked = mockUpdatePopup,
                                             onCheckedChange = {
                                                 mockUpdatePopup = it
-                                                sharedPrefs.edit().putBoolean("mock_update_popup", it).apply()
+                                                sharedPrefs.edit { putBoolean("mock_update_popup", it) }
                                             }
                                         )
                                     }
+                                ),
+                                SettingsItemData(
+                                    title = "Force Gamepad Guide",
+                                    subtitle = "Shows the first-use controller guidance on Home",
+                                    action = {
+                                        Switch(
+                                            checked = mockGamepadGuide,
+                                            onCheckedChange = {
+                                                mockGamepadGuide = it
+                                                sharedPrefs.edit { putBoolean("mock_gamepad_guide", it) }
+                                            },
+                                        )
+                                    },
+                                ),
+                                SettingsItemData(
+                                    title = "Force Troubleshooting Nudge",
+                                    subtitle = "Shows the contextual connection-help card on Home",
+                                    action = {
+                                        Switch(
+                                            checked = mockTroubleshootingNudge,
+                                            onCheckedChange = {
+                                                mockTroubleshootingNudge = it
+                                                sharedPrefs.edit { putBoolean("mock_troubleshooting_nudge", it) }
+                                            },
+                                        )
+                                    },
                                 ),
                                 SettingsItemData(
                                     title = "Home Screen Error State",
@@ -180,28 +211,28 @@ class DeveloperOptionsActivity : ComponentActivity() {
                                                                 "None" -> {
                                                                     mockBtDisabled = false
                                                                     mockUnsupported = false
-                                                                    sharedPrefs.edit().putBoolean("mock_hid_unsupported", false).apply()
+                                                                    sharedPrefs.edit { putBoolean("mock_hid_unsupported", false) }
                                                                 }
                                                                 "Bluetooth Disabled" -> {
                                                                     mockBtDisabled = true
                                                                     mockUnsupported = false
-                                                                    sharedPrefs.edit().putBoolean("mock_hid_unsupported", false).apply()
+                                                                    sharedPrefs.edit { putBoolean("mock_hid_unsupported", false) }
                                                                 }
                                                                 "Device Unsupported" -> {
                                                                     mockBtDisabled = false
                                                                     mockUnsupported = true
-                                                                    sharedPrefs.edit().putBoolean("mock_hid_unsupported", false).apply()
+                                                                    sharedPrefs.edit { putBoolean("mock_hid_unsupported", false) }
                                                                 }
                                                                 "HID Unsupported" -> {
                                                                     mockBtDisabled = false
                                                                     mockUnsupported = false
-                                                                    sharedPrefs.edit().putBoolean("mock_hid_unsupported", true).apply()
+                                                                    sharedPrefs.edit { putBoolean("mock_hid_unsupported", true) }
                                                                 }
                                                             }
-                                                            sharedPrefs.edit()
-                                                                .putBoolean("mock_bt_disabled", mockBtDisabled)
-                                                                .putBoolean("mock_device_unsupported", mockUnsupported)
-                                                                .apply()
+                                                            sharedPrefs.edit {
+                                                                putBoolean("mock_bt_disabled", mockBtDisabled)
+                                                                putBoolean("mock_device_unsupported", mockUnsupported)
+                                                            }
                                                             expanded = false
                                                         }
                                                     )

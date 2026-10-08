@@ -2,6 +2,5 @@
 <resources>
 
     <style name="Theme.MyApplication" parent="android:Theme.DeviceDefault.Light.NoActionBar">
-        <item name="android:windowSplashScreenBackground">?android:attr/colorBackground</item>
     </style>
 </resources>

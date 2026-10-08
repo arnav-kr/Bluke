@@ -9,6 +9,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.HelpOutline
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -72,26 +73,61 @@ class SettingsActivity : ComponentActivity() {
                     ) {
                         Spacer(Modifier.height(8.dp))
                         SettingsCardGroup(
+                            title = "Personalization",
                             items = listOf(
                                 SettingsItemData(
                                     title = "Look & Feel",
-                                    subtitle = "Dynamic colors, Dark theme, Haptics",
+                                    subtitle = "App colors, dark theme, haptics, and key sounds",
                                     icon = { Icon(Icons.Default.ColorLens, null, tint = MaterialTheme.colorScheme.primary) },
                                     onClick = { 
                                         startActivity(Intent(this@SettingsActivity, LookAndFeelActivity::class.java))
                                     }
                                 ),
                                 SettingsItemData(
+                                    title = "Keyboard",
+                                    subtitle = "Typing behavior, layouts, themes, and key sounds",
+                                    icon = { Icon(Icons.Default.Keyboard, null, tint = MaterialTheme.colorScheme.primary) },
+                                    onClick = {
+                                        startActivity(Intent(this@SettingsActivity, KeyboardSettingsActivity::class.java))
+                                    }
+                                ),
+                                SettingsItemData(
+                                    title = "Controller",
+                                    subtitle = "Gamepad behavior and compatibility",
+                                    icon = { Icon(Icons.Default.Gamepad, null, tint = MaterialTheme.colorScheme.primary) },
+                                    onClick = {
+                                        startActivity(Intent(this@SettingsActivity, ControllerSettingsActivity::class.java))
+                                    }
+                                ),
+                            )
+                        )
+                        SettingsCardGroup(
+                            title = "Controls & connection",
+                            items = listOf(
+                                SettingsItemData(
                                     title = "Behavior",
-                                    subtitle = "Modify certain behavior of the app",
+                                    subtitle = "Bluetooth discovery, reconnect, and remote controls",
                                     icon = { Icon(Icons.Default.Settings, null, tint = MaterialTheme.colorScheme.primary) },
                                     onClick = { 
                                         startActivity(Intent(this@SettingsActivity, BehaviorActivity::class.java))
                                     }
                                 ),
+                            )
+                        )
+                        SettingsCardGroup(
+                            title = "Support",
+                            items = listOf(
+                                SettingsItemData(
+                                    title = "Help & troubleshooting",
+                                    subtitle = "Pairing repair, controller setup, browser games, and limitations",
+                                    icon = { Icon(Icons.AutoMirrored.Filled.HelpOutline, null, tint = MaterialTheme.colorScheme.primary) },
+                                    onClick = {
+                                        startActivity(Intent(this@SettingsActivity, HelpActivity::class.java))
+                                    }
+                                ),
                                 SettingsItemData(
                                     title = "About",
-                                    subtitle = "Contributors and support",
+                                    subtitle = "Version, contributors, licenses, and support",
                                     icon = { Icon(Icons.Default.Info, null, tint = MaterialTheme.colorScheme.primary) },
                                     onClick = { 
                                         startActivity(Intent(this@SettingsActivity, AboutActivity::class.java))
@@ -100,8 +136,8 @@ class SettingsActivity : ComponentActivity() {
                             ).let { baseList ->
                                 if (isDevMode) {
                                     baseList + SettingsItemData(
-                                        title = "Developer Options",
-                                        subtitle = "App testing and debugging",
+                                        title = "Developer options",
+                                        subtitle = "Testing and debugging controls",
                                         icon = { Icon(Icons.Default.Code, null, tint = MaterialTheme.colorScheme.primary) },
                                         onClick = { 
                                             startActivity(Intent(this@SettingsActivity, DeveloperOptionsActivity::class.java))

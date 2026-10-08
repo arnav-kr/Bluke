@@ -7,6 +7,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.io.File
 import java.io.FileWriter
@@ -32,6 +33,9 @@ object DeveloperLogManager {
     private var prefs: SharedPreferences? = null
     private var autoSaveFile: File? = null
 
+    val isEnabled: Boolean
+        get() = prefs?.getBoolean("is_developer_mode", false) ?: false
+
     // Call this once on app startup or in AboutActivity when toggled
     fun init(context: Context) {
         prefs = context.getSharedPreferences("app_prefs", Context.MODE_PRIVATE)
@@ -54,18 +58,12 @@ object DeveloperLogManager {
 
     fun log(tag: String, message: String, type: LogType = LogType.INFO) {
         // Zero-cost abstraction for normal users
-        val isDevMode = prefs?.getBoolean("is_developer_mode", false) ?: false
-        if (!isDevMode) return
+        if (!isEnabled) return
 
         val entry = LogEntry(tag = tag, message = message, type = type)
         
         // Update in-memory state for the LogViewer UI
-        val currentList = _logs.value.toMutableList()
-        currentList.add(entry)
-        if (currentList.size > MAX_LOG_COUNT) {
-            currentList.removeAt(0)
-        }
-        _logs.value = currentList
+        _logs.update { current -> (current + entry).takeLast(MAX_LOG_COUNT) }
 
         // Optionally autosave to file for live ADB tailing
         autoSaveFile?.let { file ->

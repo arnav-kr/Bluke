@@ -26,6 +26,7 @@ import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
+import androidx.core.content.edit
 import dev.arnv.bluke.ui.theme.MyApplicationTheme
 import dev.arnv.bluke.utils.DeveloperLogManager
 import dev.arnv.bluke.utils.LogType
@@ -83,7 +84,7 @@ class DeveloperLogsActivity : ComponentActivity() {
                                 }
                                 IconButton(onClick = {
                                     val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                                    val logText = filteredLogs.joinToString("\n") { "[${it.tag}] ${it.message}" }
+                                    val logText = filteredLogs.joinToString("\n") { "[${it.timestamp}] [${it.type}] [${it.tag}] ${it.message}" }
                                     val clip = ClipData.newPlainText("Developer Logs", logText)
                                     clipboard.setPrimaryClip(clip)
                                     Toast.makeText(context, "Copied to clipboard", Toast.LENGTH_SHORT).show()
@@ -96,7 +97,7 @@ class DeveloperLogsActivity : ComponentActivity() {
                                             val downloadsDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
                                             val timeStamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
                                             val file = File(downloadsDir, "bluke_logs_$timeStamp.txt")
-                                            val logText = filteredLogs.joinToString("\n") { "[${it.tag}] ${it.message}" }
+                                            val logText = filteredLogs.joinToString("\n") { "[${it.timestamp}] [${it.type}] [${it.tag}] ${it.message}" }
                                             FileWriter(file).use { it.write(logText) }
                                             Toast.makeText(context, "Saved to Downloads: ${file.name}", Toast.LENGTH_LONG).show()
                                         } catch (e: Exception) {
@@ -129,7 +130,7 @@ class DeveloperLogsActivity : ComponentActivity() {
                                 checked = isAutoSaveEnabled,
                                 onCheckedChange = { 
                                     isAutoSaveEnabled = it
-                                    sharedPrefs.edit().putBoolean("dev_auto_save_logs", it).apply()
+                                    sharedPrefs.edit { putBoolean("dev_auto_save_logs", it) }
                                     DeveloperLogManager.updateAutoSaveConfig(context)
                                 }
                             )

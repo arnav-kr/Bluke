@@ -3,15 +3,18 @@ package dev.arnv.bluke.ui
 import android.annotation.SuppressLint
 import android.content.Context
 import android.content.SharedPreferences
+import android.content.Intent
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.withTransform
 import android.os.VibrationEffect
 import android.os.Vibrator
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
@@ -43,10 +46,19 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.edit
 import dev.arnv.bluke.R
+import dev.arnv.bluke.ControllerSettingsActivity
+import dev.arnv.bluke.QuickCycleActivity
 import dev.arnv.bluke.bluetooth.BluetoothKeyboardManager
+import dev.arnv.bluke.bluetooth.GAMEPAD_DPAD_MODE_PREFERENCE
+import dev.arnv.bluke.bluetooth.GAMEPAD_GUIDE_BUTTON_INDEX
+import dev.arnv.bluke.bluetooth.GAMEPAD_SHARE_BUTTON_INDEX
+import dev.arnv.bluke.bluetooth.GAMEPAD_TOUCHPAD_BUTTON_INDEX
+import dev.arnv.bluke.bluetooth.GamepadDpadOutputMode
+import dev.arnv.bluke.bluetooth.GamepadModeSwitchState
+import dev.arnv.bluke.data.LayoutRepository
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
-import kotlin.math.abs
 import kotlin.math.roundToInt
 import kotlin.math.sqrt
 import kotlin.time.Duration.Companion.milliseconds
@@ -73,11 +85,13 @@ private data class ConsoleConfig(
     val selectButton: ButtonDef,
     val startButton: ButtonDef,
     val guideButton: ButtonDef,
-    val shareButton: ButtonDef = ButtonDef("SHARE", 17),
+    val shareButton: ButtonDef = ButtonDef("SHARE", GAMEPAD_SHARE_BUTTON_INDEX),
     val leftStickAboveDpad: Boolean = true,
     val hasTouchpad: Boolean = false,
     val touchpadMappingId: Int = -1
 )
+
+private const val GAMEPAD_REPORT_INTERVAL_MILLIS = 8L
 
 private val CONSOLES = listOf(
     ConsoleConfig(
@@ -93,8 +107,8 @@ private val CONSOLES = listOf(
         rightTrigger = ButtonDef("RT", 7),
         selectButton = ButtonDef("VIEW", 8),
         startButton = ButtonDef("MENU", 9),
-        guideButton = ButtonDef("XBOX", 16, Color(0xFF2E7D32)),
-        shareButton = ButtonDef("SHARE", 17),
+        guideButton = ButtonDef("XBOX", GAMEPAD_GUIDE_BUTTON_INDEX, Color(0xFF2E7D32)),
+        shareButton = ButtonDef("SHARE", GAMEPAD_SHARE_BUTTON_INDEX),
         leftStickAboveDpad = true
     ),
     ConsoleConfig(
@@ -110,17 +124,18 @@ private val CONSOLES = listOf(
         rightTrigger = ButtonDef("R2", 7),
         selectButton = ButtonDef("CREATE", 8),
         startButton = ButtonDef("OPTIONS", 9),
-        guideButton = ButtonDef("PS", 16, Color(0xFF1565C0)),
-        shareButton = ButtonDef("SHARE", 17),
+        guideButton = ButtonDef("PS", GAMEPAD_GUIDE_BUTTON_INDEX, Color(0xFF1565C0)),
+        shareButton = ButtonDef("SHARE", GAMEPAD_SHARE_BUTTON_INDEX),
         leftStickAboveDpad = false,
         hasTouchpad = true,
-        touchpadMappingId = 18
+        touchpadMappingId = GAMEPAD_TOUCHPAD_BUTTON_INDEX
     )
 )
 
 // ── Main View ──
 
 @SuppressLint("MissingPermission")
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun GamepadView(
     btManager: BluetoothKeyboardManager,
@@ -132,14 +147,35 @@ fun GamepadView(
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    val layoutRepository = remember(context) { LayoutRepository(context) }
+    val pendingLayoutValues = remember { mutableMapOf<String, Float>() }
 
     var selectedIndex by rememberSaveable { mutableIntStateOf(0) }
     val config = CONSOLES[selectedIndex]
 
     var isEditMode by rememberSaveable { mutableStateOf(false) }
 
-    var isVibrationEnabled by remember {
+    var isVibrationEnabled by remember(sharedPrefs) {
         mutableStateOf(sharedPrefs.getBoolean("gamepad_vibration_enabled", true))
+    }
+    var dpadOutputMode by remember(sharedPrefs) {
+        mutableStateOf(
+            GamepadDpadOutputMode.fromPreference(
+                sharedPrefs.getString(GAMEPAD_DPAD_MODE_PREFERENCE, null)
+            )
+        )
+    }
+
+    DisposableEffect(sharedPrefs) {
+        val listener = SharedPreferences.OnSharedPreferenceChangeListener { preferences, key ->
+            if (key == GAMEPAD_DPAD_MODE_PREFERENCE) {
+                dpadOutputMode = GamepadDpadOutputMode.fromPreference(
+                    preferences.getString(GAMEPAD_DPAD_MODE_PREFERENCE, null)
+                )
+            }
+        }
+        sharedPrefs.registerOnSharedPreferenceChangeListener(listener)
+        onDispose { sharedPrefs.unregisterOnSharedPreferenceChangeListener(listener) }
     }
 
     val triggerVibration = { milliseconds: Long ->
@@ -151,7 +187,13 @@ fun GamepadView(
     }
 
     val saveLayoutPref = { key: String, value: Float ->
-        sharedPrefs.edit { putFloat(key, value) }
+        pendingLayoutValues[key] = value
+    }
+    val commitLayoutPrefs = {
+        val values = pendingLayoutValues.toMap()
+        pendingLayoutValues.clear()
+        scope.launch { layoutRepository.save(values) }
+        Unit
     }
 
     // Positions & Scales loaded dynamically per console layout (Xbox Series / PlayStation 5)
@@ -202,6 +244,47 @@ fun GamepadView(
     var startOffsetX by remember(config.id) { mutableFloatStateOf(sharedPrefs.getFloat("${config.id}_start_x", 0f)) }
     var startOffsetY by remember(config.id) { mutableFloatStateOf(sharedPrefs.getFloat("${config.id}_start_y", 0f)) }
     var startScale by remember(config.id) { mutableFloatStateOf(sharedPrefs.getFloat("${config.id}_start_scale", 1f)) }
+
+    LaunchedEffect(config.id, layoutRepository) {
+        val values = layoutRepository.load(config.id)
+        fun stored(suffix: String, current: Float) = values["${config.id}_$suffix"] ?: current
+        dpadOffsetX = stored("dpad_x", dpadOffsetX)
+        dpadOffsetY = stored("dpad_y", dpadOffsetY)
+        dpadScale = stored("dpad_scale", dpadScale)
+        leftStickOffsetX = stored("left_stick_x", leftStickOffsetX)
+        leftStickOffsetY = stored("left_stick_y", leftStickOffsetY)
+        leftStickScale = stored("left_stick_scale", leftStickScale)
+        rightStickOffsetX = stored("right_stick_x", rightStickOffsetX)
+        rightStickOffsetY = stored("right_stick_y", rightStickOffsetY)
+        rightStickScale = stored("right_stick_scale", rightStickScale)
+        faceButtonsOffsetX = stored("face_buttons_x", faceButtonsOffsetX)
+        faceButtonsOffsetY = stored("face_buttons_y", faceButtonsOffsetY)
+        faceButtonsScale = stored("face_buttons_scale", faceButtonsScale)
+        leftTriggerOffsetX = stored("left_trigger_x", leftTriggerOffsetX)
+        leftTriggerOffsetY = stored("left_trigger_y", leftTriggerOffsetY)
+        leftTriggerScale = stored("left_trigger_scale", leftTriggerScale)
+        leftBumperOffsetX = stored("left_bumper_x", leftBumperOffsetX)
+        leftBumperOffsetY = stored("left_bumper_y", leftBumperOffsetY)
+        leftBumperScale = stored("left_bumper_scale", leftBumperScale)
+        rightTriggerOffsetX = stored("right_trigger_x", rightTriggerOffsetX)
+        rightTriggerOffsetY = stored("right_trigger_y", rightTriggerOffsetY)
+        rightTriggerScale = stored("right_trigger_scale", rightTriggerScale)
+        rightBumperOffsetX = stored("right_bumper_x", rightBumperOffsetX)
+        rightBumperOffsetY = stored("right_bumper_y", rightBumperOffsetY)
+        rightBumperScale = stored("right_bumper_scale", rightBumperScale)
+        guideOffsetX = stored("guide_x", guideOffsetX)
+        guideOffsetY = stored("guide_y", guideOffsetY)
+        guideScale = stored("guide_scale", guideScale)
+        selectOffsetX = stored("select_x", selectOffsetX)
+        selectOffsetY = stored("select_y", selectOffsetY)
+        selectScale = stored("select_scale", selectScale)
+        shareOffsetX = stored("share_x", shareOffsetX)
+        shareOffsetY = stored("share_y", shareOffsetY)
+        shareScale = stored("share_scale", shareScale)
+        startOffsetX = stored("start_x", startOffsetX)
+        startOffsetY = stored("start_y", startOffsetY)
+        startScale = stored("start_scale", startScale)
+    }
 
     val isModified = remember(
         config.id,
@@ -331,54 +414,130 @@ fun GamepadView(
             remove("${config.id}_start_y")
             remove("${config.id}_start_scale")
         }
+        pendingLayoutValues.clear()
+        scope.launch { layoutRepository.clear(config.id) }
             
         triggerVibration(50)
     }
 
     val connectedDevNow by btManager.connectedDevice.collectAsState()
+    val modeSwitchState by btManager.gamepadModeSwitchState.collectAsState()
+    val modeSwitchError by btManager.gamepadModeSwitchError.collectAsState()
+    val modeSwitchBusy = modeSwitchState != GamepadModeSwitchState.IDLE
+    if (!modeSwitchBusy && modeSwitchError != null) {
+        AlertDialog(
+            onDismissRequest = { btManager.dismissGamepadModeSwitchError() },
+            title = { Text("Controller mode change interrupted") },
+            text = { Text(modeSwitchError.orEmpty()) },
+            confirmButton = {
+                TextButton(onClick = { btManager.retryGamepadModeSwitch() }) { Text("Retry") }
+            },
+            dismissButton = {
+                TextButton(onClick = { btManager.dismissGamepadModeSwitchError() }) { Text("Close") }
+            },
+        )
+    }
+    if (modeSwitchBusy) {
+        androidx.compose.ui.window.Dialog(
+            onDismissRequest = {},
+            properties = androidx.compose.ui.window.DialogProperties(
+                dismissOnBackPress = false,
+                dismissOnClickOutside = false,
+            ),
+        ) {
+            Surface(shape = MaterialTheme.shapes.extraLarge, tonalElevation = 6.dp) {
+                Column(
+                    modifier = Modifier.padding(28.dp).testTag("gamepad_mode_switch_loading"),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(16.dp),
+                ) {
+                    CircularProgressIndicator()
+                    Text(
+                        if (modeSwitchState == GamepadModeSwitchState.REGISTERING)
+                            "Changing controller mode…" else "Reconnecting to device…",
+                        style = MaterialTheme.typography.titleMedium,
+                        textAlign = TextAlign.Center,
+                    )
+                }
+            }
+        }
+    }
     val isConnected = connectedDevNow != null
-    val deviceName = connectedDevNow?.name ?: "No Host"
+    val deviceName = (connectedDevNow ?: btManager.getReconnectTarget())?.name ?: "No Host"
 
     var buttonMask by remember { mutableIntStateOf(0) }
-    var lastGamepadReportTime by remember { mutableLongStateOf(0L) }
+    var dpadMask by remember { mutableIntStateOf(0) }
     var isGamepadDirty by remember { mutableStateOf(false) }
     
     var leftStickX by remember { mutableFloatStateOf(0f) }
     var leftStickY by remember { mutableFloatStateOf(0f) }
     var rightStickX by remember { mutableFloatStateOf(0f) }
     var rightStickY by remember { mutableFloatStateOf(0f) }
+    LaunchedEffect(modeSwitchBusy) {
+        if (modeSwitchBusy) {
+            buttonMask = 0
+            dpadMask = 0
+            leftStickX = 0f
+            leftStickY = 0f
+            rightStickX = 0f
+            rightStickY = 0f
+            isGamepadDirty = false
+        }
+    }
 
     val transmitGamepadState = { force: Boolean ->
-        val now = System.currentTimeMillis()
-        if (force || now - lastGamepadReportTime >= 8L) {
+        if (force) {
             btManager.sendGamepadReport(
                 buttonMask,
+                dpadMask,
                 leftStickX,
                 leftStickY,
                 rightStickX,
                 rightStickY
             )
-            lastGamepadReportTime = now
             isGamepadDirty = false
         } else {
             isGamepadDirty = true
         }
     }
 
-    LaunchedEffect(Unit) {
-        while (true) {
-            delay(10L.milliseconds)
+    LaunchedEffect(btManager) {
+        while (isActive) {
+            delay(GAMEPAD_REPORT_INTERVAL_MILLIS.milliseconds)
             if (isGamepadDirty) {
                 btManager.sendGamepadReport(
                     buttonMask,
+                    dpadMask,
                     leftStickX,
                     leftStickY,
                     rightStickX,
                     rightStickY
                 )
-                lastGamepadReportTime = System.currentTimeMillis()
                 isGamepadDirty = false
             }
+        }
+    }
+
+    val inputLifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+    DisposableEffect(btManager, inputLifecycleOwner) {
+        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            if (event == androidx.lifecycle.Lifecycle.Event.ON_STOP) {
+                buttonMask = 0
+                dpadMask = 0
+                leftStickX = 0f
+                leftStickY = 0f
+                rightStickX = 0f
+                rightStickY = 0f
+                isGamepadDirty = false
+                btManager.sendGamepadReport(0, 0, 0f, 0f, 0f, 0f)
+            }
+        }
+        inputLifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            inputLifecycleOwner.lifecycle.removeObserver(observer)
+            // Do not leave the host with a sampled stick/button state after this UI and its
+            // 8 ms ticker are disposed. Release reports are safety-critical and bypass sampling.
+            btManager.sendGamepadReport(0, 0, 0f, 0f, 0f, 0f)
         }
     }
 
@@ -437,15 +596,19 @@ fun GamepadView(
                             .height(28.dp)
                             .clip(RoundedCornerShape(6.dp))
                             .background(Color.White.copy(alpha = 0.15f))
-                            .clickable {
-                                val enabledModes = listOf(0, 1, 2).filter { mode ->
-                                    val modeStr = when (mode) { 0 -> "keyboard"; 1 -> "touchpad"; 2 -> "gamepad"; else -> "keyboard" }
-                                    sharedPrefs.getStringSet("cycle_connection_modes", setOf("keyboard", "touchpad", "gamepad"))?.contains(modeStr) == true
-                                }.ifEmpty { listOf(0) }
-                                val idx = enabledModes.indexOf(launchMode)
-                                onModeChange(enabledModes[(idx + 1) % enabledModes.size])
-                                triggerVibration(25)
-                            }
+                            .combinedClickable(
+                                onClickLabel = "Next input mode",
+                                onLongClickLabel = "Configure input mode cycle",
+                                onClick = {
+                                    val enabledModes = sharedPrefs.enabledInputModes().map(InputMode::id)
+                                    val idx = enabledModes.indexOf(launchMode)
+                                    onModeChange(enabledModes[(idx + 1) % enabledModes.size])
+                                    triggerVibration(25)
+                                },
+                                onLongClick = {
+                                    context.startActivity(Intent(context, QuickCycleActivity::class.java))
+                                },
+                            )
                             .padding(horizontal = 8.dp)
                             .testTag("gamepad_mode_cycle_btn"),
                         verticalAlignment = Alignment.CenterVertically,
@@ -458,13 +621,55 @@ fun GamepadView(
                     // Connection status
                     Box(Modifier.size(6.dp).clip(CircleShape).background(if (isConnected) Color(0xFF39FF14) else Color(0xFFFF9800)))
                     Text(deviceName, color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold, fontFamily = FontFamily.SansSerif)
-                    Text(if (isConnected) "[connected]" else "[offline]", color = Color.White.copy(alpha = 0.5f), fontSize = 9.sp, fontFamily = FontFamily.SansSerif)
+                    ReconnectHostButton(btManager, iconOnly = true)
                 }
 
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
+                    // Output profile selector. All profiles share one descriptor, so
+                    // Native, Android and Web switch live without HID re-registration.
+                    Row(
+                        modifier = Modifier
+                            .height(28.dp)
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(Color.White.copy(alpha = 0.15f))
+                            .combinedClickable(
+                                enabled = !modeSwitchBusy,
+                                onClickLabel = "Switch controller compatibility",
+                                onLongClickLabel = "Configure controller compatibility",
+                                onClick = {
+                                    val newMode = dpadOutputMode.next()
+                                    if (btManager.changeGamepadMode(newMode)) triggerVibration(15)
+                                },
+                                onLongClick = {
+                                    context.startActivity(Intent(context, ControllerSettingsActivity::class.java))
+                                },
+                            )
+                            .padding(horizontal = 8.dp)
+                            .testTag("dpad_output_mode_toggle"),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Icon(
+                            imageVector = when (dpadOutputMode) {
+                                GamepadDpadOutputMode.WEB_BUTTONS -> Icons.Default.Language
+                                GamepadDpadOutputMode.ANDROID -> Icons.Default.Android
+                                GamepadDpadOutputMode.NATIVE_HAT -> Icons.Default.Gamepad
+                            },
+                            contentDescription = null,
+                            tint = Color.White,
+                            modifier = Modifier.size(11.dp)
+                        )
+                        Text(
+                            text = "Mode: ${dpadOutputMode.label}",
+                            color = Color.White,
+                            fontSize = 9.sp,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+
                     // Reset Defaults (only shown when edit mode is active and there are layout changes)
                     if (isEditMode && isModified) {
                         Row(
@@ -583,12 +788,13 @@ fun GamepadView(
                             offsetY = leftStickOffsetY,
                             scale = leftStickScale,
                             onOffsetChange = { x, y -> leftStickOffsetX = x; leftStickOffsetY = y; saveLayoutPref("${config.id}_left_stick_x", x); saveLayoutPref("${config.id}_left_stick_y", y) },
-                            onScaleChange = { s -> leftStickScale = s; saveLayoutPref("${config.id}_left_stick_scale", s) }
+                            onScaleChange = { s -> leftStickScale = s; saveLayoutPref("${config.id}_left_stick_scale", s) },
+                            onTransformEnd = commitLayoutPrefs
                         ) {
                             GamepadAnalogStick(
                                 label = "L",
-                                isClicked = (buttonMask and (1 shl 10)) != 0,
-                                isHeld = (buttonMask and (1 shl 10)) != 0,
+                                isClicked = { (buttonMask and (1 shl 10)) != 0 },
+                                isHeld = { (buttonMask and (1 shl 10)) != 0 },
                                 onMove = { x, y -> leftStickX = x; leftStickY = y; transmitGamepadState(false) },
                                 onStickClick = { scope.launch { pressButton(10); delay(100L.milliseconds); releaseButton(10) } },
                                 onToggleHold = { hold -> if (hold) pressButton(10) else releaseButton(10) }
@@ -601,13 +807,13 @@ fun GamepadView(
                             offsetY = dpadOffsetY,
                             scale = dpadScale,
                             onOffsetChange = { x, y -> dpadOffsetX = x; dpadOffsetY = y; saveLayoutPref("${config.id}_dpad_x", x); saveLayoutPref("${config.id}_dpad_y", y) },
-                            onScaleChange = { s -> dpadScale = s; saveLayoutPref("${config.id}_dpad_scale", s) }
+                            onScaleChange = { s -> dpadScale = s; saveLayoutPref("${config.id}_dpad_scale", s) },
+                            onTransformEnd = commitLayoutPrefs
                         ) {
                             GamepadDpad(
                                 isXboxStyle = true,
                                 onDpadChange = { mask ->
-                                    val cleared = buttonMask and (0xF shl 12).inv()
-                                    buttonMask = cleared or (mask shl 12)
+                                    dpadMask = mask
                                     transmitGamepadState(true)
                                     if (mask != 0) triggerVibration(15)
                                 }
@@ -635,7 +841,8 @@ fun GamepadView(
                                     offsetY = leftTriggerOffsetY,
                                     scale = leftTriggerScale,
                                     onOffsetChange = { x, y -> leftTriggerOffsetX = x; leftTriggerOffsetY = y; saveLayoutPref("${config.id}_left_trigger_x", x); saveLayoutPref("${config.id}_left_trigger_y", y) },
-                                    onScaleChange = { s -> leftTriggerScale = s; saveLayoutPref("${config.id}_left_trigger_scale", s) }
+                                    onScaleChange = { s -> leftTriggerScale = s; saveLayoutPref("${config.id}_left_trigger_scale", s) },
+                                    onTransformEnd = commitLayoutPrefs
                                 ) {
                                     GamepadTriggerButton(config.leftTrigger, true, pressButton, releaseButton)
                                 }
@@ -646,7 +853,8 @@ fun GamepadView(
                                     offsetY = leftBumperOffsetY,
                                     scale = leftBumperScale,
                                     onOffsetChange = { x, y -> leftBumperOffsetX = x; leftBumperOffsetY = y; saveLayoutPref("${config.id}_left_bumper_x", x); saveLayoutPref("${config.id}_left_bumper_y", y) },
-                                    onScaleChange = { s -> leftBumperScale = s; saveLayoutPref("${config.id}_left_bumper_scale", s) }
+                                    onScaleChange = { s -> leftBumperScale = s; saveLayoutPref("${config.id}_left_bumper_scale", s) },
+                                    onTransformEnd = commitLayoutPrefs
                                 ) {
                                     GamepadBumperButton(config.leftBumper, true, pressButton, releaseButton)
                                 }
@@ -659,7 +867,8 @@ fun GamepadView(
                                     offsetY = rightTriggerOffsetY,
                                     scale = rightTriggerScale,
                                     onOffsetChange = { x, y -> rightTriggerOffsetX = x; rightTriggerOffsetY = y; saveLayoutPref("${config.id}_right_trigger_x", x); saveLayoutPref("${config.id}_right_trigger_y", y) },
-                                    onScaleChange = { s -> rightTriggerScale = s; saveLayoutPref("${config.id}_right_trigger_scale", s) }
+                                    onScaleChange = { s -> rightTriggerScale = s; saveLayoutPref("${config.id}_right_trigger_scale", s) },
+                                    onTransformEnd = commitLayoutPrefs
                                 ) {
                                     GamepadTriggerButton(config.rightTrigger, false, pressButton, releaseButton)
                                 }
@@ -670,7 +879,8 @@ fun GamepadView(
                                     offsetY = rightBumperOffsetY,
                                     scale = rightBumperScale,
                                     onOffsetChange = { x, y -> rightBumperOffsetX = x; rightBumperOffsetY = y; saveLayoutPref("${config.id}_right_bumper_x", x); saveLayoutPref("${config.id}_right_bumper_y", y) },
-                                    onScaleChange = { s -> rightBumperScale = s; saveLayoutPref("${config.id}_right_bumper_scale", s) }
+                                    onScaleChange = { s -> rightBumperScale = s; saveLayoutPref("${config.id}_right_bumper_scale", s) },
+                                    onTransformEnd = commitLayoutPrefs
                                 ) {
                                     GamepadBumperButton(config.rightBumper, false, pressButton, releaseButton)
                                 }
@@ -686,7 +896,8 @@ fun GamepadView(
                             offsetY = guideOffsetY,
                             scale = guideScale,
                             onOffsetChange = { x, y -> guideOffsetX = x; guideOffsetY = y; saveLayoutPref("${config.id}_guide_x", x); saveLayoutPref("${config.id}_guide_y", y) },
-                            onScaleChange = { s -> guideScale = s; saveLayoutPref("${config.id}_guide_scale", s) }
+                            onScaleChange = { s -> guideScale = s; saveLayoutPref("${config.id}_guide_scale", s) },
+                            onTransformEnd = commitLayoutPrefs
                         ) {
                             XboxLogoGuideButton(config.guideButton, pressButton, releaseButton)
                         }
@@ -705,7 +916,8 @@ fun GamepadView(
                                 offsetY = selectOffsetY,
                                 scale = selectScale,
                                 onOffsetChange = { x, y -> selectOffsetX = x; selectOffsetY = y; saveLayoutPref("${config.id}_select_x", x); saveLayoutPref("${config.id}_select_y", y) },
-                                onScaleChange = { s -> selectScale = s; saveLayoutPref("${config.id}_select_scale", s) }
+                                onScaleChange = { s -> selectScale = s; saveLayoutPref("${config.id}_select_scale", s) },
+                                onTransformEnd = commitLayoutPrefs
                             ) {
                                 GamepadCenterButton(config.selectButton, pressButton, releaseButton)
                             }
@@ -715,7 +927,8 @@ fun GamepadView(
                                 offsetY = shareOffsetY,
                                 scale = shareScale,
                                 onOffsetChange = { x, y -> shareOffsetX = x; shareOffsetY = y; saveLayoutPref("${config.id}_share_x", x); saveLayoutPref("${config.id}_share_y", y) },
-                                onScaleChange = { s -> shareScale = s; saveLayoutPref("${config.id}_share_scale", s) }
+                                onScaleChange = { s -> shareScale = s; saveLayoutPref("${config.id}_share_scale", s) },
+                                onTransformEnd = commitLayoutPrefs
                             ) {
                                 GamepadCenterButton(config.shareButton, pressButton, releaseButton)
                             }
@@ -725,7 +938,8 @@ fun GamepadView(
                                 offsetY = startOffsetY,
                                 scale = startScale,
                                 onOffsetChange = { x, y -> startOffsetX = x; startOffsetY = y; saveLayoutPref("${config.id}_start_x", x); saveLayoutPref("${config.id}_start_y", y) },
-                                onScaleChange = { s -> startScale = s; saveLayoutPref("${config.id}_start_scale", s) }
+                                onScaleChange = { s -> startScale = s; saveLayoutPref("${config.id}_start_scale", s) },
+                                onTransformEnd = commitLayoutPrefs
                             ) {
                                 GamepadCenterButton(config.startButton, pressButton, releaseButton)
                             }
@@ -746,7 +960,8 @@ fun GamepadView(
                             offsetY = faceButtonsOffsetY,
                             scale = faceButtonsScale,
                             onOffsetChange = { x, y -> faceButtonsOffsetX = x; faceButtonsOffsetY = y; saveLayoutPref("${config.id}_face_buttons_x", x); saveLayoutPref("${config.id}_face_buttons_y", y) },
-                            onScaleChange = { s -> faceButtonsScale = s; saveLayoutPref("${config.id}_face_buttons_scale", s) }
+                            onScaleChange = { s -> faceButtonsScale = s; saveLayoutPref("${config.id}_face_buttons_scale", s) },
+                            onTransformEnd = commitLayoutPrefs
                         ) {
                             FaceButtonsDiamond(
                                 config = config,
@@ -762,12 +977,13 @@ fun GamepadView(
                             offsetY = rightStickOffsetY,
                             scale = rightStickScale,
                             onOffsetChange = { x, y -> rightStickOffsetX = x; rightStickOffsetY = y; saveLayoutPref("${config.id}_right_stick_x", x); saveLayoutPref("${config.id}_right_stick_y", y) },
-                            onScaleChange = { s -> rightStickScale = s; saveLayoutPref("${config.id}_right_stick_scale", s) }
+                            onScaleChange = { s -> rightStickScale = s; saveLayoutPref("${config.id}_right_stick_scale", s) },
+                            onTransformEnd = commitLayoutPrefs
                         ) {
                             GamepadAnalogStick(
                                 label = "R",
-                                isClicked = (buttonMask and (1 shl 11)) != 0,
-                                isHeld = (buttonMask and (1 shl 11)) != 0,
+                                isClicked = { (buttonMask and (1 shl 11)) != 0 },
+                                isHeld = { (buttonMask and (1 shl 11)) != 0 },
                                 onMove = { x, y -> rightStickX = x; rightStickY = y; transmitGamepadState(false) },
                                 onStickClick = { scope.launch { pressButton(11); delay(100L.milliseconds); releaseButton(11) } },
                                 onToggleHold = { hold -> if (hold) pressButton(11) else releaseButton(11) }
@@ -790,13 +1006,13 @@ fun GamepadView(
                             offsetY = dpadOffsetY,
                             scale = dpadScale,
                             onOffsetChange = { x, y -> dpadOffsetX = x; dpadOffsetY = y; saveLayoutPref("${config.id}_dpad_x", x); saveLayoutPref("${config.id}_dpad_y", y) },
-                            onScaleChange = { s -> dpadScale = s; saveLayoutPref("${config.id}_dpad_scale", s) }
+                            onScaleChange = { s -> dpadScale = s; saveLayoutPref("${config.id}_dpad_scale", s) },
+                            onTransformEnd = commitLayoutPrefs
                         ) {
                             GamepadDpad(
                                 isXboxStyle = false,
                                 onDpadChange = { mask ->
-                                    val cleared = buttonMask and (0xF shl 12).inv()
-                                    buttonMask = cleared or (mask shl 12)
+                                    dpadMask = mask
                                     transmitGamepadState(true)
                                     if (mask != 0) triggerVibration(15)
                                 }
@@ -809,12 +1025,13 @@ fun GamepadView(
                             offsetY = leftStickOffsetY,
                             scale = leftStickScale,
                             onOffsetChange = { x, y -> leftStickOffsetX = x; leftStickOffsetY = y; saveLayoutPref("${config.id}_left_stick_x", x); saveLayoutPref("${config.id}_left_stick_y", y) },
-                            onScaleChange = { s -> leftStickScale = s; saveLayoutPref("${config.id}_left_stick_scale", s) }
+                            onScaleChange = { s -> leftStickScale = s; saveLayoutPref("${config.id}_left_stick_scale", s) },
+                            onTransformEnd = commitLayoutPrefs
                         ) {
                             GamepadAnalogStick(
                                 label = "L",
-                                isClicked = (buttonMask and (1 shl 10)) != 0,
-                                isHeld = (buttonMask and (1 shl 10)) != 0,
+                                isClicked = { (buttonMask and (1 shl 10)) != 0 },
+                                isHeld = { (buttonMask and (1 shl 10)) != 0 },
                                 onMove = { x, y -> leftStickX = x; leftStickY = y; transmitGamepadState(false) },
                                 onStickClick = { scope.launch { pressButton(10); delay(100L.milliseconds); releaseButton(10) } },
                                 onToggleHold = { hold -> if (hold) pressButton(10) else releaseButton(10) }
@@ -842,7 +1059,8 @@ fun GamepadView(
                                     offsetY = leftTriggerOffsetY,
                                     scale = leftTriggerScale,
                                     onOffsetChange = { x, y -> leftTriggerOffsetX = x; leftTriggerOffsetY = y; saveLayoutPref("${config.id}_left_trigger_x", x); saveLayoutPref("${config.id}_left_trigger_y", y) },
-                                    onScaleChange = { s -> leftTriggerScale = s; saveLayoutPref("${config.id}_left_trigger_scale", s) }
+                                    onScaleChange = { s -> leftTriggerScale = s; saveLayoutPref("${config.id}_left_trigger_scale", s) },
+                                    onTransformEnd = commitLayoutPrefs
                                 ) {
                                     GamepadTriggerButton(config.leftTrigger, true, pressButton, releaseButton)
                                 }
@@ -853,7 +1071,8 @@ fun GamepadView(
                                     offsetY = leftBumperOffsetY,
                                     scale = leftBumperScale,
                                     onOffsetChange = { x, y -> leftBumperOffsetX = x; leftBumperOffsetY = y; saveLayoutPref("${config.id}_left_bumper_x", x); saveLayoutPref("${config.id}_left_bumper_y", y) },
-                                    onScaleChange = { s -> leftBumperScale = s; saveLayoutPref("${config.id}_left_bumper_scale", s) }
+                                    onScaleChange = { s -> leftBumperScale = s; saveLayoutPref("${config.id}_left_bumper_scale", s) },
+                                    onTransformEnd = commitLayoutPrefs
                                 ) {
                                     GamepadBumperButton(config.leftBumper, true, pressButton, releaseButton)
                                 }
@@ -866,7 +1085,8 @@ fun GamepadView(
                                     offsetY = rightTriggerOffsetY,
                                     scale = rightTriggerScale,
                                     onOffsetChange = { x, y -> rightTriggerOffsetX = x; rightTriggerOffsetY = y; saveLayoutPref("${config.id}_right_trigger_x", x); saveLayoutPref("${config.id}_right_trigger_y", y) },
-                                    onScaleChange = { s -> rightTriggerScale = s; saveLayoutPref("${config.id}_right_trigger_scale", s) }
+                                    onScaleChange = { s -> rightTriggerScale = s; saveLayoutPref("${config.id}_right_trigger_scale", s) },
+                                    onTransformEnd = commitLayoutPrefs
                                 ) {
                                     GamepadTriggerButton(config.rightTrigger, false, pressButton, releaseButton)
                                 }
@@ -877,7 +1097,8 @@ fun GamepadView(
                                     offsetY = rightBumperOffsetY,
                                     scale = rightBumperScale,
                                     onOffsetChange = { x, y -> rightBumperOffsetX = x; rightBumperOffsetY = y; saveLayoutPref("${config.id}_right_bumper_x", x); saveLayoutPref("${config.id}_right_bumper_y", y) },
-                                    onScaleChange = { s -> rightBumperScale = s; saveLayoutPref("${config.id}_right_bumper_scale", s) }
+                                    onScaleChange = { s -> rightBumperScale = s; saveLayoutPref("${config.id}_right_bumper_scale", s) },
+                                    onTransformEnd = commitLayoutPrefs
                                 ) {
                                     GamepadBumperButton(config.rightBumper, false, pressButton, releaseButton)
                                 }
@@ -893,7 +1114,8 @@ fun GamepadView(
                             offsetY = guideOffsetY,
                             scale = guideScale,
                             onOffsetChange = { x, y -> guideOffsetX = x; guideOffsetY = y; saveLayoutPref("${config.id}_guide_x", x); saveLayoutPref("${config.id}_guide_y", y) },
-                            onScaleChange = { s -> guideScale = s; saveLayoutPref("${config.id}_guide_scale", s) }
+                            onScaleChange = { s -> guideScale = s; saveLayoutPref("${config.id}_guide_scale", s) },
+                            onTransformEnd = commitLayoutPrefs
                         ) {
                             PlayStationLogoButton(config.guideButton, pressButton, releaseButton)
                         }
@@ -912,7 +1134,8 @@ fun GamepadView(
                                 offsetY = selectOffsetY,
                                 scale = selectScale,
                                 onOffsetChange = { x, y -> selectOffsetX = x; selectOffsetY = y; saveLayoutPref("${config.id}_select_x", x); saveLayoutPref("${config.id}_select_y", y) },
-                                onScaleChange = { s -> selectScale = s; saveLayoutPref("${config.id}_select_scale", s) }
+                                onScaleChange = { s -> selectScale = s; saveLayoutPref("${config.id}_select_scale", s) },
+                                onTransformEnd = commitLayoutPrefs
                             ) {
                                 GamepadCenterButton(config.selectButton, pressButton, releaseButton)
                             }
@@ -922,7 +1145,8 @@ fun GamepadView(
                                 offsetY = shareOffsetY,
                                 scale = shareScale,
                                 onOffsetChange = { x, y -> shareOffsetX = x; shareOffsetY = y; saveLayoutPref("${config.id}_share_x", x); saveLayoutPref("${config.id}_share_y", y) },
-                                onScaleChange = { s -> shareScale = s; saveLayoutPref("${config.id}_share_scale", s) }
+                                onScaleChange = { s -> shareScale = s; saveLayoutPref("${config.id}_share_scale", s) },
+                                onTransformEnd = commitLayoutPrefs
                             ) {
                                 GamepadCenterButton(config.shareButton, pressButton, releaseButton)
                             }
@@ -932,7 +1156,8 @@ fun GamepadView(
                                 offsetY = startOffsetY,
                                 scale = startScale,
                                 onOffsetChange = { x, y -> startOffsetX = x; startOffsetY = y; saveLayoutPref("${config.id}_start_x", x); saveLayoutPref("${config.id}_start_y", y) },
-                                onScaleChange = { s -> startScale = s; saveLayoutPref("${config.id}_start_scale", s) }
+                                onScaleChange = { s -> startScale = s; saveLayoutPref("${config.id}_start_scale", s) },
+                                onTransformEnd = commitLayoutPrefs
                             ) {
                                 GamepadCenterButton(config.startButton, pressButton, releaseButton)
                             }
@@ -953,7 +1178,8 @@ fun GamepadView(
                             offsetY = faceButtonsOffsetY,
                             scale = faceButtonsScale,
                             onOffsetChange = { x, y -> faceButtonsOffsetX = x; faceButtonsOffsetY = y; saveLayoutPref("${config.id}_face_buttons_x", x); saveLayoutPref("${config.id}_face_buttons_y", y) },
-                            onScaleChange = { s -> faceButtonsScale = s; saveLayoutPref("${config.id}_face_buttons_scale", s) }
+                            onScaleChange = { s -> faceButtonsScale = s; saveLayoutPref("${config.id}_face_buttons_scale", s) },
+                            onTransformEnd = commitLayoutPrefs
                         ) {
                             FaceButtonsDiamond(
                                 config = config,
@@ -969,12 +1195,13 @@ fun GamepadView(
                             offsetY = rightStickOffsetY,
                             scale = rightStickScale,
                             onOffsetChange = { x, y -> rightStickOffsetX = x; rightStickOffsetY = y; saveLayoutPref("${config.id}_right_stick_x", x); saveLayoutPref("${config.id}_right_stick_y", y) },
-                            onScaleChange = { s -> rightStickScale = s; saveLayoutPref("${config.id}_right_stick_scale", s) }
+                            onScaleChange = { s -> rightStickScale = s; saveLayoutPref("${config.id}_right_stick_scale", s) },
+                            onTransformEnd = commitLayoutPrefs
                         ) {
                             GamepadAnalogStick(
                                 label = "R",
-                                isClicked = (buttonMask and (1 shl 11)) != 0,
-                                isHeld = (buttonMask and (1 shl 11)) != 0,
+                                isClicked = { (buttonMask and (1 shl 11)) != 0 },
+                                isHeld = { (buttonMask and (1 shl 11)) != 0 },
                                 onMove = { x, y -> rightStickX = x; rightStickY = y; transmitGamepadState(false) },
                                 onStickClick = { scope.launch { pressButton(11); delay(100L.milliseconds); releaseButton(11) } },
                                 onToggleHold = { hold -> if (hold) pressButton(11) else releaseButton(11) }
@@ -990,26 +1217,32 @@ fun GamepadView(
 
 // ── Sub-Components ──
 
+@Composable
 fun Modifier.gamepadButtonTouch(
     onPress: () -> Unit,
     onRelease: () -> Unit,
     onPressedStateChange: (Boolean) -> Unit
-): Modifier = this.pointerInput(Unit) {
-    awaitEachGesture {
-        val down = awaitFirstDown(requireUnconsumed = false)
-        val targetPointerId = down.id
-        onPressedStateChange(true)
-        onPress()
-        down.consume()
-        while (true) {
-            val event = awaitPointerEvent()
-            val change = event.changes.firstOrNull { it.id == targetPointerId } ?: break
-            if (!change.pressed) {
-                onPressedStateChange(false)
-                onRelease()
-                break
+): Modifier {
+    val currentOnPress by rememberUpdatedState(onPress)
+    val currentOnRelease by rememberUpdatedState(onRelease)
+    val currentOnPressedStateChange by rememberUpdatedState(onPressedStateChange)
+    return this.pointerInput(Unit) {
+        awaitEachGesture {
+            val down = awaitFirstDown(requireUnconsumed = false)
+            val targetPointerId = down.id
+            currentOnPressedStateChange(true)
+            currentOnPress()
+            down.consume()
+            while (true) {
+                val event = awaitPointerEvent()
+                val change = event.changes.firstOrNull { it.id == targetPointerId } ?: break
+                if (!change.pressed) {
+                    currentOnPressedStateChange(false)
+                    currentOnRelease()
+                    break
+                }
+                change.consume()
             }
-            change.consume()
         }
     }
 }
@@ -2048,23 +2281,24 @@ private fun GamepadStickHoldButton(
 @Composable
 private fun GamepadAnalogStick(
     label: String,
-    isClicked: Boolean,
+    isClicked: () -> Boolean,
     modifier: Modifier = Modifier,
-    isHeld: Boolean = false,
+    isHeld: () -> Boolean = { false },
     onMove: (Float, Float) -> Unit,
     onStickClick: () -> Unit,
     onToggleHold: ((Boolean) -> Unit)? = null
 ) {
+    val clicked = isClicked()
+    val held = isHeld()
     var stickOffsetX by remember { mutableFloatStateOf(0f) }
     var stickOffsetY by remember { mutableFloatStateOf(0f) }
-    var isTouchActive by remember { mutableStateOf(false) }
 
-    val currentIsHeld by rememberUpdatedState(isHeld)
+    val currentIsHeld by rememberUpdatedState(held)
     val currentOnStickClick by rememberUpdatedState(onStickClick)
     val currentOnMove by rememberUpdatedState(onMove)
 
     val stickScale by animateFloatAsState(
-        targetValue = if (isClicked || isHeld) 0.90f else 1.0f,
+        targetValue = if (clicked || held) 0.90f else 1.0f,
         animationSpec = spring(stiffness = Spring.StiffnessMedium),
         label = "stickScale"
     )
@@ -2084,7 +2318,6 @@ private fun GamepadAnalogStick(
 
                     awaitEachGesture {
                         val down = awaitFirstDown(requireUnconsumed = false)
-                        isTouchActive = true
                         val pointerId = down.id
                         val downTime = System.currentTimeMillis()
 
@@ -2117,7 +2350,6 @@ private fun GamepadAnalogStick(
                             val change = event.changes.firstOrNull { it.id == pointerId } ?: break
 
                             if (!change.pressed) {
-                                isTouchActive = false
                                 val dragDistance = sqrt((change.position.x - down.position.x) * (change.position.x - down.position.x) + 
                                                         (change.position.y - down.position.y) * (change.position.y - down.position.y))
 
@@ -2222,7 +2454,7 @@ private fun GamepadAnalogStick(
                 )
                 
                 // Shifting central elements for 3D parallax deflection and press look
-                val pressShift = if (isClicked) 1.2.dp.toPx() else 0f
+                val pressShift = if (clicked) 1.2.dp.toPx() else 0f
                 val cupCx = cx + stickOffsetX * 0.12f
                 val cupCy = cy + stickOffsetY * 0.12f + pressShift
                 
@@ -2283,7 +2515,7 @@ private fun GamepadAnalogStick(
         if (onToggleHold != null) {
             GamepadStickHoldButton(
                 label = if (label == "L") "L3" else "R3",
-                isHeld = isHeld,
+                isHeld = held,
                 onToggle = onToggleHold,
                 modifier = Modifier
                     .align(Alignment.TopStart)
@@ -2300,6 +2532,7 @@ private fun GamepadDpad(
     modifier: Modifier = Modifier
 ) {
     var activeDirection by remember { mutableIntStateOf(0) }
+    val currentOnDpadChange by rememberUpdatedState(onDpadChange)
     
     // Physical tilt based on pressed direction (pure pivot rotation)
     var targetRotX = 0f
@@ -2319,24 +2552,35 @@ private fun GamepadDpad(
             .pointerInput(Unit) {
                 awaitEachGesture {
                     val down = awaitFirstDown(requireUnconsumed = false)
-                    var currentBit = determineDpadBit(down.position.x, down.position.y, size.width.toFloat())
+                    val targetPointerId = down.id
+                    var currentBit = determineDpadBit(
+                        down.position.x,
+                        down.position.y,
+                        size.width.toFloat(),
+                        size.height.toFloat(),
+                    )
                     activeDirection = currentBit
-                    onDpadChange(currentBit)
+                    currentOnDpadChange(currentBit)
 
                     while (true) {
                         val event = awaitPointerEvent()
-                        val change = event.changes.firstOrNull() ?: break
+                        val change = event.changes.firstOrNull { it.id == targetPointerId } ?: break
                         if (!change.pressed) {
                             activeDirection = 0
-                            onDpadChange(0)
+                            currentOnDpadChange(0)
                             break
                         }
                         change.consume()
-                        val newBit = determineDpadBit(change.position.x, change.position.y, size.width.toFloat())
+                        val newBit = determineDpadBit(
+                            change.position.x,
+                            change.position.y,
+                            size.width.toFloat(),
+                            size.height.toFloat(),
+                        )
                         if (newBit != currentBit) {
                             currentBit = newBit
                             activeDirection = currentBit
-                            onDpadChange(currentBit)
+                            currentOnDpadChange(currentBit)
                         }
                     }
                 }
@@ -2582,32 +2826,6 @@ private fun GamepadDpad(
     }
 }
 
-private fun determineDpadBit(x: Float, y: Float, totalSize: Float): Int {
-    val center = totalSize / 2f
-    val dx = x - center
-    val dy = y - center
-    val distance = sqrt(dx * dx + dy * dy)
-    if (distance < totalSize * 0.08f) return 0
-
-    var mask = 0
-    // Threshold distance for diagonal combined directions
-    val sectorThreshold = distance * 0.38f
-
-    if (dy < -sectorThreshold) mask = mask or 1 // UP
-    if (dy > sectorThreshold) mask = mask or 2  // DOWN
-    if (dx < -sectorThreshold) mask = mask or 4 // LEFT
-    if (dx > sectorThreshold) mask = mask or 8  // RIGHT
-
-    if (mask == 0) {
-        mask = if (abs(dx) > abs(dy)) {
-            if (dx > 0) 8 else 4
-        } else {
-            if (dy > 0) 2 else 1
-        }
-    }
-    return mask
-}
-
 @Composable
 private fun EditableComponentWrapper(
     isEditMode: Boolean,
@@ -2616,6 +2834,7 @@ private fun EditableComponentWrapper(
     scale: Float,
     onOffsetChange: (Float, Float) -> Unit,
     onScaleChange: (Float) -> Unit,
+    onTransformEnd: () -> Unit,
     content: @Composable () -> Unit
 ) {
     val density = LocalDensity.current.density
@@ -2625,6 +2844,7 @@ private fun EditableComponentWrapper(
     val currentScale by rememberUpdatedState(scale)
     val currentOnOffsetChange by rememberUpdatedState(onOffsetChange)
     val currentOnScaleChange by rememberUpdatedState(onScaleChange)
+    val currentOnTransformEnd by rememberUpdatedState(onTransformEnd)
     
     var layoutTopInWindowPx by remember { mutableFloatStateOf(0f) }
     
@@ -2637,15 +2857,15 @@ private fun EditableComponentWrapper(
                 val layoutTopInWindow = layoutTopInWindowPx / density
                 val constrainedOffsetY = if (layoutTopInWindow > 0) {
                     val minY = 38f + 4f - layoutTopInWindow
-                    offsetY.coerceAtLeast(minY)
+                    currentOffsetY.coerceAtLeast(minY)
                 } else {
-                    offsetY
+                    currentOffsetY
                 }
-                IntOffset((offsetX * density).roundToInt(), (constrainedOffsetY * density).roundToInt())
+                IntOffset((currentOffsetX * density).roundToInt(), (constrainedOffsetY * density).roundToInt())
             }
             .graphicsLayer {
-                scaleX = scale
-                scaleY = scale
+                scaleX = currentScale
+                scaleY = currentScale
             },
         contentAlignment = Alignment.Center
     ) {
@@ -2666,8 +2886,14 @@ private fun EditableComponentWrapper(
                         shape = RoundedCornerShape(8.dp)
                     )
                     .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.08f), shape = RoundedCornerShape(8.dp))
-                    .pointerInput(Unit) {
-                        detectTransformGestures { _, pan, zoom, _ ->
+                    .pointerInput(isEditMode) {
+                        awaitEachGesture {
+                            awaitFirstDown(requireUnconsumed = false)
+                            var event: PointerEvent
+                            do {
+                                event = awaitPointerEvent()
+                                val pan = event.calculatePan()
+                                val zoom = event.calculateZoom()
                             // 1. Update scale via pinch zoom
                             val newScale = (currentScale * zoom).coerceIn(0.6f, 1.8f)
                             currentOnScaleChange(newScale)
@@ -2677,6 +2903,9 @@ private fun EditableComponentWrapper(
                             val newX = currentOffsetX + (pan.x * currentScale) / density
                             val newY = (currentOffsetY + (pan.y * currentScale) / density).coerceAtLeast(minY)
                             currentOnOffsetChange(newX, newY)
+                                event.changes.forEach { it.consume() }
+                            } while (event.changes.any { it.pressed })
+                            currentOnTransformEnd()
                         }
                     }
             )
@@ -2690,11 +2919,15 @@ private fun EditableComponentWrapper(
                     .clip(CircleShape)
                     .background(MaterialTheme.colorScheme.primary)
                     .pointerInput(Unit) {
-                        detectDragGestures { change, dragAmount ->
-                            change.consume()
-                            val deltaScale = (dragAmount.x + dragAmount.y) / 150f
-                            currentOnScaleChange((currentScale + deltaScale).coerceIn(0.6f, 1.8f))
-                        }
+                        detectDragGestures(
+                            onDragEnd = currentOnTransformEnd,
+                            onDragCancel = currentOnTransformEnd,
+                            onDrag = { change, dragAmount ->
+                                change.consume()
+                                val deltaScale = (dragAmount.x + dragAmount.y) / 150f
+                                currentOnScaleChange((currentScale + deltaScale).coerceIn(0.6f, 1.8f))
+                            },
+                        )
                     },
                 contentAlignment = Alignment.Center
             ) {

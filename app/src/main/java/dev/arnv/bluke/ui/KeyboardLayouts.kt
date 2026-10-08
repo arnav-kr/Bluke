@@ -21,32 +21,48 @@ enum class KeyboardLayoutType(val displayName: String) {
     EIGHT_ZERO_ZERO_EIGHT_65("GMK 8008 65%")
 }
 
-enum class CaseColor(val displayName: String, val caseColor: Color, val metallic: Boolean) {
-    BLACK("Black", Color(0xFF1E1E20), false),
-    GRAY("Gray", Color(0xFF5A5C61), false),
-    SILVER("Silver", Color(0xFFD1D5DB), true),
-    WHITE("White", Color(0xFFF9FAFB), false),
-    BEIGE("Beige", Color(0xFFE6DFD3), false),
-    ROSE_GOLD("Rose Gold", Color(0xFFE8C3B9), true),
-    LIGHT_GOLD("Light Gold", Color(0xFFEAD0A8), true),
-    CUSTOM("Custom", Color(0xFF3F51B5), false);
+enum class KeyboardGeometry(
+    val displayName: String,
+    internal val legacySource: KeyboardLayoutType,
+) {
+    CLASSIC_75("Classic 75%", KeyboardLayoutType.OLIVIA_75),
+    STANDARD_65("Standard 65%", KeyboardLayoutType.CAFE_65),
+    HHKB_60("HHKB 60%", KeyboardLayoutType.HHKB_60),
+    BALANCED_65("Balanced 65%", KeyboardLayoutType.MIZU_65),
+    INLINE_75("Inline 75%", KeyboardLayoutType.LASER_75),
+    COMPACT_75("Compact 75%", KeyboardLayoutType.OBLIVION_75),
+    EXTENDED_65("Extended 65%", KeyboardLayoutType.EIGHT_ZERO_ZERO_EIGHT_65);
 
-    fun getActualColor(sharedPrefs: android.content.SharedPreferences): Color {
-        return if (this == CUSTOM) {
-            val r = sharedPrefs.getInt("custom_case_color_r", 63)
-            val g = sharedPrefs.getInt("custom_case_color_g", 81)
-            val b = sharedPrefs.getInt("custom_case_color_b", 181)
-            Color(r, g, b)
-        } else {
-            this.caseColor
+    companion object {
+        fun fromPreference(value: String?): KeyboardGeometry =
+            fromStoredName(value) ?: COMPACT_75
+
+        internal fun fromStoredName(value: String?): KeyboardGeometry? = when (value) {
+            CLASSIC_75.name,
+            "OLIVIA_75",
+            "DRACULA_75",
+            "MODEL_M_75",
+            "NINE_ZERO_ZERO_NINE" -> CLASSIC_75
+            STANDARD_65.name, "CAFE_65" -> STANDARD_65
+            HHKB_60.name -> HHKB_60
+            BALANCED_65.name, "MIZU_65" -> BALANCED_65
+            INLINE_75.name, "LASER_75" -> INLINE_75
+            COMPACT_75.name, "OBLIVION_75" -> COMPACT_75
+            EXTENDED_65.name, "EIGHT_ZERO_ZERO_EIGHT_65" -> EXTENDED_65
+            else -> null
         }
-    }
 
-    fun getActualMetallic(sharedPrefs: android.content.SharedPreferences): Boolean {
-        return if (this == CUSTOM) {
-            sharedPrefs.getBoolean("custom_case_color_metallic", false)
-        } else {
-            this.metallic
+        fun fromLegacy(type: KeyboardLayoutType): KeyboardGeometry = when (type) {
+            KeyboardLayoutType.OLIVIA_75,
+            KeyboardLayoutType.DRACULA_75,
+            KeyboardLayoutType.MODEL_M_VINTAGE,
+            KeyboardLayoutType.NINE_ZERO_ZERO_NINE_TKL -> CLASSIC_75
+            KeyboardLayoutType.CAFE_65 -> STANDARD_65
+            KeyboardLayoutType.HHKB_60 -> HHKB_60
+            KeyboardLayoutType.MIZU_65 -> BALANCED_65
+            KeyboardLayoutType.LASER_75 -> INLINE_75
+            KeyboardLayoutType.OBLIVION_75 -> COMPACT_75
+            KeyboardLayoutType.EIGHT_ZERO_ZERO_EIGHT_65 -> EXTENDED_65
         }
     }
 }
@@ -169,16 +185,21 @@ object Colorways {
 
 data class KeyLayoutInfo(
     val legend: String,
+    val styleId: String = "",
     val shiftedLegend: String = "",
     val widthRatio: Float = 1.0f,
     val heightRatio: Float = 1.0f,
     val x: Float = 0.0f,
     val y: Float = 0.0f,
     val keyCode: Int = 0,
+    val physicalKeyCode: Int = keyCode,
     val category: KeyColorCategory = KeyColorCategory.ALPHA
 )
 
 object KeyboardLayouts {
+    // Local-only keycode. It is intercepted before HID keyboard reports are built.
+    const val KEY_FN = 0x100
+
     // Standard HID Keyboard codes
     const val KEY_A = 0x04
     const val KEY_B = 0x05
@@ -274,10 +295,18 @@ object KeyboardLayouts {
     const val MOD_RALT = 0xE6
     const val MOD_RWIN = 0xE7
 
-    fun getLayout(type: KeyboardLayoutType): List<List<KeyLayoutInfo>> {
+    fun getLayout(
+        type: KeyboardLayoutType,
+        characterLayout: KeyboardCharacterLayout = KeyboardCharacterLayout.US_QWERTY,
+    ): List<List<KeyLayoutInfo>> {
         val kle = getKleString(type)
-        return parseKleString(kle)
+        return parseKleString(kle).withCharacterLayout(characterLayout)
     }
+
+    fun getLayout(
+        geometry: KeyboardGeometry,
+        characterLayout: KeyboardCharacterLayout = KeyboardCharacterLayout.US_QWERTY,
+    ): List<List<KeyLayoutInfo>> = getLayout(geometry.legacySource, characterLayout)
 
     private fun getKleString(type: KeyboardLayoutType): String {
         return when (type) {
@@ -377,6 +406,7 @@ object KeyboardLayouts {
         
         var currentY = 0.0f
         var rowIndex = 0
+        val styleIdOccurrences = mutableMapOf<Int, Int>()
         
         // Key state modifiers
         var keyW = 1.0f
@@ -467,6 +497,7 @@ object KeyboardLayouts {
                     
                     currentRow.add(
                         KeyLayoutInfo(
+                            styleId = "$kCode:${styleIdOccurrences.getOrDefault(kCode, 0)}",
                             legend = pLegend,
                             shiftedLegend = pShifted,
                             widthRatio = keyW,
@@ -477,6 +508,7 @@ object KeyboardLayouts {
                             category = cat
                         )
                     )
+                    styleIdOccurrences[kCode] = styleIdOccurrences.getOrDefault(kCode, 0) + 1
                     
                     currentX += keyW
                     keyW = 1.0f
@@ -529,6 +561,7 @@ object KeyboardLayouts {
             "rwin" -> MOD_RWIN
             "alt", "lalt", "opt" -> MOD_LALT
             "ralt" -> MOD_RALT
+            "fn", "fn2" -> KEY_FN
             "spacebar", "space", "" -> KEY_SPACE
             "←", "left" -> KEY_LEFT
             "↑", "up" -> KEY_UP

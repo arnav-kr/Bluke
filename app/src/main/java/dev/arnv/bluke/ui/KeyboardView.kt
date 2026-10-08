@@ -10,29 +10,34 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.LayoutDirection
 
 @Suppress("UnusedBoxWithConstraintsScope")
 @Composable
 fun KeyboardView(
-    layoutType: KeyboardLayoutType,
-    caseColor: CaseColor,
+    geometry: KeyboardGeometry,
+    theme: KeyboardThemeDefinition,
+    characterLayout: KeyboardCharacterLayout = KeyboardCharacterLayout.US_QWERTY,
     activePressedKeys: List<Int>,
     isConnected: Boolean = false,
     isCapsLockActive: Boolean,
     isNumLockActive: Boolean,
     isScrollLockActive: Boolean,
+    isFnActive: Boolean = false,
     keySensitivity: Float = 6f,
+    selectedStyleId: String? = null,
+    onKeySelected: ((KeyLayoutInfo) -> Unit)? = null,
     onKeyPressChange: (Int, Boolean) -> Unit
 ) {
-    val palette = Colorways.PALETTES[layoutType] ?: Colorways.PALETTES[KeyboardLayoutType.OBLIVION_75]!!
-
-    BoxWithConstraints(
-        modifier = Modifier.fillMaxSize(),
-        contentAlignment = Alignment.Center
-    ) {
-        val keyboardRows = KeyboardLayouts.getLayout(layoutType)
-        val allKeys = keyboardRows.flatten()
+    CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
+        BoxWithConstraints(
+            modifier = Modifier.fillMaxSize(),
+            contentAlignment = Alignment.Center
+        ) {
+            val keyboardRows = KeyboardLayouts.getLayout(geometry, characterLayout)
+            val allKeys = keyboardRows.flatten()
 
         val totalLayoutWidthInUnits = allKeys.maxOfOrNull { it.x + it.widthRatio } ?: 15.0f
         val totalLayoutHeightInUnits = allKeys.maxOfOrNull { it.y + it.heightRatio } ?: 5.0f
@@ -65,11 +70,31 @@ fun KeyboardView(
                     spotColor = Color.Black.copy(alpha = 0.5f),
                     ambientColor = Color.Black
                 )
-                .background(palette.bgCode, RoundedCornerShape(10.dp))
+                .background(Color(theme.plateArgb), RoundedCornerShape(10.dp))
                 .border(1.5.dp, Color.White.copy(alpha = 0.15f), RoundedCornerShape(10.dp))
                 .padding(platePadding)
-                .pointerInput(baseUnitWidth, allKeys) {
+                .pointerInput(baseUnitWidth, allKeys, onKeySelected) {
                         awaitPointerEventScope {
+                            if (onKeySelected != null) {
+                                var pointerWasDown = false
+                                while (true) {
+                                    val event = awaitPointerEvent()
+                                    val pressedChange = event.changes.firstOrNull { it.pressed }
+                                    if (pressedChange != null && !pointerWasDown) {
+                                        val pos = pressedChange.position
+                                        allKeys.lastOrNull { key ->
+                                            val keyLeft = baseUnitWidth.toPx() * key.x
+                                            val keyRight = keyLeft + baseUnitWidth.toPx() * key.widthRatio
+                                            val keyTop = baseUnitWidth.toPx() * key.y
+                                            val keyBottom = keyTop + baseUnitWidth.toPx() * key.heightRatio
+                                            pos.x in keyLeft..keyRight && pos.y in keyTop..keyBottom
+                                        }?.let(onKeySelected)
+                                    }
+                                    pointerWasDown = pressedChange != null
+                                    event.changes.forEach { it.consume() }
+                                }
+                            }
+
                             // Map of PointerId to List of KeyCodes currently being pressed by that pointer
                             val currentPointers = mutableMapOf<Long, List<Int>>()
                             
@@ -133,22 +158,23 @@ fun KeyboardView(
                     val keyWidth = baseUnitWidth * key.widthRatio
                     val keyHeight = baseUnitWidth * key.heightRatio
 
-                    val (keyColor, legendColor) = when (key.category) {
-                        KeyColorCategory.ALPHA -> palette.alphaBg to palette.alphaLegend
-                        KeyColorCategory.MOD -> palette.modBg to palette.modLegend
-                        KeyColorCategory.ACCENT -> palette.accentBg to palette.accentLegend
-                    }
+                    val keyStyle = theme.styleFor(key)
+                    val keyColor = Color(keyStyle.backgroundArgb)
+                    val legendColor = Color(keyStyle.legendArgb)
 
                     val isPressed = activePressedKeys.contains(key.keyCode)
 
                     val isShiftActive = activePressedKeys.contains(0xE1) || activePressedKeys.contains(0xE5)
                     val isUppercase = isCapsLockActive xor isShiftActive
                     val isAlphabetic = key.legend.length == 1 && key.legend[0].isLetter()
-                    val displayLegend = if (isAlphabetic) {
+                    val baseDisplayLegend = if (isAlphabetic) {
                         if (isUppercase) key.legend.uppercase() else key.legend.lowercase()
                     } else {
                         key.legend
                     }
+                    val fnLegend = if (isFnActive) fnLegendForKey(key.keyCode) else null
+                    val displayLegend = fnLegend ?: baseDisplayLegend
+                    val displayShiftedLegend = if (fnLegend == null) key.shiftedLegend else ""
 
                     val isIndicatorActive = when (key.keyCode) {
                         0x39 -> isCapsLockActive
@@ -158,19 +184,21 @@ fun KeyboardView(
                     }
 
                     val finalGlowColor = if (isIndicatorActive) {
-                        palette.accentBg.copy(alpha = 0.25f)
+                        Color(theme.accentStyle.backgroundArgb).copy(alpha = 0.25f)
                     } else {
                         null
                     }
 
                     KeyCap(
                         legend = displayLegend,
-                        shiftedLegend = key.shiftedLegend,
+                        shiftedLegend = displayShiftedLegend,
                         width = keyWidth,
                         height = keyHeight,
                         isPressed = isPressed,
                         keyBgColor = keyColor,
                         legendColor = legendColor,
+                        legendScale = keyStyle.legendScale,
+                        isSelected = selectedStyleId == key.styleId,
                         baseUnitWidth = baseUnitWidth,
                         modifier = Modifier
                             .offset(
@@ -181,5 +209,6 @@ fun KeyboardView(
                     )
                 }
             }
+        }
         }
     }

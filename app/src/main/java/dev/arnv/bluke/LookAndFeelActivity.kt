@@ -121,7 +121,9 @@ class LookAndFeelActivity : ComponentActivity() {
                                                         .background(color)
                                                         .clickable {
                                                             accentColorIndex = index
-                                                            sharedPrefs.edit { putInt("accent_color_index", index) }
+                                                            sharedPrefs.edit {
+                                                                putInt("accent_color_index", index)
+                                                            }
                                                         },
                                                     contentAlignment = Alignment.Center
                                                 ) {
@@ -273,7 +275,7 @@ class LookAndFeelActivity : ComponentActivity() {
                                     }
                                 ),
                                 SettingsItemData(
-                                    title = "Key Press Sound",
+                                    title = "Enable sounds",
                                     subtitle = "Play sound effect on key press",
                                     icon = { Icon(Icons.AutoMirrored.Filled.VolumeUp, null, tint = MaterialTheme.colorScheme.primary) },
                                     action = {

@@ -28,6 +28,12 @@ local.properties
 # Log Files
 *.log
 
+# Local web research artifacts
+.firecrawl/
+
+# Local diagnostic tools and build-user files
+.tmp/
+
 # OS generated files
 .DS_Store
 Thumbs.db

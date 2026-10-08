@@ -28,6 +28,7 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.getValue
 import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.core.content.edit
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -108,7 +109,7 @@ class AboutActivity : ComponentActivity() {
                                 ) {
                                     clickCount++
                                     if (clickCount == 5) {
-                                        sharedPrefs.edit().putBoolean("is_developer_mode", true).apply()
+                                        sharedPrefs.edit { putBoolean("is_developer_mode", true) }
                                         android.widget.Toast.makeText(context, "You are now a developer!", android.widget.Toast.LENGTH_SHORT).show()
                                     } else if (clickCount > 5 && clickCount % 3 == 0) {
                                         android.widget.Toast.makeText(context, "No need, you are already a developer.", android.widget.Toast.LENGTH_SHORT).show()
