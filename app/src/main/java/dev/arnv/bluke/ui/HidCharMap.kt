@@ -7,7 +7,7 @@ import dev.arnv.bluke.ui.UnicodeEntry.UnicodeEntryMode
 /**
  * Turns text into the key events that reproduce it on the host.
  *
- * The system IME hands us finished text rather than key presses, so anything typed there has to be
+ * The phone's keyboard app hands us finished text rather than key presses, so anything typed there has to be
  * turned back into scancodes before it can go out over HID. Which scancode produces which character
  * depends on the layout configured on the *host*, so translation is done against a [HostLayout]
  * chosen by the user - see [HostLayouts] for why this cannot be detected automatically.
@@ -59,12 +59,9 @@ object HidCharMap {
         return out
     }
 
-    /**
-     * Whether [text] can be typed in full under [layout], ignoring the Unicode fallback.
-     * Used to decide whether to warn the user before a clipboard send.
-     */
-    fun untypableIn(text: String, layout: HostLayout): String =
-        text.filter { c -> translateChar(c, layout, UnicodeEntryMode.OFF) == null }
+    /** Types Unicode-entry hex digits through the host layout rather than at US key positions. */
+    private fun hexKeyFor(layout: HostLayout): (Char) -> List<KeyEvent>? =
+        { c -> layout.direct[c]?.let(::strokeEvents) }
 
     /**
      * The events for a single [Char], or null when it cannot be produced at all.
@@ -76,7 +73,11 @@ object HidCharMap {
         layout: HostLayout,
         unicodeMode: UnicodeEntryMode
     ): List<KeyEvent>? {
-        layout.direct[c]?.let { return strokeEvents(it) }
+        layout.direct[c]?.let { stroke ->
+            val events = strokeEvents(stroke)
+            // A dead key only arms an accent; Space turns it into the bare symbol.
+            return if (c in layout.deadSymbols) events + tap(KeyboardLayouts.KEY_SPACE) else events
+        }
         layout.deadKeys[c]?.let { seq ->
             // A dead key emits nothing itself; the host composes it with the following keystroke.
             return strokeEvents(seq.dead) + strokeEvents(seq.base)
@@ -91,7 +92,7 @@ object HidCharMap {
                 return strokes.filterNotNull().flatMap { strokeEvents(it) }
             }
         }
-        val viaUnicode = UnicodeEntry.sequenceFor(c.code, unicodeMode)
+        val viaUnicode = UnicodeEntry.sequenceFor(c.code, unicodeMode, hexKeyFor(layout))
         return viaUnicode.ifEmpty { null }
     }
 
@@ -114,7 +115,7 @@ object HidCharMap {
                 Character.isLowSurrogate(text[i + 1])
             ) {
                 val codePoint = Character.toCodePoint(c, text[i + 1])
-                val seq = UnicodeEntry.sequenceFor(codePoint, unicodeMode)
+                val seq = UnicodeEntry.sequenceFor(codePoint, unicodeMode, hexKeyFor(layout))
                 if (seq.isEmpty()) {
                     dropped.appendCodePoint(codePoint)
                 } else {

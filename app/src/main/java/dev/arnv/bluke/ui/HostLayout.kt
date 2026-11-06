@@ -14,8 +14,7 @@ package dev.arnv.bluke.ui
  *
  * ## Verification status
  *
- * Only [US] is exercised by the on-screen keycaps today, so it is the only table with real-world
- * coverage behind it. Every other table here is derived from the published layout for that locale
+ * Only [US], the default, has seen wide real-world use so far. Every other table here is derived from the published layout for that locale
  * and is *unverified against physical hardware*. They are believed correct but should be treated as
  * best-effort until someone confirms them against a real host; see the `verified` flag.
  */
@@ -53,7 +52,13 @@ object HostLayouts {
         /** Direct single-keystroke mappings. */
         val direct: Map<Char, Stroke>,
         /** Characters reachable only as dead-key + base-letter pairs. */
-        val deadKeys: Map<Char, DeadKeySequence> = emptyMap()
+        val deadKeys: Map<Char, DeadKeySequence> = emptyMap(),
+        /**
+         * Characters in [direct] whose key is a dead key: on its own it only arms an accent, and
+         * Space afterwards produces the bare symbol. Only listed where the key is dead on both
+         * Windows and Linux, since a Space after a live key would type an extra space.
+         */
+        val deadSymbols: Set<Char> = emptySet(),
     ) {
         /** Every character this layout can produce without falling back to Unicode entry. */
         fun canType(c: Char): Boolean = direct.containsKey(c) || deadKeys.containsKey(c)
@@ -212,12 +217,11 @@ object HostLayouts {
             put('\\', a(K.KEY_Q)); put('|', a(K.KEY_W)); put('€', a(K.KEY_U))
             put('[', a(K.KEY_F)); put(']', a(K.KEY_G))
             put('{', a(K.KEY_B)); put('}', a(K.KEY_N))
-            // On the Hungarian layout < and > sit on AltGr + the physical Y and X keys. Because
-            // QWERTZ swaps Y and Z, the '<' legend is reached through the KEY_Z position.
-            put('<', a(K.KEY_Y)); put('>', a(K.KEY_Z))
+            // < is AltGr+Í (left of Y) and > is AltGr+Y, which QWERTZ puts at the KEY_Z position.
+            put('<', a(K.KEY_NONUS_BACKSLASH)); put('>', a(K.KEY_Z))
             put('@', a(K.KEY_V)); put('#', a(K.KEY_X))
-            put('&', a(K.KEY_C)); put('*', a(K.KEY_MINUS))
-            put('$', a(K.KEY_NONUS_BACKSLASH))
+            put('&', a(K.KEY_C)); put('*', a(K.KEY_SLASH))
+            put('$', a(K.KEY_SEMICOLON))
         }
     )
 
@@ -248,6 +252,7 @@ object HostLayouts {
             put('à', k(K.KEY_0))
             put(')', k(K.KEY_MINUS)); put('°', s(K.KEY_MINUS))
             put('=', k(K.KEY_EQUAL)); put('+', s(K.KEY_EQUAL))
+            put('$', k(K.KEY_RBRACKET)); put('£', s(K.KEY_RBRACKET))
             put('ù', k(K.KEY_APOSTROPHE)); put('%', s(K.KEY_APOSTROPHE))
             put('*', k(K.KEY_BACKSLASH)); put('µ', s(K.KEY_BACKSLASH))
             put(',', k(K.KEY_M)); put('?', s(K.KEY_M))
@@ -286,7 +291,8 @@ object HostLayouts {
             put('ò', k(K.KEY_SEMICOLON)); put('ç', s(K.KEY_SEMICOLON))
             put('à', k(K.KEY_APOSTROPHE)); put('°', s(K.KEY_APOSTROPHE))
             put('ù', k(K.KEY_BACKSLASH)); put('§', s(K.KEY_BACKSLASH))
-            put('\\', k(K.KEY_NONUS_BACKSLASH)); put('|', s(K.KEY_NONUS_BACKSLASH))
+            put('\\', k(K.KEY_GRAVE)); put('|', s(K.KEY_GRAVE))
+            put('<', k(K.KEY_NONUS_BACKSLASH)); put('>', s(K.KEY_NONUS_BACKSLASH))
             put(',', k(K.KEY_COMMA)); put(';', s(K.KEY_COMMA))
             put('.', k(K.KEY_PERIOD)); put(':', s(K.KEY_PERIOD))
             put('-', k(K.KEY_SLASH)); put('_', s(K.KEY_SLASH))
@@ -330,6 +336,7 @@ object HostLayouts {
             put('{', a(K.KEY_APOSTROPHE)); put('}', a(K.KEY_BACKSLASH))
             put('\\', a(K.KEY_GRAVE)); put('|', a(K.KEY_1)); put('~', a(K.KEY_4))
         },
+        deadSymbols = setOf('`', '^', '´', '¨'),
         // Spanish reaches its accented vowels through the acute-accent dead key.
         deadKeys = buildMap {
             val acute = k(K.KEY_APOSTROPHE)
@@ -371,10 +378,12 @@ object HostLayouts {
         put('@', a(K.KEY_2)); put('$', a(K.KEY_4)); put('€', a(K.KEY_E))
         put('{', a(K.KEY_7)); put('[', a(K.KEY_8))
         put(']', a(K.KEY_9)); put('}', a(K.KEY_0))
-        put('\\', a(K.KEY_NONUS_BACKSLASH))
-        put('|', Stroke(K.KEY_NONUS_BACKSLASH, shift = true, altGr = true))
         put('~', a(K.KEY_RBRACKET))
+        // Backslash and pipe sit on a different key in each of the three; see the layouts below.
     }.toMutableMap()
+
+    // ´ ` ¨ ^ ~ are dead keys on all three, on Windows and Linux alike. Norwegian swaps ´ for \.
+    private val nordicDeadSymbols = setOf('´', '`', '¨', '^', '~')
 
     private val SE = HostLayout(
         id = "se",
@@ -385,7 +394,9 @@ object HostLayouts {
             put('ö', k(K.KEY_SEMICOLON)); put('Ö', s(K.KEY_SEMICOLON))
             put('ä', k(K.KEY_APOSTROPHE)); put('Ä', s(K.KEY_APOSTROPHE))
             put('¨', k(K.KEY_RBRACKET)); put('^', s(K.KEY_RBRACKET))
-        }
+            put('\\', a(K.KEY_MINUS)); put('|', a(K.KEY_NONUS_BACKSLASH))
+        },
+        deadSymbols = nordicDeadSymbols,
     )
 
     private val NO = HostLayout(
@@ -398,7 +409,10 @@ object HostLayouts {
             put('ø', k(K.KEY_SEMICOLON)); put('Ø', s(K.KEY_SEMICOLON))
             put('æ', k(K.KEY_APOSTROPHE)); put('Æ', s(K.KEY_APOSTROPHE))
             put('¨', k(K.KEY_RBRACKET)); put('^', s(K.KEY_RBRACKET))
-        }
+            put('|', k(K.KEY_GRAVE)); put('§', s(K.KEY_GRAVE))
+            put('\\', k(K.KEY_EQUAL)); put('´', a(K.KEY_EQUAL))
+        },
+        deadSymbols = nordicDeadSymbols,
     )
 
     private val DK = HostLayout(
@@ -410,7 +424,9 @@ object HostLayouts {
             put('æ', k(K.KEY_SEMICOLON)); put('Æ', s(K.KEY_SEMICOLON))
             put('ø', k(K.KEY_APOSTROPHE)); put('Ø', s(K.KEY_APOSTROPHE))
             put('¨', k(K.KEY_RBRACKET)); put('^', s(K.KEY_RBRACKET))
-        }
+            put('\\', a(K.KEY_NONUS_BACKSLASH)); put('|', a(K.KEY_EQUAL))
+        },
+        deadSymbols = nordicDeadSymbols,
     )
 
     /** Every layout offered in settings, in display order. US first as the default. */

@@ -34,6 +34,50 @@ class HidCharMapTest {
     assertEquals(listOf(KeyboardLayouts.KEY_H), typedKeys("H"))
   }
 
+  /** The single key tapped for [c] on [layoutId], and whether AltGr was held for it. */
+  private fun keyFor(c: Char, layoutId: String): Pair<Int, Boolean> {
+    val events = HidCharMap.translate(c.toString(), HostLayouts.byId(layoutId)).events
+    val altGr = events.any { it.keyCode == KeyboardLayouts.MOD_RALT && it.isPress }
+    return events.first { it.isPress && it.keyCode !in 0xE0..0xE7 }.keyCode to altGr
+  }
+
+  @Test
+  fun shellSymbols_sitOnTheirPublishedKeys() {
+    val altGr = true
+    // Hungarian: < is AltGr+Í, $ is AltGr+É, * is AltGr+-.
+    assertEquals(KeyboardLayouts.KEY_NONUS_BACKSLASH to altGr, keyFor('<', "hu"))
+    assertEquals(KeyboardLayouts.KEY_SEMICOLON to altGr, keyFor('$', "hu"))
+    assertEquals(KeyboardLayouts.KEY_SLASH to altGr, keyFor('*', "hu"))
+    // French: $ has its own key, right of the ^ dead key.
+    assertEquals(KeyboardLayouts.KEY_RBRACKET to false, keyFor('$', "fr"))
+    // Italian: \ left of 1, < on the extra key by the left Shift.
+    assertEquals(KeyboardLayouts.KEY_GRAVE to false, keyFor('\\', "it"))
+    assertEquals(KeyboardLayouts.KEY_NONUS_BACKSLASH to false, keyFor('<', "it"))
+    // Nordic: backslash and pipe differ between the three.
+    assertEquals(KeyboardLayouts.KEY_MINUS to altGr, keyFor('\\', "se"))
+    assertEquals(KeyboardLayouts.KEY_NONUS_BACKSLASH to altGr, keyFor('|', "se"))
+    assertEquals(KeyboardLayouts.KEY_EQUAL to false, keyFor('\\', "no"))
+    assertEquals(KeyboardLayouts.KEY_GRAVE to false, keyFor('|', "no"))
+    assertEquals(KeyboardLayouts.KEY_NONUS_BACKSLASH to altGr, keyFor('\\', "dk"))
+    assertEquals(KeyboardLayouts.KEY_EQUAL to altGr, keyFor('|', "dk"))
+  }
+
+  @Test
+  fun deadKeySymbols_areFollowedBySpace() {
+    // On Spanish ^ is a dead key: without the Space, "^a" would arrive as â.
+    assertEquals(
+      listOf(KeyboardLayouts.KEY_LBRACKET, KeyboardLayouts.KEY_SPACE, KeyboardLayouts.KEY_A),
+      typedKeys("^a", HostLayouts.byId("es")),
+    )
+    // ~ on Swedish likewise, or "~/" loses the tilde.
+    assertEquals(
+      listOf(KeyboardLayouts.KEY_RBRACKET, KeyboardLayouts.KEY_SPACE),
+      typedKeys("~", HostLayouts.byId("se")),
+    )
+    // US has no dead keys.
+    assertEquals(listOf(KeyboardLayouts.KEY_6), typedKeys("^"))
+  }
+
   @Test
   fun shiftedSymbols_mapToTheirBaseKey() {
     assertEquals(listOf(KeyboardLayouts.KEY_1), typedKeys("!"))
@@ -226,15 +270,28 @@ class HidCharMapTest {
   }
 
   @Test
-  fun windowsUnicodeEntry_usesKeypadDigitsWithAltHeld() {
-    val events = UnicodeEntry.sequenceFor(0xE9, UnicodeEntryMode.WINDOWS_ALT)
+  fun windowsUnicodeEntry_typesKeypadPlusThenHexWithAltHeld() {
+    val events = UnicodeEntry.sequenceFor(0x20AC, UnicodeEntryMode.WINDOWS_ALT)
     assertEquals(KeyboardLayouts.MOD_LALT, events.first().keyCode)
     assertTrue(events.first().isPress)
     assertEquals(KeyboardLayouts.MOD_LALT, events.last().keyCode)
     assertFalse(events.last().isPress)
-    // 0xE9 = 233 decimal, typed on the keypad (0x59..0x62), never the top row.
+    // € is U+20AC: keypad +, then 2, 0 on the keypad and a, c from the letter keys. Decimal
+    // Alt-codes would go through the OEM code page and type something else entirely.
     val taps = events.filter { it.isPress && it.keyCode !in 0xE0..0xE7 }.map { it.keyCode }
-    assertEquals(listOf(0x5A, 0x5B, 0x5B), taps)
+    assertEquals(listOf(0x57, 0x5A, 0x62, KeyboardLayouts.KEY_A, KeyboardLayouts.KEY_C), taps)
+  }
+
+  @Test
+  fun unicodeEntryHexDigits_followTheHostLayout() {
+    // U+0101 (ā) is not on AZERTY. Its hex digits are typed with Shift there, and Linux entry must
+    // do the same or the host gets & and à instead of 1 and 0.
+    val fr = HostLayouts.byId("fr")
+    val events = HidCharMap.translate("ā", fr, UnicodeEntryMode.LINUX_IBUS).events
+    val afterPrefix = events.dropWhile { !(it.keyCode == KeyboardLayouts.KEY_U && it.isPress) }
+      .dropWhile { it.keyCode != KeyboardLayouts.MOD_LCTRL }.drop(1)
+    val shiftedDigits = afterPrefix.count { it.keyCode == KeyboardLayouts.MOD_LSHIFT && it.isPress }
+    assertEquals("each of 1, 0, 1 needs Shift on AZERTY", 3, shiftedDigits)
   }
 
   @Test
@@ -288,13 +345,6 @@ class HidCharMapTest {
     val text = "árvíztűrő tükörfúrógép"
     assertEquals("", HidCharMap.translate(text, hu).droppedChars)
     // The same string is mostly untypable on a US host.
-    assertTrue(HidCharMap.untypableIn(text, us).isNotEmpty())
-  }
-
-  @Test
-  fun untypableIn_ignoresTheUnicodeFallbackByDesign() {
-    // Used to warn before a clipboard send, so it must report the layout's own limits.
-    assertEquals("α", HidCharMap.untypableIn("α", us))
-    assertEquals("", HidCharMap.untypableIn("abc", us))
+    assertTrue(HidCharMap.translate(text, us).droppedChars.isNotEmpty())
   }
 }

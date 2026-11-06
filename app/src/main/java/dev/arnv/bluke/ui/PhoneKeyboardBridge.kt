@@ -77,10 +77,14 @@ class PhoneKeyboardBridge(
             val end = s.offsetByCodePoints(i, 1)
             val unit = s.substring(i, end)
             i = end
-            val translation = HidCharMap.translate(unit, hostLayout(), unicodeMode())
+            val mods = modifiers.active()
+            // A shortcut needs a real key. Unicode entry is a key sequence of its own, and held
+            // modifiers would turn it into a string of unrelated shortcuts.
+            val mode = if (mods.isEmpty()) unicodeMode() else UnicodeEntry.UnicodeEntryMode.OFF
+            val translation = HidCharMap.translate(unit, hostLayout(), mode)
             dropped.append(translation.droppedChars)
             if (translation.events.isEmpty()) continue
-            out += withModifiers(modifiers.active(), translation.events.map { it.keyCode to it.isPress })
+            out += withModifiers(mods, translation.events.map { it.keyCode to it.isPress })
             echo?.typed(unit, modifiers.active())
             modifiers.consumeOnce()
         }

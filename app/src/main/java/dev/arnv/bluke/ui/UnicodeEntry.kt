@@ -9,14 +9,14 @@ package dev.arnv.bluke.ui
  *
  * - **Linux (IBus/GTK)**: `Ctrl+Shift+U`, hex digits, then Enter or Space. Works in GTK and Qt apps
  *   under IBus, but not in every toolkit, and not in a bare TTY.
- * - **Windows**: `Alt` held while typing the *decimal* codepoint on the **numeric keypad**, which
- *   only works when the registry value `EnableHexNumpad` is set, and only in applications that
- *   honour it. Notably unreliable outside Win32 text controls.
+ * - **Windows**: `Alt` held while typing keypad `+` and then the *hex* codepoint, which only works
+ *   when the registry value `EnableHexNumpad` is set (and Num Lock is on), and only in applications
+ *   that honour it. Notably unreliable outside Win32 text controls. Plain Alt+decimal is not used:
+ *   that goes through the OEM code page, so most codepoints would come out as the wrong character.
  * - **macOS**: relies on the *Unicode Hex Input* keyboard source being selected; the user has to add
  *   it in System Settings. With a normal layout selected it will type raw hex digits instead.
  *
- * Because none of these is dependable everywhere, [UnicodeEntryMode.OFF] stays the default and the
- * clipboard route in [ImeInputView] remains the sturdier option for anything important.
+ * Because none of these is dependable everywhere, [UnicodeEntryMode.OFF] stays the default.
  */
 object UnicodeEntry {
 
@@ -34,7 +34,7 @@ object UnicodeEntry {
         WINDOWS_ALT(
             "windows",
             "Windows (Alt+Numpad)",
-            "Requires the EnableHexNumpad registry value; unreliable outside Win32 text fields"
+            "Alt, keypad + then hex. Requires the EnableHexNumpad registry value and Num Lock; unreliable outside Win32 text fields"
         ),
         MACOS_HEX(
             "macos",
@@ -61,6 +61,7 @@ object UnicodeEntry {
     )
 
     /** Windows Alt-entry must use the keypad digits; the top-row ones are ignored. */
+    private const val KEY_KP_PLUS = 0x57
     private val KEYPAD_DIGITS = mapOf(
         '0' to 0x62, '1' to 0x59, '2' to 0x5A, '3' to 0x5B, '4' to 0x5C,
         '5' to 0x5D, '6' to 0x5E, '7' to 0x5F, '8' to 0x60, '9' to 0x61
@@ -74,42 +75,55 @@ object UnicodeEntry {
      *
      * Takes a codepoint rather than a Char so characters outside the BMP - emoji, most importantly -
      * are handled as one unit instead of as broken surrogate halves.
+     *
+     * [hexKey] types one hex digit (`0-9`, `a-f`) on the host's layout, or returns null if it
+     * cannot. On AZERTY, for one, the digits need Shift and `a` is where US has `q`; the default
+     * assumes US positions.
      */
-    fun sequenceFor(codePoint: Int, mode: UnicodeEntryMode): List<KeyEvent> = when (mode) {
+    fun sequenceFor(
+        codePoint: Int,
+        mode: UnicodeEntryMode,
+        hexKey: (Char) -> List<KeyEvent>? = ::usHexKey,
+    ): List<KeyEvent> = when (mode) {
         UnicodeEntryMode.OFF -> emptyList()
-        UnicodeEntryMode.LINUX_IBUS -> linuxSequence(codePoint)
-        UnicodeEntryMode.WINDOWS_ALT -> windowsSequence(codePoint)
+        UnicodeEntryMode.LINUX_IBUS -> linuxSequence(codePoint, hexKey)
+        UnicodeEntryMode.WINDOWS_ALT -> windowsSequence(codePoint, hexKey)
+        // The Unicode Hex Input source is itself the active layout, with US key positions.
         UnicodeEntryMode.MACOS_HEX -> macOsSequence(codePoint)
     }
 
-    /** Ctrl+Shift+U, hex digits, then Enter to commit. */
-    private fun linuxSequence(codePoint: Int): List<KeyEvent> {
-        val hex = codePoint.toString(16).lowercase()
-        if (hex.any { it !in HEX_KEYS }) return emptyList()
+    private fun usHexKey(c: Char): List<KeyEvent>? = HEX_KEYS[c]?.let(::tap)
+
+    /** Ctrl+Shift+U, hex digits, then Enter to commit. U sits in the same place on every layout here. */
+    private fun linuxSequence(codePoint: Int, hexKey: (Char) -> List<KeyEvent>?): List<KeyEvent> {
+        val digits = codePoint.toString(16).map { hexKey(it) ?: return emptyList() }
         val out = mutableListOf<KeyEvent>()
         out.add(KeyEvent(K.MOD_LCTRL, true))
         out.add(KeyEvent(K.MOD_LSHIFT, true))
         out.addAll(tap(K.KEY_U))
         out.add(KeyEvent(K.MOD_LSHIFT, false))
         out.add(KeyEvent(K.MOD_LCTRL, false))
-        hex.forEach { out.addAll(tap(HEX_KEYS.getValue(it))) }
+        digits.forEach(out::addAll)
         out.addAll(tap(K.KEY_ENTER))
         return out
     }
 
     /**
-     * Alt held down while the decimal codepoint is typed on the keypad, then released.
+     * Alt held down while keypad `+` and the hex codepoint are typed, then released. Digits go on
+     * the keypad; `a-f` have no keypad key, so they come from the letter keys.
      *
-     * Windows only accepts this for values it can represent this way; anything above the BMP is
-     * out of reach, so emoji are refused rather than typed as garbage.
+     * Windows only accepts four hex digits this way; anything above the BMP is out of reach, so
+     * emoji are refused rather than typed as garbage.
      */
-    private fun windowsSequence(codePoint: Int): List<KeyEvent> {
+    private fun windowsSequence(codePoint: Int, hexKey: (Char) -> List<KeyEvent>?): List<KeyEvent> {
         if (codePoint > 0xFFFF) return emptyList()
-        val decimal = codePoint.toString()
-        if (decimal.any { it !in KEYPAD_DIGITS }) return emptyList()
+        val digits = codePoint.toString(16).map { c ->
+            KEYPAD_DIGITS[c]?.let(::tap) ?: hexKey(c) ?: return emptyList()
+        }
         val out = mutableListOf<KeyEvent>()
         out.add(KeyEvent(K.MOD_LALT, true))
-        decimal.forEach { out.addAll(tap(KEYPAD_DIGITS.getValue(it))) }
+        out.addAll(tap(KEY_KP_PLUS))
+        digits.forEach(out::addAll)
         out.add(KeyEvent(K.MOD_LALT, false))
         return out
     }
