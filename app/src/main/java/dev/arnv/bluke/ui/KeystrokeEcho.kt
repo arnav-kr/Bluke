@@ -11,10 +11,17 @@ package dev.arnv.bluke.ui
 class KeystrokeEcho(
     private val maxEntries: Int = 8,
     private val maxTextLength: Int = 32,
+    private val maxPastePreview: Int = 48,
 ) {
     sealed interface Entry {
         data class Text(val text: String) : Entry
         data class Key(val label: String, val count: Int = 1) : Entry
+
+        /**
+         * A clipboard send: the start of what was pasted, on one line, and its full length in
+         * characters so a cut-off preview still says how much went out.
+         */
+        data class Pasted(val preview: String, val length: Int, val truncated: Boolean) : Entry
     }
 
     private val mutableEntries = ArrayDeque<Entry>()
@@ -42,7 +49,27 @@ class KeystrokeEcho(
     /** Records a non-text key such as Enter or an arrow, with whatever modifiers were held. */
     fun pressed(keyCode: Int, modifiers: List<Int>) = key(comboLabel(modifiers, keyLabel(keyCode)))
 
-    /** Records something that is not a single key, such as a clipboard send. */
+    /**
+     * Records a clipboard send by its content. Line breaks and tabs show as symbols so the preview
+     * stays on one line, and a long clip is cut to its start, which is what identifies it.
+     */
+    fun pasted(text: String) {
+        if (text.isEmpty()) return
+        val oneLine = text.replace("\r\n", "\n")
+            .replace('\r', '\n')
+            .replace("\n", "⏎")
+            .replace("\t", "⇥")
+        val length = oneLine.codePointCount(0, oneLine.length)
+        val truncated = length > maxPastePreview
+        val preview = if (truncated) {
+            oneLine.substring(0, oneLine.offsetByCodePoints(0, maxPastePreview)) + "…"
+        } else {
+            oneLine
+        }
+        add(Entry.Pasted(preview, text.codePointCount(0, text.length), truncated))
+    }
+
+    /** Records something that is not a single key or text. */
     fun key(label: String) {
         val last = mutableEntries.lastOrNull()
         if (last is Entry.Key && last.label == label) {

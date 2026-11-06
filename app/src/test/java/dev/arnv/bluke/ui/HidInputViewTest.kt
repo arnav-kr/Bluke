@@ -25,6 +25,7 @@ class HidInputViewTest {
     private val sent = mutableListOf<Pair<Int, Boolean>>()
     private val composing = mutableListOf<String>()
     private var keystrokes = 0
+    private var pastes = 0
 
     private val connection: InputConnection
     private val editorInfo = EditorInfo()
@@ -37,7 +38,13 @@ class HidInputViewTest {
             modifiers = ModifierLatch(),
             emit = { sent += it },
         )
-        val view = HidInputView(context, bridge, onComposingChanged = { composing += it }, onKeystroke = { keystrokes++ })
+        val view = HidInputView(
+            context,
+            bridge,
+            onComposingChanged = { composing += it },
+            onKeystroke = { keystrokes++ },
+            onPaste = { pastes++ },
+        )
         connection = view.onCreateInputConnection(editorInfo)
     }
 
@@ -48,6 +55,18 @@ class HidInputViewTest {
     @Test
     fun asksTheImeForRawInput() {
         assertEquals(InputType.TYPE_NULL, editorInfo.inputType)
+    }
+
+    @Test
+    fun keyboardPasteGoesToTheClipboardSendAfterAnyComposingWord() {
+        connection.setComposingText("hi", 1)
+        assertEquals(true, connection.performContextMenuAction(android.R.id.paste))
+        assertEquals(1, pastes)
+        assertEquals(keys("hi"), taps())
+
+        // Nothing local to cut, copy or select.
+        assertEquals(false, connection.performContextMenuAction(android.R.id.copy))
+        assertEquals(1, pastes)
     }
 
     @Test

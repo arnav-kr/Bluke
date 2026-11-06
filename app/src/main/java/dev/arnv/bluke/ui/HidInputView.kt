@@ -26,6 +26,8 @@ class HidInputView(
     private val onComposingChanged: (String) -> Unit,
     /** Called once per user-visible keystroke, for sound and vibration feedback. */
     private val onKeystroke: () -> Unit,
+    /** The keyboard app asked to paste; there is no local text to paste into, so the host gets it. */
+    private val onPaste: () -> Unit,
 ) : View(context) {
 
     init {
@@ -147,5 +149,15 @@ class HidInputView(
 
         // Selection and cursor moves are the host's business; nothing local to move.
         override fun setSelection(start: Int, end: Int): Boolean = true
+
+        // Keyboards with a clipboard panel either commit the clip as text, which goes out as typing
+        // anyway, or ask the editor to paste, which lands here. Cut, copy and select-all have nothing
+        // local to act on.
+        override fun performContextMenuAction(id: Int): Boolean {
+            if (id != android.R.id.paste && id != android.R.id.pasteAsPlainText) return false
+            flush()
+            onPaste()
+            return true
+        }
     }
 }

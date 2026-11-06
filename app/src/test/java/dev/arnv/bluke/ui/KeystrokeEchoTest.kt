@@ -78,4 +78,24 @@ class KeystrokeEchoTest {
         bridge.tapKey(KeyboardLayouts.KEY_ENTER)
         assertEquals(listOf(Entry.Text("hi"), Entry.Key("Ctrl+C"), Entry.Key("⏎")), echo.entries)
     }
+
+    @Test
+    fun pasteShowsTheTextOnOneLine() {
+        echo.pasted("ls\r\ncd\tx")
+        assertEquals(listOf(Entry.Pasted("ls⏎cd⇥x", length = 8, truncated = false)), echo.entries)
+    }
+
+    @Test
+    fun longPasteShowsItsStartAndFullLength() {
+        val echo = KeystrokeEcho(maxPastePreview = 4)
+        echo.pasted("password123")
+        assertEquals(listOf(Entry.Pasted("pass…", length = 11, truncated = true)), echo.entries)
+    }
+
+    @Test
+    fun typingAfterAPasteStartsItsOwnRun() {
+        echo.pasted("abc")
+        echo.typed("d", emptyList())
+        assertEquals(Entry.Text("d"), echo.entries.last())
+    }
 }

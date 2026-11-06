@@ -17,6 +17,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.VolumeOff
 import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.ContentPaste
 import androidx.compose.material.icons.filled.Keyboard
 import androidx.compose.material.icons.filled.PhoneAndroid
 import androidx.compose.material.icons.filled.Vibration
@@ -31,6 +32,9 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalView
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -54,6 +58,9 @@ private val PhoneKeyboardCanvasColor = Color(0xFF1D1D1D)
 
 /** How long the record of sent keys stays up after the last keystroke. */
 private const val ECHO_TIMEOUT_MILLIS = 4_000L
+
+/** Queued strokes (about half a second's worth) above which progress and Stop are shown. */
+private const val SHOW_PROGRESS_STROKES = 100
 
 /**
  * Types on the host with whichever keyboard app the phone has installed.
@@ -111,7 +118,12 @@ fun PhoneKeyboardView(
     val latch = remember { ModifierLatch() }
     val echo = remember { KeystrokeEcho() }
     var echoClears by remember { mutableIntStateOf(0) }
-    LaunchedEffect(latchRevision) {
+    // Declared ahead of the stroke queue so the echo can stay up while a long send drains.
+    var pendingStrokes by remember { mutableIntStateOf(0) }
+    // Derived, so the screen only recomposes when sending starts or stops, not on every stroke.
+    val isSending by remember { derivedStateOf { pendingStrokes > 0 } }
+    LaunchedEffect(latchRevision, isSending) {
+        if (isSending) return@LaunchedEffect
         delay(ECHO_TIMEOUT_MILLIS)
         if (echo.entries.isNotEmpty()) {
             echo.clear()
@@ -122,12 +134,38 @@ fun PhoneKeyboardView(
     // One unbounded queue drained by one long-lived consumer. A clipboard send is hundreds of
     // strokes; they must go out in order, and nothing may be dropped if more arrives mid-drain.
     val strokeQueue = remember { Channel<Pair<Int, Boolean>>(Channel.UNLIMITED) }
+    // pendingStrokes counts strokes queued but not yet sent. Everything that touches it runs on
+    // the main thread.
+    fun enqueue(stroke: Pair<Int, Boolean>) {
+        if (strokeQueue.trySend(stroke).isSuccess) pendingStrokes++
+    }
     LaunchedEffect(strokeQueue) {
         for ((code, press) in strokeQueue) {
             sendKey(code, press)
+            pendingStrokes = (pendingStrokes - 1).coerceAtLeast(0)
             // Paced so hosts do not coalesce fast repeats of the same key.
             delay(4)
         }
+    }
+
+    /** Drops whatever has not gone out yet, such as the rest of a long clipboard send. */
+    fun stopSending() {
+        if (pendingStrokes == 0) return
+        while (strokeQueue.tryReceive().isSuccess) Unit
+        pendingStrokes = 0
+        // The last stroke out may have been a press whose release was just dropped.
+        releaseAll()
+        statusNotice = "Stopped - the rest was not sent"
+    }
+
+    // Leaving the app mid-send must not keep typing into the host where nobody is watching.
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_STOP) stopSending()
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
     val bridge = remember(hostLayout, unicodeMode) {
@@ -136,7 +174,7 @@ fun PhoneKeyboardView(
             unicodeMode = { unicodeMode },
             modifiers = latch,
             emit = { strokes ->
-                strokes.forEach { strokeQueue.trySend(it) }
+                strokes.forEach(::enqueue)
                 droppedNotice = null
                 statusNotice = null
                 latchRevision++
@@ -151,12 +189,36 @@ fun PhoneKeyboardView(
         if (isVibrationEnabled) view.performHapticFeedback(HapticFeedbackConstants.KEYBOARD_TAP)
     }
 
+    fun sendClipboard() {
+        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
+        val clip = clipboard?.primaryClip
+        val text = if (clip != null && clip.itemCount > 0) {
+            clip.getItemAt(0).coerceToText(context).toString()
+        } else ""
+        if (text.isEmpty()) {
+            statusNotice = "Clipboard is empty"
+            return
+        }
+        // Typed as plain text: a modifier latched for the next key should not turn a pasted
+        // password into a string of shortcuts.
+        val translation = HidCharMap.translate(text, hostLayout, unicodeMode)
+        translation.events.forEach { enqueue(it.keyCode to it.isPress) }
+        echo.pasted(text)
+        latchRevision++
+        statusNotice = "Typing ${text.length} characters from the clipboard"
+        droppedNotice = translation.droppedChars.takeIf { it.isNotEmpty() }
+    }
+
     val inputView = remember(bridge) {
         HidInputView(
             context = context,
             bridge = bridge,
             onComposingChanged = { composing = it },
             onKeystroke = { feedback() },
+            onPaste = {
+                sendClipboard()
+                feedback()
+            },
         )
     }
 
@@ -174,26 +236,6 @@ fun PhoneKeyboardView(
             latch.clear()
             releaseAll()
         }
-    }
-
-    fun sendClipboard() {
-        val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
-        val clip = clipboard?.primaryClip
-        val text = if (clip != null && clip.itemCount > 0) {
-            clip.getItemAt(0).coerceToText(context).toString()
-        } else ""
-        if (text.isEmpty()) {
-            statusNotice = "Clipboard is empty"
-            return
-        }
-        // Typed as plain text: a modifier latched for the next key should not turn a pasted
-        // password into a string of shortcuts.
-        val translation = HidCharMap.translate(text, hostLayout, unicodeMode)
-        translation.events.forEach { strokeQueue.trySend(it.keyCode to it.isPress) }
-        echo.key("Clipboard")
-        latchRevision++
-        statusNotice = "Sent ${text.length} characters from the clipboard"
-        droppedNotice = translation.droppedChars.takeIf { it.isNotEmpty() }
     }
 
     fun onKeyBarPress(def: ImeKeyBar.KeyDef) {
@@ -257,6 +299,19 @@ fun PhoneKeyboardView(
                 )
             }
             Spacer(Modifier.weight(1f))
+            ToolbarPill(onClick = {
+                sendClipboard()
+                feedback()
+            }) {
+                Icon(
+                    Icons.Default.ContentPaste,
+                    "Type the clipboard on the host",
+                    tint = Color.White,
+                    modifier = Modifier.size(12.dp).testTag("phone_keyboard_paste"),
+                )
+                Spacer(Modifier.width(4.dp))
+                Text("Paste", color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+            }
             ToolbarPill(onClick = {
                 isSoundEnabled = !isSoundEnabled
                 sharedPrefs.edit { putBoolean(PHONE_KEYBOARD_SOUND_PREFERENCE, isSoundEnabled) }
@@ -357,6 +412,7 @@ fun PhoneKeyboardView(
                         modifier = Modifier.testTag("phone_keyboard_status_notice"),
                     )
                 }
+                SendProgress(pending = { pendingStrokes }, onStop = ::stopSending)
             }
         }
 
@@ -393,6 +449,36 @@ fun PhoneKeyboardView(
                 }
             }
             ArrowCluster(onPress = ::onKeyBarPress)
+        }
+    }
+}
+
+/**
+ * How much of a long send (a clipboard, usually) is still queued, with a way to stop it. Takes the
+ * count as a lambda so only this line redraws as it ticks down, not the whole screen.
+ */
+@Composable
+private fun SendProgress(pending: () -> Int, onStop: () -> Unit) {
+    val left = pending()
+    if (left <= SHOW_PROGRESS_STROKES) return
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Text(
+            text = "Sending - $left keystrokes to go",
+            color = MaterialTheme.colorScheme.primary,
+            fontSize = 11.sp,
+            modifier = Modifier.testTag("phone_keyboard_send_progress"),
+        )
+        ToolbarPill(onClick = onStop) {
+            Text(
+                "Stop",
+                color = Color.White,
+                fontSize = 10.sp,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.testTag("phone_keyboard_stop_sending"),
+            )
         }
     }
 }
@@ -454,6 +540,7 @@ private fun KeystrokeEchoLine(entries: List<KeystrokeEcho.Entry>) {
                     fontFamily = FontFamily.Monospace,
                     maxLines = 1,
                 )
+                is KeystrokeEcho.Entry.Pasted -> PastedEcho(entry)
                 is KeystrokeEcho.Entry.Key -> Box(
                     modifier = Modifier
                         .clip(RoundedCornerShape(6.dp))
@@ -470,6 +557,40 @@ private fun KeystrokeEchoLine(entries: List<KeystrokeEcho.Entry>) {
                     )
                 }
             }
+        }
+    }
+}
+
+/** A clipboard send in the echo: what was pasted, marked as a paste rather than typing. */
+@Composable
+private fun PastedEcho(entry: KeystrokeEcho.Entry.Pasted) {
+    val accent = MaterialTheme.colorScheme.primary
+    val shape = RoundedCornerShape(6.dp)
+    Row(
+        modifier = Modifier
+            .clip(shape)
+            .background(accent.copy(alpha = 0.14f))
+            .border(1.dp, accent.copy(alpha = 0.45f), shape)
+            .padding(horizontal = 8.dp, vertical = 4.dp)
+            .testTag("phone_keyboard_echo_paste"),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(6.dp),
+    ) {
+        Icon(Icons.Default.ContentPaste, "Pasted", tint = accent, modifier = Modifier.size(16.dp))
+        Text(
+            text = entry.preview,
+            color = Color.White,
+            fontSize = 18.sp,
+            fontFamily = FontFamily.Monospace,
+            maxLines = 1,
+        )
+        if (entry.truncated) {
+            Text(
+                text = "${entry.length} chars",
+                color = Color.White.copy(alpha = 0.6f),
+                fontSize = 11.sp,
+                maxLines = 1,
+            )
         }
     }
 }

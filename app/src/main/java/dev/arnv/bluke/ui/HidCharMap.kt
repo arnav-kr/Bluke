@@ -110,6 +110,11 @@ object HidCharMap {
         var i = 0
         while (i < text.length) {
             val c = text[i]
+            // A Windows line break is one line break, not two Enters.
+            if (c == '\r' && i + 1 < text.length && text[i + 1] == '\n') {
+                i++
+                continue
+            }
             // Codepoints outside the BMP arrive as surrogate pairs; emoji must be handled whole.
             if (Character.isHighSurrogate(c) && i + 1 < text.length &&
                 Character.isLowSurrogate(text[i + 1])

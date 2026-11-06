@@ -34,6 +34,16 @@ class HidCharMapTest {
     assertEquals(listOf(KeyboardLayouts.KEY_H), typedKeys("H"))
   }
 
+  @Test
+  fun lineBreaks_areOneEnterWhateverTheirStyle() {
+    val enter = KeyboardLayouts.KEY_ENTER
+    val a = KeyboardLayouts.KEY_A
+    val b = KeyboardLayouts.KEY_B
+    assertEquals(listOf(a, enter, b), typedKeys("a\nb"))
+    assertEquals(listOf(a, enter, b), typedKeys("a\r\nb"))
+    assertEquals(listOf(a, enter, b), typedKeys("a\rb"))
+  }
+
   /** The single key tapped for [c] on [layoutId], and whether AltGr was held for it. */
   private fun keyFor(c: Char, layoutId: String): Pair<Int, Boolean> {
     val events = HidCharMap.translate(c.toString(), HostLayouts.byId(layoutId)).events
