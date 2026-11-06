@@ -26,7 +26,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 
 /**
- * Editor for the System Keyboard extra key rows.
+ * Editor for the Phone Keyboard extra key rows.
  *
  * Rows are assembled from [ImeKeyBar.CATALOG] rather than typed in, so a bar cannot be configured
  * into a key that does nothing. Reordering is via arrow buttons instead of drag-and-drop: the keys
@@ -62,7 +62,7 @@ fun ImeKeyBarEditorDialog(
                     .verticalScroll(rememberScrollState())
             ) {
                 Text(
-                    text = "Arrange the extra key rows shown under the text field. " +
+                    text = "Arrange the extra key rows shown above your phone's keyboard. " +
                         "Everything here is sent to the computer you are controlling.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
