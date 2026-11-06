@@ -4,6 +4,11 @@ import android.content.SharedPreferences
 import androidx.core.content.edit
 
 private const val INPUT_MODE_CYCLE_PREFERENCE = "cycle_connection_modes"
+private const val INPUT_MODE_CYCLE_VERSION_PREFERENCE = "cycle_connection_modes_version"
+
+// Bumped whenever a mode joins the defaults. An untouched older default is upgraded once per bump,
+// so a mode the user unticks afterwards stays unticked even though the set now looks like an old default.
+private const val INPUT_MODE_CYCLE_VERSION = 1
 
 enum class InputMode(
     val id: Int,
@@ -32,9 +37,10 @@ private const val REMOVED_MOUSE_MODE_KEY = "mouse"
 private const val REMOVED_KEYBOARD_TOUCHPAD_MODE_KEY = "keyboard_touchpad"
 val defaultInputModeKeys: Set<String> = InputMode.entries.mapTo(linkedSetOf()) { it.preferenceKey }
 
-fun normalizeInputModeKeys(savedKeys: Set<String>?): Set<String> {
+fun normalizeInputModeKeys(savedKeys: Set<String>?, upgradeLegacyDefaults: Boolean = true): Set<String> {
     val normalized = when {
-        savedKeys == null || savedKeys in legacyDefaultModeKeySets -> defaultInputModeKeys
+        savedKeys == null -> defaultInputModeKeys
+        upgradeLegacyDefaults && savedKeys in legacyDefaultModeKeySets -> defaultInputModeKeys
         else -> savedKeys.mapNotNullTo(linkedSetOf()) { key ->
             when (key) {
                 REMOVED_MOUSE_MODE_KEY -> InputMode.MEDIA_PRESENTATION.preferenceKey
@@ -50,9 +56,13 @@ fun normalizeInputModeKeys(savedKeys: Set<String>?): Set<String> {
 
 fun SharedPreferences.enabledInputModes(): List<InputMode> {
     val saved = getStringSet(INPUT_MODE_CYCLE_PREFERENCE, null)?.toSet()
-    val normalized = normalizeInputModeKeys(saved)
-    if (saved != normalized) {
-        edit { putStringSet(INPUT_MODE_CYCLE_PREFERENCE, normalized) }
+    val upgrade = getInt(INPUT_MODE_CYCLE_VERSION_PREFERENCE, 0) < INPUT_MODE_CYCLE_VERSION
+    val normalized = normalizeInputModeKeys(saved, upgradeLegacyDefaults = upgrade)
+    if (saved != normalized || upgrade) {
+        edit {
+            putStringSet(INPUT_MODE_CYCLE_PREFERENCE, normalized)
+            putInt(INPUT_MODE_CYCLE_VERSION_PREFERENCE, INPUT_MODE_CYCLE_VERSION)
+        }
     }
     return InputMode.entries.filter { normalized.contains(it.preferenceKey) }
 }

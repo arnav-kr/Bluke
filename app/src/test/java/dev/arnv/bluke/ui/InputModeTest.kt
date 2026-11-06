@@ -62,4 +62,14 @@ class InputModeTest {
             normalizeInputModeKeys(setOf("keyboard", "touchpad", "gamepad", "media_presentation")),
         )
     }
+
+    @Test
+    fun previousDefaultIsKeptOnceUpgraded() {
+        // After the one-time upgrade, this set means the user unticked Phone Keyboard.
+        val withoutPhoneKeyboard = setOf("keyboard", "touchpad", "gamepad", "media_presentation")
+        assertEquals(
+            withoutPhoneKeyboard,
+            normalizeInputModeKeys(withoutPhoneKeyboard, upgradeLegacyDefaults = false),
+        )
+    }
 }
