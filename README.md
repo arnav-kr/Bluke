@@ -24,6 +24,7 @@ Bluke turns your Android phone into a Bluetooth keyboard, touchpad, gamepad, and
 - Multiple keyboard geometries (60%, 65%, 75%) and custom themes with case, plate, and keycap styling
 - Gamepad controller with live switching between Native, Android, and Web mappings
 - Multimedia remote with presentation controls, touchpad, and phone volume button forwarding
+- Phone Keyboard mode: type with your own keyboard app, with a configurable bar of Ctrl, Alt, Esc, arrows, F-keys and host shortcuts
 - Built for peak UX with haptic feedback, OLED black mode, and Material You dynamic theming
 
 

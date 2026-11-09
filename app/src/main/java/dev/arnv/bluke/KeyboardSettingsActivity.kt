@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -16,8 +17,11 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.Keyboard
+import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Palette
+import androidx.compose.material.icons.filled.PhoneAndroid
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.filled.Translate
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -40,11 +44,17 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.unit.dp
 import androidx.core.content.edit
+import dev.arnv.bluke.ui.HOST_LAYOUT_PREFERENCE
+import dev.arnv.bluke.ui.HostLayouts
+import dev.arnv.bluke.ui.ImeKeyBar
+import dev.arnv.bluke.ui.ImeKeyBarEditorDialog
 import dev.arnv.bluke.ui.KEYBOARD_CHARACTER_LAYOUT_PREFERENCE
 import dev.arnv.bluke.ui.KeyboardCharacterLayout
 import dev.arnv.bluke.ui.SettingsCardGroup
 import dev.arnv.bluke.ui.SettingsGroup
 import dev.arnv.bluke.ui.SettingsItemData
+import dev.arnv.bluke.ui.UNICODE_ENTRY_MODE_PREFERENCE
+import dev.arnv.bluke.ui.UnicodeEntry
 import dev.arnv.bluke.ui.theme.MyApplicationTheme
 
 class KeyboardSettingsActivity : ComponentActivity() {
@@ -59,6 +69,13 @@ class KeyboardSettingsActivity : ComponentActivity() {
                 var characterLayout by remember {
                     mutableStateOf(KeyboardCharacterLayout.fromPreference(preferences.getString(KEYBOARD_CHARACTER_LAYOUT_PREFERENCE, null)))
                 }
+                var hostLayout by remember {
+                    mutableStateOf(HostLayouts.byId(preferences.getString(HOST_LAYOUT_PREFERENCE, null)))
+                }
+                var unicodeMode by remember {
+                    mutableStateOf(UnicodeEntry.UnicodeEntryMode.byId(preferences.getString(UNICODE_ENTRY_MODE_PREFERENCE, null)))
+                }
+                var keyBarRows by remember { mutableStateOf(ImeKeyBar.load(preferences)) }
                 var dialog by remember { mutableStateOf<KeyboardDialog?>(null) }
                 val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
 
@@ -144,6 +161,34 @@ class KeyboardSettingsActivity : ComponentActivity() {
                                 ),
                             ),
                         )
+                        SettingsCardGroup(
+                            title = "Phone Keyboard",
+                            items = listOf(
+                                SettingsItemData(
+                                    title = "Host keyboard layout",
+                                    subtitle = "${hostLayout.displayName}" +
+                                        if (hostLayout.verified) "" else " · unverified, please report wrong characters",
+                                    icon = { Icon(Icons.Default.Language, null, tint = MaterialTheme.colorScheme.primary) },
+                                    onClick = { dialog = KeyboardDialog.HOST_LAYOUT },
+                                ),
+                                SettingsItemData(
+                                    title = "Unicode entry fallback",
+                                    subtitle = "${unicodeMode.displayName} · ${unicodeMode.description}",
+                                    icon = { Icon(Icons.Default.Translate, null, tint = MaterialTheme.colorScheme.primary) },
+                                    onClick = { dialog = KeyboardDialog.UNICODE_ENTRY },
+                                ),
+                                SettingsItemData(
+                                    title = "Extra keys",
+                                    subtitle = keyBarRows.let { rows ->
+                                        val keys = rows.sumOf { it.size }
+                                        "$keys ${if (keys == 1) "key" else "keys"} in ${rows.size} " +
+                                            "${if (rows.size == 1) "row" else "rows"} · Ctrl, Esc, Home/End, F-keys and more"
+                                    },
+                                    icon = { Icon(Icons.Default.PhoneAndroid, null, tint = MaterialTheme.colorScheme.primary) },
+                                    onClick = { dialog = KeyboardDialog.EXTRA_KEYS },
+                                ),
+                            ),
+                        )
                         Spacer(Modifier.height(32.dp))
                     }
                 }
@@ -173,6 +218,41 @@ class KeyboardSettingsActivity : ComponentActivity() {
                         },
                         onDismiss = { dialog = null },
                     )
+                    KeyboardDialog.HOST_LAYOUT -> ChoiceDialog(
+                        title = "Host keyboard layout",
+                        explanation = "Phone Keyboard sends key positions, not letters, and the computer decides " +
+                            "what each position means. Pick the layout that computer is set to.",
+                        choices = HostLayouts.ALL.map { if (it.verified) it.displayName else "${it.displayName} (unverified)" },
+                        selectedIndex = HostLayouts.ALL.indexOf(hostLayout),
+                        onSelect = { index ->
+                            hostLayout = HostLayouts.ALL[index]
+                            preferences.edit { putString(HOST_LAYOUT_PREFERENCE, hostLayout.id) }
+                            dialog = null
+                        },
+                        onDismiss = { dialog = null },
+                    )
+                    KeyboardDialog.UNICODE_ENTRY -> ChoiceDialog(
+                        title = "Unicode entry fallback",
+                        explanation = "How to send characters the host layout has no key for, such as emoji. " +
+                            "These rely on host OS features and do not work everywhere.",
+                        choices = UnicodeEntry.UnicodeEntryMode.entries.map { "${it.displayName} · ${it.description}" },
+                        selectedIndex = UnicodeEntry.UnicodeEntryMode.entries.indexOf(unicodeMode),
+                        onSelect = { index ->
+                            unicodeMode = UnicodeEntry.UnicodeEntryMode.entries[index]
+                            preferences.edit { putString(UNICODE_ENTRY_MODE_PREFERENCE, unicodeMode.id) }
+                            dialog = null
+                        },
+                        onDismiss = { dialog = null },
+                    )
+                    KeyboardDialog.EXTRA_KEYS -> ImeKeyBarEditorDialog(
+                        initialRows = keyBarRows,
+                        onDismiss = { dialog = null },
+                        onSave = { rows ->
+                            ImeKeyBar.save(preferences, rows)
+                            keyBarRows = ImeKeyBar.load(preferences)
+                            dialog = null
+                        },
+                    )
                     null -> Unit
                 }
             }
@@ -180,7 +260,7 @@ class KeyboardSettingsActivity : ComponentActivity() {
     }
 }
 
-private enum class KeyboardDialog { TYPING_LAYOUT, CAPS_LOCK }
+private enum class KeyboardDialog { TYPING_LAYOUT, CAPS_LOCK, HOST_LAYOUT, UNICODE_ENTRY, EXTRA_KEYS }
 
 @Composable
 internal fun ChoiceDialog(
@@ -195,7 +275,10 @@ internal fun ChoiceDialog(
         onDismissRequest = onDismiss,
         title = { Text(title) },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+            Column(
+                modifier = Modifier.heightIn(max = 480.dp).verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
                 Text(explanation, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 choices.forEachIndexed { index, choice ->
                     SettingsCardGroup(

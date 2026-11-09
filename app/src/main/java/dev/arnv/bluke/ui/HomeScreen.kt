@@ -427,11 +427,15 @@ fun HomeScreen(
         }
     }
 
+    // Phone Keyboard mode needs the soft keyboard, which cannot share the screen with the
+    // forced-landscape immersive plate - so it stays portrait with system bars, like the home screen.
+    val immersiveKeyboard = isKeyboardActive && launchMode != InputMode.PHONE_KEYBOARD.id
+
     // Toggle orientation and full-screen layout helper automatically
-    LaunchedEffect(isKeyboardActive) {
+    LaunchedEffect(immersiveKeyboard) {
         val activity = context as? Activity ?: return@LaunchedEffect
         val window = activity.window ?: return@LaunchedEffect
-        if (isKeyboardActive) {
+        if (immersiveKeyboard) {
             try {
                 activity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
             } catch (e: Exception) {
@@ -621,7 +625,7 @@ fun HomeScreen(
             }
 
             when (launchMode) {
-                1, 2, 4 -> {
+                1, 2, 4, InputMode.PHONE_KEYBOARD.id -> {
                     val darkScheme = darkColorScheme(
                         primary = MaterialTheme.colorScheme.primary,
                         background = Color(0xFF141218),
@@ -667,6 +671,18 @@ fun HomeScreen(
                                     },
                                     sharedPrefs = sharedPrefs,
                                     isConnected = isConnected,
+                                )
+                            }
+                            InputMode.PHONE_KEYBOARD.id -> {
+                                PhoneKeyboardView(
+                                    isConnected = isConnected,
+                                    sharedPrefs = sharedPrefs,
+                                    soundSynth = soundSynth,
+                                    launchMode = launchMode,
+                                    onModeChange = { newMode -> switchInputMode(newMode) },
+                                    onClose = { isKeyboardActive = false },
+                                    sendKey = btManager::sendKey,
+                                    releaseAll = btManager::releaseAllInputs,
                                 )
                             }
                         }
@@ -1278,6 +1294,7 @@ fun HomeScreen(
                                     1 -> Icons.Default.Mouse
                                     2 -> Icons.Default.SportsEsports
                                     4 -> Icons.Filled.SmartDisplay
+                                    InputMode.PHONE_KEYBOARD.id -> Icons.Default.PhoneAndroid
                                     else -> Icons.Default.Keyboard
                                 }
                                 Icon(
@@ -1310,6 +1327,7 @@ fun HomeScreen(
                                     1 -> "Launch Touchpad"
                                     2 -> "Launch Gamepad"
                                     4 -> "Launch Multimedia"
+                                    InputMode.PHONE_KEYBOARD.id -> "Launch Phone Keyboard"
                                     else -> "Launch Keyboard"
                                 }
                                 Icon(

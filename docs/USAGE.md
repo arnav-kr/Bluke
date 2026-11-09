@@ -92,6 +92,19 @@ A dedicated remote for couch media browsing and presentations.
 
 ---
 
+### Phone Keyboard
+Type on the computer with your phone's own keyboard app (Gboard, SwiftKey, and so on). Tap the mode button on the home screen until it shows the phone icon, then open it.
+
+- **Straight to the host:** There is no text box on the phone. Every key goes to the computer as you press it, so the text and the cursor live on the computer's screen. Terminal tab completion, command history and clicking elsewhere all work, because Bluke has no copy that could fall out of step.
+- **Raw keys:** Bluke asks your keyboard app for plain keystrokes, the way terminal apps do, so autocorrect and word suggestions are off in this mode.
+- **Extra keys:** Above the keyboard sit the arrow keys, grouped as their own block, and configurable rows of what a phone keyboard lacks: Esc, Tab, Ctrl, Alt, Shift, Home/End, Page Up/Down and Delete to start with, plus F-keys, symbols and host shortcuts if you add them. Ctrl, Alt, Shift and Super latch: tap once for the next key only (outlined), twice to lock (filled), a third time to release.
+- **What was sent:** The middle of the screen, above the keys, shows the last few keystrokes as they go out - typed text, pasted text after a clipboard icon, plus labels such as `Ctrl+C`, `⏎` or `⌫ ×3` - so you can check what reached the computer without looking over at it.
+- **Clipboard:** *Paste* in the toolbar types out your phone's clipboard on the computer, as does your keyboard app's own paste and the optional *Clipboard* extra key. It is typed rather than pasted, so it works in any field and follows the host keyboard layout; Windows line breaks become a single Enter. A long clip shows how much is left, with *Stop* to drop the rest; leaving the app stops it too.
+- **Sound & vibration:** Toggle both from the toolbar. Sound is off by default because your keyboard app usually clicks already.
+- **Settings:** Under **Settings > Keyboard > Phone Keyboard**, set the **host keyboard layout** (the layout the *computer* is set to), an optional **Unicode entry fallback** for characters that layout cannot type, and the **extra keys** rows.
+
+---
+
 ## 4. Settings & Customization
 
 ### Personalization
@@ -171,6 +184,10 @@ A dedicated remote for couch media browsing and presentations.
 #### Russian or accented characters do not type correctly
 * **Cause:** Keyboards send physical key positions rather than typed letters. Your computer turns those keypresses into characters using whatever keyboard language is currently active on the computer.
 * **Fix:** When switching to the Russian layout in Bluke, switch your computer's input language to Russian as well.
+
+#### Phone Keyboard types the wrong symbols (for example `y` and `z` swapped)
+* **Cause:** Phone Keyboard has to know which layout the computer is using to pick the right keys for each character.
+* **Fix:** Set **Settings > Keyboard > Phone Keyboard > Host keyboard layout** to the layout the computer is set to. Layouts marked *unverified* have not been checked against real hardware yet, so please report any wrong characters.
 
 ---
 

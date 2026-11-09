@@ -18,6 +18,7 @@ import androidx.core.content.edit
 import dev.arnv.bluke.ui.InputMode
 import dev.arnv.bluke.ui.SettingsCardGroup
 import dev.arnv.bluke.ui.SettingsItemData
+import dev.arnv.bluke.ui.enabledInputModes
 import dev.arnv.bluke.ui.normalizedCycleSelection
 import dev.arnv.bluke.ui.toggledCycleSelection
 import dev.arnv.bluke.ui.theme.MyApplicationTheme
@@ -31,7 +32,10 @@ class QuickCycleActivity : ComponentActivity() {
             MyApplicationTheme {
                 val modeIds = InputMode.entries.map { it.preferenceKey }
                 var selectedModes by remember {
-                    mutableStateOf(normalizedCycleSelection(preferences.getStringSet("cycle_connection_modes", null), modeIds))
+                    // Through enabledInputModes, so any pending upgrade of an old default is applied
+                    // before the user edits the set, not afterwards on top of their choice.
+                    val enabled = preferences.enabledInputModes().map { it.preferenceKey }
+                    mutableStateOf(normalizedCycleSelection(enabled.toSet(), modeIds))
                 }
                 val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
                 Scaffold(

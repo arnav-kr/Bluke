@@ -48,4 +48,28 @@ class InputModeTest {
         )
         assertEquals(InputMode.KEYBOARD, InputMode.fromId(3))
     }
+
+    @Test
+    fun phoneKeyboardIsInTheDefaultCycle() {
+        assertTrue(normalizeInputModeKeys(null).contains(InputMode.PHONE_KEYBOARD.preferenceKey))
+        assertEquals(InputMode.PHONE_KEYBOARD, InputMode.fromId(InputMode.PHONE_KEYBOARD.id))
+    }
+
+    @Test
+    fun untouchedPreviousDefaultGainsPhoneKeyboard() {
+        assertEquals(
+            defaultInputModeKeys,
+            normalizeInputModeKeys(setOf("keyboard", "touchpad", "gamepad", "media_presentation")),
+        )
+    }
+
+    @Test
+    fun previousDefaultIsKeptOnceUpgraded() {
+        // After the one-time upgrade, this set means the user unticked Phone Keyboard.
+        val withoutPhoneKeyboard = setOf("keyboard", "touchpad", "gamepad", "media_presentation")
+        assertEquals(
+            withoutPhoneKeyboard,
+            normalizeInputModeKeys(withoutPhoneKeyboard, upgradeLegacyDefaults = false),
+        )
+    }
 }
