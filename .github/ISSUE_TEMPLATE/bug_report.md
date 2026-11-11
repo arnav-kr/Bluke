@@ -1,6 +1,6 @@
 ---
 name: Bug report
-about: Report a bug to help improve Bluke
+about: Report a bug to help improve Simply Bluke
 title: '[BUG] '
 labels: bug
 assignees: ''
@@ -12,7 +12,7 @@ A clear and concise description of the issue.
 
 **To Reproduce**
 Steps to reproduce the behavior:
-1. Open the Bluke application on your Android device.
+1. Open the Simply Bluke application on your Android device.
 2. Perform action '...' (e.g., tap scan, attempt connection to device 'x', launch keyboard).
 3. Observe the unexpected behavior.
 

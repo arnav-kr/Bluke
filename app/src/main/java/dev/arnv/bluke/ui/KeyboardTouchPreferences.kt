@@ -35,3 +35,31 @@ enum class PortraitKeyboardLayout(val preferenceValue: String, val displayName: 
             entries.firstOrNull { it.preferenceValue == value } ?: TOUCH
     }
 }
+
+const val KEYBOARD_STYLE_PREFERENCE = "keyboard_style"
+const val KEYBOARD_TRACKPAD_PREFERENCE = "keyboard_show_trackpad"
+const val KEYBOARD_TRACKPAD_SIDE_PREFERENCE = "keyboard_trackpad_side"
+
+/** How keys are drawn. */
+enum class KeyboardStyle(val preferenceValue: String, val displayName: String) {
+    MECHANICAL("mechanical", "Mechanical (realistic keycaps)"),
+    MINIMAL("minimal", "Minimal (flat keys, less padding)");
+
+    companion object {
+        fun fromPreference(value: String?): KeyboardStyle =
+            entries.firstOrNull { it.preferenceValue == value } ?: MECHANICAL
+    }
+}
+
+/** Where the trackpad sits next to the keyboard in landscape. */
+enum class TrackpadSide(val preferenceValue: String, val displayName: String) {
+    LEFT("left", "Left"),
+    RIGHT("right", "Right");
+
+    fun flipped(): TrackpadSide = if (this == LEFT) RIGHT else LEFT
+
+    companion object {
+        fun fromPreference(value: String?): TrackpadSide =
+            entries.firstOrNull { it.preferenceValue == value } ?: RIGHT
+    }
+}

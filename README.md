@@ -1,15 +1,17 @@
 <div align="center">
 
-<img src="Logo.svg" width="128" height="128" alt="Bluke Logo" />
+<img src="Logo.svg" width="128" height="128" alt="Simply Bluke Logo" />
 
-# Bluke
+# Simply Bluke
+
+Simply Bluke is a fork of [Bluke](https://github.com/arnav-kr/Bluke) by [Arnav Kumar](https://github.com/arnav-kr). It is not affiliated with the original project, so please report issues with this fork here, not upstream.
 
 Bluke turns your Android phone into a Bluetooth keyboard, touchpad, gamepad, and multimedia remote without needing any host companion software.
 
 [![Android](https://img.shields.io/badge/Android-3DDC84?style=for-the-badge&logo=android&logoColor=white)](https://developer.android.com)
 [![Kotlin](https://img.shields.io/badge/kotlin-%237F52FF.svg?style=for-the-badge&logo=kotlin&logoColor=white)](https://kotlinlang.org)
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL%20v3-blue.svg?style=for-the-badge)](LICENSE)
-[![Latest Release](https://img.shields.io/github/v/release/arnav-kr/Bluke?style=for-the-badge&color=orange)](https://github.com/arnav-kr/Bluke/releases)
+[![Latest Release](https://img.shields.io/github/v/release/wylify/Bluke_Simplified?style=for-the-badge&color=orange)](https://github.com/wylify/Bluke_Simplified/releases)
 
 </div>
 
@@ -46,8 +48,8 @@ Bluke turns your Android phone into a Bluetooth keyboard, touchpad, gamepad, and
 
 1. **Clone the repository**:
    ```bash
-   git clone https://github.com/arnav-kr/Bluke.git
-   cd Bluke
+   git clone https://github.com/wylify/Bluke_Simplified.git
+   cd Bluke_Simplified
    ```
 
 2. **Build with Gradle**:
@@ -80,9 +82,10 @@ This project is licensed under the [AGPL-3.0](LICENSE).
 
 ## Credits
 
+* **[Bluke](https://github.com/arnav-kr/Bluke)** by [Arnav Kumar](https://github.com/arnav-kr): the original app this fork is based on. To install the original, download the APK from its [releases page](https://github.com/arnav-kr/Bluke/releases/latest). It can be installed next to Simply Bluke.
 * **[kbsim](https://github.com/tplai/kbsim)**: Part of mechanical switch audio assets are sourced from [kbs.im](https://kbs.im).
 
-## Contributors
+## Original Bluke contributors
 
 <a href="https://github.com/arnav-kr/Bluke/graphs/contributors">
   <img src="https://contrib.rocks/image?repo=arnav-kr/Bluke" alt="Bluke Contributors" />

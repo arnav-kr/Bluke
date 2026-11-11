@@ -129,6 +129,15 @@ fun HomeScreen(
         mutableStateOf(PortraitKeyboardLayout.fromPreference(sharedPrefs.getString(PORTRAIT_KEYBOARD_LAYOUT_PREFERENCE, null)))
     }
     var isKeyPreviewEnabled by remember { mutableStateOf(sharedPrefs.getBoolean(KEY_PREVIEW_PREFERENCE, true)) }
+    var keyboardStyle by remember {
+        mutableStateOf(KeyboardStyle.fromPreference(sharedPrefs.getString(KEYBOARD_STYLE_PREFERENCE, null)))
+    }
+    var isKeyboardTrackpadEnabled by remember {
+        mutableStateOf(sharedPrefs.getBoolean(KEYBOARD_TRACKPAD_PREFERENCE, false))
+    }
+    var trackpadSide by remember {
+        mutableStateOf(TrackpadSide.fromPreference(sharedPrefs.getString(KEYBOARD_TRACKPAD_SIDE_PREFERENCE, null)))
+    }
     val isPortrait = LocalConfiguration.current.orientation == Configuration.ORIENTATION_PORTRAIT
     var launchMode by rememberSaveable {
         val enabledModes = sharedPrefs.enabledInputModes().map(InputMode::id)
@@ -167,6 +176,9 @@ fun HomeScreen(
                     sharedPrefs.getString(PORTRAIT_KEYBOARD_LAYOUT_PREFERENCE, null)
                 )
                 isKeyPreviewEnabled = sharedPrefs.getBoolean(KEY_PREVIEW_PREFERENCE, true)
+                keyboardStyle = KeyboardStyle.fromPreference(sharedPrefs.getString(KEYBOARD_STYLE_PREFERENCE, null))
+                isKeyboardTrackpadEnabled = sharedPrefs.getBoolean(KEYBOARD_TRACKPAD_PREFERENCE, false)
+                trackpadSide = TrackpadSide.fromPreference(sharedPrefs.getString(KEYBOARD_TRACKPAD_SIDE_PREFERENCE, null))
                 characterLayout = KeyboardCharacterLayout.fromPreference(
                     sharedPrefs.getString(KEYBOARD_CHARACTER_LAYOUT_PREFERENCE, null)
                 )
@@ -298,9 +310,9 @@ fun HomeScreen(
             text = {
                 Text(
                     if (descriptorRefreshRequired) {
-                        "Bluke now uses one shared HID descriptor for Native, Android and Web, " +
+                        "Simply Bluke now uses one shared HID descriptor for Native, Android and Web, " +
                             "but Bluetooth hosts cache the old layout. To use the new controls, forget the host on this phone, " +
-                            "remove Bluke on the host, then pair again once. Reinstalling the app alone is not enough. " +
+                            "remove Simply Bluke on the host, then pair again once. Reinstalling the app alone is not enough. " +
                             "After this one-time refresh, all controller modes switch live without reconnecting or re-pairing."
                     } else {
                         "We've added new features and made significant underlying changes to the controller!\n" +
@@ -324,7 +336,7 @@ fun HomeScreen(
             },
             dismissButton = {
                 androidx.compose.material3.TextButton(onClick = { 
-                    uriHandler.openUri("https://github.com/arnav-kr/Bluke/releases")
+                    uriHandler.openUri("https://github.com/wylify/Bluke_Simplified/releases")
                 }) {
                     Text("Changelog")
                 }
@@ -387,8 +399,8 @@ fun HomeScreen(
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     Text("Choose Native for Windows/Linux games, Android for games on Android, or Web when a browser game ignores directions. Tap the controller mode button to switch; hold it to open settings.")
-                    Text("On Windows, some newer games accept only Xbox XInput controllers. Bluke is a standard Bluetooth HID gamepad, so Steam Input or another compatibility layer may be needed.")
-                    Text("If the host cached an older Bluke controller layout, forget Bluke on both devices and pair again once.")
+                    Text("On Windows, some newer games accept only Xbox XInput controllers. Simply Bluke is a standard Bluetooth HID gamepad, so Steam Input or another compatibility layer may be needed.")
+                    Text("If the host cached an older controller layout, forget Simply Bluke on both devices and pair again once.")
                 }
             },
             confirmButton = {
@@ -805,7 +817,7 @@ fun HomeScreen(
                         modifier = Modifier
                             .fillMaxSize()
                             .background(caseBrush)
-                            .padding(bottom = 6.dp),
+                            .padding(bottom = if (keyboardStyle == KeyboardStyle.MINIMAL) 0.dp else 6.dp),
                         verticalArrangement = Arrangement.SpaceBetween,
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
@@ -918,6 +930,39 @@ fun HomeScreen(
                                 
                                 // Reconnect Button
                                 ReconnectHostButton(btManager)
+
+                                // Move the trackpad to the other side (landscape only)
+                                if (isKeyboardTrackpadEnabled && !isPortrait) {
+                                    Row(
+                                        modifier = Modifier
+                                            .height(28.dp)
+                                            .clip(RoundedCornerShape(6.dp))
+                                            .background(Color.White.copy(alpha = 0.15f))
+                                            .clickable(onClickLabel = "Move trackpad to the other side") {
+                                                trackpadSide = trackpadSide.flipped()
+                                                sharedPrefs.edit {
+                                                    putString(KEYBOARD_TRACKPAD_SIDE_PREFERENCE, trackpadSide.preferenceValue)
+                                                }
+                                            }
+                                            .padding(horizontal = 8.dp)
+                                            .testTag("swap_trackpad_side_btn"),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(4.dp)
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.SwapHoriz,
+                                            contentDescription = null,
+                                            tint = Color.White,
+                                            modifier = Modifier.size(12.dp)
+                                        )
+                                        Text(
+                                            text = "Trackpad",
+                                            color = Color.White,
+                                            fontSize = 9.sp,
+                                            fontWeight = FontWeight.Bold
+                                        )
+                                    }
+                                }
                             }
 
                             // Right Section: lock LEDs indicators, configuration pills, and mute button
@@ -1220,43 +1265,75 @@ fun HomeScreen(
                             }
                         }
 
-                        // 2. Main Mechanical Keyboard Chassis (centered with custom margins)
-                        Box(
+                        // 2. Keyboard, optionally with a trackpad above it (portrait) or beside it (landscape)
+                        val isMinimal = keyboardStyle == KeyboardStyle.MINIMAL
+                        val showTrackpad = isKeyboardTrackpadEnabled
+                        // A full-size layout is too cramped next to a trackpad in landscape,
+                        // so the Touch layout is used there too.
+                        val useTouchLayout = (isPortrait && portraitKeyboardLayout == PortraitKeyboardLayout.TOUCH) ||
+                            (showTrackpad && !isPortrait)
+                        val keyboardRows = remember(useTouchLayout, touchLayer, characterLayout, selectedGeometry) {
+                            if (useTouchLayout) TouchKeyboardLayouts.getLayout(touchLayer, characterLayout)
+                            else KeyboardLayouts.getLayout(selectedGeometry, characterLayout)
+                        }
+                        // Keys are a bit shorter with the trackpad above, leaving it more room.
+                        val keyAspect = if (showTrackpad && isPortrait) 1.25f else 1.45f
+
+                        @Composable
+                        fun KeyboardPanel(modifier: Modifier) {
+                            Box(modifier = modifier, contentAlignment = Alignment.Center) {
+                                KeyboardView(
+                                    geometry = selectedGeometry,
+                                    theme = selectedKeyboardTheme,
+                                    characterLayout = characterLayout,
+                                    activePressedKeys = activePressedKeys,
+                                    isConnected = isConnected,
+                                    isCapsLockActive = isCapsLockActive,
+                                    isNumLockActive = isNumLockActive,
+                                    isScrollLockActive = isScrollLockActive,
+                                    isFnActive = isFnActive,
+                                    keySensitivity = keySensitivity,
+                                    rowsOverride = keyboardRows,
+                                    fillHeight = useTouchLayout,
+                                    maxKeyAspect = keyAspect,
+                                    latchedKeys = latchedKeys,
+                                    legendScale = if (useTouchLayout) 1.5f else 1f,
+                                    showKeyPreview = useTouchLayout && isKeyPreviewEnabled,
+                                    style = keyboardStyle,
+                                    onKeyPressChange = { code, press -> handleLocalKeyPress(code, press) }
+                                )
+                                KeyboardLayoutSwitcherOverlay(
+                                    visible = showLayoutSwitcher,
+                                    selectedLayout = pendingCharacterLayout ?: characterLayout,
+                                    modifier = Modifier.align(Alignment.Center),
+                                )
+                            }
+                        }
+
+                        KeyboardTrackpadSplit(
+                            showTrackpad = showTrackpad,
+                            isPortrait = isPortrait,
+                            trackpadSide = trackpadSide,
+                            style = keyboardStyle,
+                            keyboardRows = keyboardRows,
+                            keyAspect = if (useTouchLayout) keyAspect else 1f,
                             modifier = Modifier
                                 .weight(1f)
                                 .fillMaxWidth()
-                                .padding(horizontal = 6.dp, vertical = 2.dp),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            val useTouchLayout = isPortrait &&
-                                portraitKeyboardLayout == PortraitKeyboardLayout.TOUCH
-                            val touchRows = remember(useTouchLayout, touchLayer, characterLayout) {
-                                if (useTouchLayout) TouchKeyboardLayouts.getLayout(touchLayer, characterLayout) else null
-                            }
-                            KeyboardView(
-                                geometry = selectedGeometry,
-                                theme = selectedKeyboardTheme,
-                                characterLayout = characterLayout,
-                                activePressedKeys = activePressedKeys,
-                                isConnected = isConnected,
-                                isCapsLockActive = isCapsLockActive,
-                                isNumLockActive = isNumLockActive,
-                                isScrollLockActive = isScrollLockActive,
-                                isFnActive = isFnActive,
-                                keySensitivity = keySensitivity,
-                                rowsOverride = touchRows,
-                                fillHeight = useTouchLayout,
-                                latchedKeys = latchedKeys,
-                                legendScale = if (useTouchLayout) 1.5f else 1f,
-                                showKeyPreview = useTouchLayout && isKeyPreviewEnabled,
-                                onKeyPressChange = { code, press -> handleLocalKeyPress(code, press) }
-                            )
-                            KeyboardLayoutSwitcherOverlay(
-                                visible = showLayoutSwitcher,
-                                selectedLayout = pendingCharacterLayout ?: characterLayout,
-                                modifier = Modifier.align(Alignment.Center),
-                            )
-                        }
+                                .padding(
+                                    horizontal = if (isMinimal) 0.dp else 6.dp,
+                                    vertical = if (isMinimal) 0.dp else 2.dp,
+                                ),
+                            trackpad = { trackpadModifier ->
+                                KeyboardTrackpadPanel(
+                                    btManager = btManager,
+                                    sharedPrefs = sharedPrefs,
+                                    style = keyboardStyle,
+                                    modifier = trackpadModifier,
+                                )
+                            },
+                            keyboard = { keyboardModifier -> KeyboardPanel(keyboardModifier) },
+                        )
                     }
                 }
             }
@@ -1499,7 +1576,7 @@ private fun TroubleshootingNudgeCard(
                 Text("Having trouble connecting?", style = MaterialTheme.typography.titleMedium)
                 Text(
                     if (offerSettingsPairingHelp) {
-                        "If you paired through Bluetooth settings, forget the pairing on both devices, then use Scan in Bluke to pair and connect again."
+                        "If you paired through Bluetooth settings, forget the pairing on both devices, then use Scan in Simply Bluke to pair and connect again."
                     } else {
                         "Check both pairing prompts or follow the safe repair steps. A slow attempt does not automatically mean this phone is incompatible."
                     },

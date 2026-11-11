@@ -32,24 +32,28 @@ fun KeyCap(
     modifier: Modifier = Modifier,
     glowColor: Color? = null,
     latchState: LatchState = LatchState.OFF,
+    /** Flat key without the bezel and inset, so the label area uses the whole key. */
+    minimal: Boolean = false,
 ) {
     val keyBorderColor = keyBgColor.darker()
     
     // Proportional radii mapped directly from KBSim's 5px/3px on a 54px keysize
-    val outerRadius = baseUnitWidth * 0.092f
-    val innerRadius = baseUnitWidth * 0.055f
+    val outerRadius = if (minimal) baseUnitWidth * 0.14f else baseUnitWidth * 0.092f
+    val innerRadius = if (minimal) outerRadius else baseUnitWidth * 0.055f
     
     // Inset padding mapped directly from KBSim's keysize/9 and keysize/18
-    val insetX = baseUnitWidth / 9f
-    val insetTop = baseUnitWidth / 18f
-    val insetBottom = baseUnitWidth / 6f // keysize * 3 / 18
+    val insetX = if (minimal) 0.dp else baseUnitWidth / 9f
+    val insetTop = if (minimal) 0.dp else baseUnitWidth / 18f
+    val insetBottom = if (minimal) 0.dp else baseUnitWidth / 6f // keysize * 3 / 18
+    // Without the bezel there is more room for the label.
+    val styleFontScale = if (minimal) 1.2f else 1f
 
     Box(
         modifier = modifier
             .width(width)
             .height(height)
             .testTag("key_$legend")
-            .padding(1.dp)
+            .padding(if (minimal) 2.dp else 1.dp)
             .then(
                 if (isSelected) Modifier.border(2.dp, Color(0xFF00BCD4), RoundedCornerShape(outerRadius))
                 else Modifier
@@ -67,12 +71,14 @@ fun KeyCap(
         }
 
         // 1. Key Border Base Bezel (KBSim .keyborder)
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .background(keyBorderColor, RoundedCornerShape(outerRadius))
-                .border(1.dp, Color.Black.copy(alpha = 0.85f), RoundedCornerShape(outerRadius))
-        )
+        if (!minimal) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(keyBorderColor, RoundedCornerShape(outerRadius))
+                    .border(1.dp, Color.Black.copy(alpha = 0.85f), RoundedCornerShape(outerRadius))
+            )
+        }
 
         // 2. Key Top Bevel (KBSim .keytop, inset and styled)
         Box(
@@ -88,7 +94,10 @@ fun KeyCap(
                     color = if (isPressed) keyBorderColor else keyBgColor,
                     shape = RoundedCornerShape(innerRadius)
                 )
-                .border(1.dp, Color.Black.copy(alpha = 0.15f), RoundedCornerShape(innerRadius)),
+                .then(
+                    if (minimal) Modifier
+                    else Modifier.border(1.dp, Color.Black.copy(alpha = 0.15f), RoundedCornerShape(innerRadius))
+                ),
             contentAlignment = Alignment.Center
         ) {
             val keyWidthRatio = (width.value / baseUnitWidth.value).coerceAtLeast(1f)
@@ -105,11 +114,11 @@ fun KeyCap(
             }
             val mainFontSize = (
                 (baseUnitWidth.value * 0.24f).coerceIn(3f, 13f) *
-                    legendScale * legendLengthScale
+                    legendScale * legendLengthScale * styleFontScale
                 ).sp
             val shiftFontSize = (
                 (baseUnitWidth.value * 0.17f).coerceIn(2.5f, 9f) *
-                    legendScale * shiftedLengthScale
+                    legendScale * shiftedLengthScale * styleFontScale
                 ).sp
 
             if (shiftedLegend.isNotEmpty()) {

@@ -71,7 +71,7 @@ internal fun ProfileNotSupportedScreen(
             )
         } else if (bluetoothState is BluetoothState.ProfileNotSupported) {
             Text(
-                text = "Bluke could not access the Bluetooth HID Device role after repeated attempts. This device's firmware may omit or disable the role required for keyboard, mouse, and gamepad output.",
+                text = "Simply Bluke could not access the Bluetooth HID Device role after repeated attempts. This device's firmware may omit or disable the role required for keyboard, mouse, and gamepad output.",
                 style = MaterialTheme.typography.bodyMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center

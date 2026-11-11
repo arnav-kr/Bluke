@@ -153,7 +153,7 @@ class SoundPacksActivity : ComponentActivity() {
                     AlertDialog(
                         onDismissRequest = { pendingDeletion = null },
                         title = { Text("Delete ${pack.name}?") },
-                        text = { Text("This removes the imported pack from Bluke. Built-in sounds are not affected.") },
+                        text = { Text("This removes the imported pack from Simply Bluke. Built-in sounds are not affected.") },
                         confirmButton = {
                             TextButton(
                                 onClick = {
@@ -233,7 +233,7 @@ class SoundPacksActivity : ComponentActivity() {
                         verticalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
                         Text(
-                            "Choose one sound profile for every key press. Imported Mechvibes packs live beside Bluke's built-in switch sounds and can be reached by the keyboard toolbar cycle.",
+                            "Choose one sound profile for every key press. Imported Mechvibes packs live beside the built-in switch sounds and can be reached by the keyboard toolbar cycle.",
                             style = MaterialTheme.typography.bodyLarge,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )

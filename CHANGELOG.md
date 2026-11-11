@@ -1,7 +1,31 @@
 # Changelog
 
-All notable user-facing changes and improvements to Bluke are documented in this file.
+All notable user-facing changes to Simply Bluke, a fork of [Bluke](https://github.com/arnav-kr/Bluke) by Arnav Kumar, are documented in this file. Entries before 1.1.1 come from the original Bluke project.
 For detailed usage instructions, see the [Usage Guide](docs/USAGE.md).
+
+## [1.1.1] - 2026-11-11
+
+> [!NOTE]
+> **New app ID:** Simply Bluke now uses the package name `com.wylify.simplybluke`, so it installs as its own app next to the original Bluke. Settings from earlier builds of this fork don't carry over. Only one of the two apps should be connected to a host at a time.
+
+### Added
+- **Touch keyboard for portrait:** A 10-key-wide layout with taller keys, plus `?123` (symbols and navigation) and `Fn` (F1–F12 and media keys) pages. Modifiers stay in place on every page.
+- **Sticky modifiers:** Tap Ctrl, Alt, Shift, Win or Fn to apply it to the next key, double-tap to lock it, or hold it as before. Can be turned off in Keyboard settings.
+- **Trackpad with keyboard:** An optional trackpad above the keyboard in portrait, or beside it in landscape (left or right, switchable from the toolbar).
+- **Minimal keyboard style:** Flat keys with less padding, so keys are larger and easier to hit.
+- **Keyboard rotation setting:** Keyboard mode can follow the phone's rotation, or stay in portrait or landscape.
+
+### Improved & Fixed
+- **More accurate typing:** Each touch picks one key, the one under your finger or the nearest one, and a key preview bubble shows what you pressed.
+- **No stuck keys:** Rotating the phone, closing the keyboard or leaving the app releases all held keys.
+- **Fewer permissions:** Android 12 and newer no longer ask for location access.
+
+### Changed
+- **New name and icon:** The app is now called Simply Bluke and has a black-and-white icon.
+- **Bluetooth name:** The input device now introduces itself to computers as "Simply Bluke".
+- **About screen:** Credits the original developer, explains that this is a fork, and shows how to install the original Bluke. Removed the sponsor link and the Report issue and Feature request links that pointed to the original project.
+
+---
 
 ## [1.1.0] - 2026-10-09
 

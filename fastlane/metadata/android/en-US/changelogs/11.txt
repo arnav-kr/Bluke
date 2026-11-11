@@ -1,0 +1,7 @@
+• Simply Bluke: a fork of Bluke by Arnav Kumar, with a new name and black-and-white icon
+• New app ID, so it installs next to the original Bluke. Settings from older builds don't carry over
+• Touch-friendly portrait keyboard with symbol and Fn pages
+• Sticky Ctrl/Alt/Shift/Win/Fn: tap for the next key, double-tap to lock
+• Optional trackpad above or beside the keyboard
+• Minimal keyboard style with bigger keys
+• Android 12+ no longer asks for location

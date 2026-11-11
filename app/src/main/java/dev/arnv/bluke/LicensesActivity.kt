@@ -159,12 +159,12 @@ class LicensesActivity : ComponentActivity() {
                                         Spacer(modifier = Modifier.width(16.dp))
                                         Column {
                                             Text(
-                                                text = "Bluke",
+                                                text = "Simply Bluke",
                                                 fontWeight = FontWeight.Bold,
                                                 style = MaterialTheme.typography.titleLarge,
                                                 color = MaterialTheme.colorScheme.onPrimaryContainer
                                             )
-                                            Text("This application", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f))
+                                            Text("This application · a fork of Bluke by Arnav Kumar", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.7f))
                                         }
                                     }
                                     
@@ -193,7 +193,7 @@ class LicensesActivity : ComponentActivity() {
                                             color = MaterialTheme.colorScheme.primary, 
                                             fontWeight = FontWeight.SemiBold,
                                             modifier = Modifier.clickable {
-                                                context.startActivity(Intent(Intent.ACTION_VIEW, "https://github.com/arnav-kr/Bluke".toUri()))
+                                                context.startActivity(Intent(Intent.ACTION_VIEW, "https://github.com/wylify/Bluke_Simplified".toUri()))
                                             }
                                         )
                                         Text(
@@ -201,7 +201,7 @@ class LicensesActivity : ComponentActivity() {
                                             color = MaterialTheme.colorScheme.primary, 
                                             fontWeight = FontWeight.SemiBold,
                                             modifier = Modifier.clickable {
-                                                context.startActivity(Intent(Intent.ACTION_VIEW, "https://raw.githubusercontent.com/arnav-kr/Bluke/main/LICENSE".toUri()))
+                                                context.startActivity(Intent(Intent.ACTION_VIEW, "https://raw.githubusercontent.com/wylify/Bluke_Simplified/main/LICENSE".toUri()))
                                             }
                                         )
                                     }
@@ -330,7 +330,7 @@ class LicensesActivity : ComponentActivity() {
                                                             "https://raw.githubusercontent.com/tplai/kbsim/master/LICENSE.md"
                                                         } else {
                                                             when (lib.license) {
-                                                                "AGPL-3.0" -> "https://raw.githubusercontent.com/arnav-kr/Bluke/main/LICENSE"
+                                                                "AGPL-3.0" -> "https://raw.githubusercontent.com/wylify/Bluke_Simplified/main/LICENSE"
                                                                 else -> "https://www.apache.org/licenses/LICENSE-2.0.txt"
                                                             }
                                                         }

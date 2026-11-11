@@ -17,11 +17,9 @@ import androidx.compose.animation.core.spring
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.BugReport
-import androidx.compose.material.icons.filled.Email
+import androidx.compose.material.icons.automirrored.filled.CallSplit
+import androidx.compose.material.icons.filled.Download
 import androidx.compose.material.icons.filled.History
-import androidx.compose.material.icons.filled.Lightbulb
-import androidx.compose.material.icons.filled.Coffee
 import androidx.compose.material.icons.filled.Policy
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -41,6 +39,11 @@ import dev.arnv.bluke.ui.SettingsCardGroup
 import dev.arnv.bluke.ui.SettingsItemData
 import dev.arnv.bluke.ui.theme.MyApplicationTheme
 import dev.arnv.bluke.ui.theme.getCookieShape
+
+private const val ORIGINAL_REPO_URL = "https://github.com/arnav-kr/Bluke"
+private const val ORIGINAL_RELEASES_URL = "https://github.com/arnav-kr/Bluke/releases/latest"
+private const val ORIGINAL_DEVELOPER_URL = "https://github.com/arnav-kr"
+private const val FORK_RELEASES_URL = "https://github.com/wylify/Bluke_Simplified/releases"
 
 class AboutActivity : ComponentActivity() {
     @OptIn(ExperimentalMaterial3Api::class)
@@ -100,7 +103,7 @@ class AboutActivity : ComponentActivity() {
                         
                         Surface(
                             shape = logoShape,
-                            color = MaterialTheme.colorScheme.primary,
+                            color = Color.Black,
                             modifier = Modifier
                                 .size(100.dp)
                                 .clickable(
@@ -120,7 +123,7 @@ class AboutActivity : ComponentActivity() {
                                 painter = painterResource(id = R.drawable.ic_launcher_foreground),
                                 contentDescription = "App Logo",
                                 modifier = Modifier.fillMaxSize(),
-                                tint = MaterialTheme.colorScheme.onPrimary
+                                tint = Color.White
                             )
                         }
                         
@@ -138,73 +141,46 @@ class AboutActivity : ComponentActivity() {
                             modifier = Modifier.padding(bottom = 8.dp)
                         )
 
-                        // Staged chips below version number
-                        Row(
-                            horizontalArrangement = Arrangement.Center,
-                            modifier = Modifier.padding(bottom = 16.dp),
-                            verticalAlignment = Alignment.CenterVertically
+                        // Fork badge
+                        Surface(
+                            shape = CircleShape,
+                            color = MaterialTheme.colorScheme.secondaryContainer,
+                            contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+                            modifier = Modifier.padding(bottom = 8.dp)
                         ) {
-                            // GitHub Repository Link Chip
-                            Surface(
-                                onClick = { openUrl("https://github.com/arnav-kr/Bluke") },
-                                shape = CircleShape,
-                                color = MaterialTheme.colorScheme.primaryContainer,
-                                contentColor = MaterialTheme.colorScheme.onPrimaryContainer
+                            Row(
+                                modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Row(
-                                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.Center
-                                ) {
-                                    Icon(
-                                        painter = painterResource(id = R.drawable.ic_github),
-                                        contentDescription = "GitHub Repository",
-                                        modifier = Modifier.size(18.dp),
-                                        tint = MaterialTheme.colorScheme.onPrimaryContainer
-                                    )
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    Text(
-                                        text = "GitHub",
-                                        fontWeight = FontWeight.Bold,
-                                        style = MaterialTheme.typography.titleMedium,
-                                        fontSize = 14.sp
-                                    )
-                                }
-                            }
-
-                            Spacer(modifier = Modifier.width(8.dp))
-
-                            // Email Link Chip
-                            Surface(
-                                onClick = { openUrl("mailto:bluke@arnv.dev") },
-                                shape = CircleShape,
-                                color = MaterialTheme.colorScheme.primaryContainer,
-                                contentColor = MaterialTheme.colorScheme.onPrimaryContainer
-                            ) {
-                                Row(
-                                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
-                                    verticalAlignment = Alignment.CenterVertically,
-                                    horizontalArrangement = Arrangement.Center
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.Email,
-                                        contentDescription = "Contact Email",
-                                        modifier = Modifier.size(18.dp),
-                                        tint = MaterialTheme.colorScheme.onPrimaryContainer
-                                    )
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    Text(
-                                        text = "Email",
-                                        fontWeight = FontWeight.Bold,
-                                        style = MaterialTheme.typography.titleMedium,
-                                        fontSize = 14.sp
-                                    )
-                                }
+                                Icon(
+                                    imageVector = Icons.AutoMirrored.Filled.CallSplit,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = "Unofficial fork of Bluke",
+                                    fontWeight = FontWeight.Bold,
+                                    style = MaterialTheme.typography.titleMedium,
+                                    fontSize = 14.sp
+                                )
                             }
                         }
 
-                        // Developer Heading and Card content wrapped in SettingsGroup for visual consistency
-                        SettingsGroup(title = "Developer") {
+                        SettingsGroup(title = "About this fork") {
+                            Text(
+                                text = "Simply Bluke is a simplified, unofficial fork of Bluke. " +
+                                    "All the core Bluetooth keyboard, touchpad and remote work comes from the original project by Arnav Kumar.\n\n" +
+                                    "This fork is not affiliated with or supported by the original developer, " +
+                                    "so please don't send issues about Simply Bluke to the Bluke project.",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier.padding(horizontal = 24.dp, vertical = 12.dp)
+                            )
+                        }
+
+                        // Credit to the original developer
+                        SettingsGroup(title = "Original developer") {
                             Column(modifier = Modifier.padding(horizontal = 24.dp, vertical = 12.dp)) {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                      Surface(
@@ -234,7 +210,7 @@ class AboutActivity : ComponentActivity() {
                                             fontWeight = FontWeight.Bold
                                         )
                                         Text(
-                                            text = "@arnav-kr",
+                                            text = "@arnav-kr · creator of Bluke",
                                             style = MaterialTheme.typography.bodyMedium,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant
                                         )
@@ -251,8 +227,8 @@ class AboutActivity : ComponentActivity() {
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
                                     PlayfulSocialButton(
-                                        onClick = { openUrl("https://github.com/arnav-kr") },
-                                        label = "GitHub",
+                                        onClick = { openUrl(ORIGINAL_DEVELOPER_URL) },
+                                        label = "Profile",
                                         icon = {
                                             Icon(
                                                 painter = painterResource(id = R.drawable.ic_github),
@@ -263,13 +239,13 @@ class AboutActivity : ComponentActivity() {
                                         containerColor = MaterialTheme.colorScheme.secondaryContainer,
                                         contentColor = MaterialTheme.colorScheme.onSecondaryContainer
                                     )
-                                    
+
                                     PlayfulSocialButton(
-                                        onClick = { openUrl("https://buymeacoffee.com/arnavkr") },
-                                        label = "Buy Me a Coffee",
+                                        onClick = { openUrl(ORIGINAL_REPO_URL) },
+                                        label = "Bluke repo",
                                         icon = {
                                             Icon(
-                                                imageVector = Icons.Default.Coffee,
+                                                painter = painterResource(id = R.drawable.ic_github),
                                                 contentDescription = null,
                                                 modifier = Modifier.size(18.dp)
                                             )
@@ -281,32 +257,60 @@ class AboutActivity : ComponentActivity() {
                             }
                         }
 
+                        // How to get the original app
+                        SettingsGroup(title = "Get the original Bluke") {
+                            Column(
+                                modifier = Modifier.padding(horizontal = 24.dp, vertical = 12.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                val steps = listOf(
+                                    "Open the Bluke releases page on GitHub.",
+                                    "Under the latest release, download the .apk file from Assets.",
+                                    "You can keep Simply Bluke installed. The two are separate apps, but only one should be connected to a host at a time.",
+                                    "Open the downloaded APK and allow installs from your browser or file manager if Android asks."
+                                )
+                                steps.forEachIndexed { index, step ->
+                                    Row {
+                                        Text(
+                                            text = "${index + 1}.",
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            fontWeight = FontWeight.Bold,
+                                            color = MaterialTheme.colorScheme.onSurface,
+                                            modifier = Modifier.width(24.dp)
+                                        )
+                                        Text(
+                                            text = step,
+                                            style = MaterialTheme.typography.bodyMedium,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                }
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Button(
+                                    onClick = { openUrl(ORIGINAL_RELEASES_URL) },
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Icon(Icons.Default.Download, contentDescription = null, modifier = Modifier.size(18.dp))
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Text("Open Bluke releases")
+                                }
+                            }
+                        }
+
                         SettingsCardGroup(
                             title = "App",
                             items = listOf(
                                 SettingsItemData(
-                                    title = "Changelogs",
-                                    subtitle = "History of all the changes made to the app",
+                                    title = "Changelog",
+                                    subtitle = "Release history of Simply Bluke",
                                     icon = { Icon(Icons.Default.History, null, tint = MaterialTheme.colorScheme.primary) },
-                                    onClick = { openUrl("https://github.com/arnav-kr/Bluke/releases") }
+                                    onClick = { openUrl(FORK_RELEASES_URL) }
                                 ),
                                 SettingsItemData(
                                     title = "Licenses",
                                     subtitle = "View the licenses that the app and libraries are using",
                                     icon = { Icon(Icons.Default.Policy, null, tint = MaterialTheme.colorScheme.primary) },
                                     onClick = { startActivity(Intent(this@AboutActivity, LicensesActivity::class.java)) }
-                                ),
-                                SettingsItemData(
-                                    title = "Report issue",
-                                    subtitle = "Report any issue or bug you have encountered while using the app",
-                                    icon = { Icon(Icons.Default.BugReport, null, tint = MaterialTheme.colorScheme.primary) },
-                                    onClick = { openUrl("https://github.com/arnav-kr/Bluke/issues/new?template=bug_report.md") }
-                                ),
-                                SettingsItemData(
-                                    title = "Feature request",
-                                    subtitle = "If you have any ideas or suggestions for the app, let us know",
-                                    icon = { Icon(Icons.Default.Lightbulb, null, tint = MaterialTheme.colorScheme.primary) },
-                                    onClick = { openUrl("https://github.com/arnav-kr/Bluke/issues/new?template=feature_request.md") }
                                 )
                             )
                         )

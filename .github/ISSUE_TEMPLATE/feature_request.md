@@ -1,6 +1,6 @@
 ---
 name: Feature request
-about: Suggest an idea or new feature for Bluke
+about: Suggest an idea or new feature for Simply Bluke
 title: '[FEATURE] '
 labels: enhancement
 assignees: ''

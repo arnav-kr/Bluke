@@ -103,9 +103,9 @@ class HelpActivity : ComponentActivity() {
                             title = "Connect a new host",
                             steps = listOf(
                                 "Make the computer, TV, tablet, or phone visible in its Bluetooth settings.",
-                                "Scan in Bluke and tap the host name.",
+                                "Scan in Simply Bluke and tap the host name.",
                                 "Accept the matching pairing prompt on both devices.",
-                                "Wait for Bluke's status dot to turn green before sending input."
+                                "Wait for Simply Bluke's status dot to turn green before sending input."
                             )
                         )
                         
@@ -114,9 +114,9 @@ class HelpActivity : ComponentActivity() {
                             title = "Repair a stale pairing",
                             steps = listOf(
                                 "Forget the host in this phone's Bluetooth settings.",
-                                "Remove Bluke or this phone from the host's Bluetooth settings.",
-                                "Toggle Bluetooth on both sides, then pair again from Bluke.",
-                                "Reinstalling Bluke alone does not clear the host's cached HID layout."
+                                "Remove Simply Bluke or this phone from the host's Bluetooth settings.",
+                                "Toggle Bluetooth on both sides, then pair again from Simply Bluke.",
+                                "Reinstalling Simply Bluke alone does not clear the host's cached HID layout."
                             )
                         )
                         
@@ -139,7 +139,7 @@ class HelpActivity : ComponentActivity() {
                                 "Choose Native for Windows/Linux games, Android for Android games, or Web when a browser game ignores directions.",
                                 "Tap the controller mode button to cycle Native / Android / Web. Hold it to open Controller compatibility settings. All modes switch live without reconnecting. After updating to the shared controller descriptor, forget both devices and pair again once; subsequent mode switches need no re-pairing.",
                                 "For Steam, enable the controller in Steam Input and verify it in Steam's controller test or the operating system's game-controller panel.",
-                                "Bluke is a generic HID gamepad, not an Xbox XInput device. Some newer Windows games accept only XInput without a compatibility layer."
+                                "Simply Bluke is a generic HID gamepad, not an Xbox XInput device. Some newer Windows games accept only XInput without a compatibility layer."
                             )
                         )
 

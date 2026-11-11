@@ -41,6 +41,7 @@ fun KeyboardView(
     latchedKeys: Map<Int, LatchState> = emptyMap(),
     legendScale: Float = 1f,
     showKeyPreview: Boolean = false,
+    style: KeyboardStyle = KeyboardStyle.MECHANICAL,
     onKeySelected: ((KeyLayoutInfo) -> Unit)? = null,
     onKeyPressChange: (Int, Boolean) -> Unit
 ) {
@@ -55,8 +56,10 @@ fun KeyboardView(
         val totalLayoutWidthInUnits = allKeys.maxOfOrNull { it.x + it.widthRatio } ?: 15.0f
         val totalLayoutHeightInUnits = allKeys.maxOfOrNull { it.y + it.heightRatio } ?: 5.0f
 
-        val platePadding = 6.dp
-        val outerBoxPadding = 6.dp
+        val isMinimal = style == KeyboardStyle.MINIMAL
+        val platePadding = if (isMinimal) 2.dp else 6.dp
+        val outerBoxPadding = if (isMinimal) 0.dp else 6.dp
+        val plateShape = RoundedCornerShape(if (isMinimal) 0.dp else 10.dp)
 
         // Adjust constraints perfectly to take up absolutely maximum available space without dead zones
         val usableWidthDp = maxWidth - (outerBoxPadding * 2) - (platePadding * 2)
@@ -94,14 +97,18 @@ fun KeyboardView(
                 .padding(bottom = if (fillHeight) outerBoxPadding else 0.dp)
                 .width(plateWidth + (platePadding * 2))
                 .height(plateHeight + (platePadding * 2))
-                .shadow(
-                    elevation = 4.dp,
-                    shape = RoundedCornerShape(10.dp),
-                    spotColor = Color.Black.copy(alpha = 0.5f),
-                    ambientColor = Color.Black
+                .then(
+                    if (isMinimal) Modifier
+                    else Modifier
+                        .shadow(
+                            elevation = 4.dp,
+                            shape = plateShape,
+                            spotColor = Color.Black.copy(alpha = 0.5f),
+                            ambientColor = Color.Black
+                        )
+                        .border(1.5.dp, Color.White.copy(alpha = 0.15f), plateShape)
                 )
-                .background(Color(theme.plateArgb), RoundedCornerShape(10.dp))
-                .border(1.5.dp, Color.White.copy(alpha = 0.15f), RoundedCornerShape(10.dp))
+                .background(Color(theme.plateArgb), plateShape)
                 .padding(platePadding)
                 .pointerInput(onKeySelected != null) {
                         awaitPointerEventScope {
@@ -216,6 +223,7 @@ fun KeyboardView(
                         isSelected = selectedStyleId == key.styleId,
                         baseUnitWidth = keyStyleUnit,
                         latchState = latchState,
+                        minimal = isMinimal,
                         modifier = Modifier
                             .offset(
                                 x = baseUnitWidth * key.x,
@@ -244,6 +252,24 @@ fun KeyboardView(
         }
         }
     }
+
+/**
+ * Height a [KeyboardView] with fillHeight needs at [width] so its keys are
+ * [keyAspect] times taller than wide. Used to give the rest to the trackpad.
+ */
+internal fun keyboardHeightForWidth(
+    width: Dp,
+    rows: List<List<KeyLayoutInfo>>,
+    keyAspect: Float,
+    style: KeyboardStyle,
+): Dp {
+    val keys = rows.flatten()
+    val widthUnits = keys.maxOfOrNull { it.x + it.widthRatio } ?: 10f
+    val heightUnits = keys.maxOfOrNull { it.y + it.heightRatio } ?: 5f
+    val chrome = if (style == KeyboardStyle.MINIMAL) (0.dp + 2.dp) * 2 else (6.dp + 6.dp) * 2
+    val unitWidth = (width - chrome) / widthUnits
+    return unitWidth * keyAspect * heightUnits + chrome
+}
 
 /** Full [boost] for short labels, fading to none for labels that already fill the key. */
 internal fun legendBoost(legend: String, widthRatio: Float, boost: Float): Float {

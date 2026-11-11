@@ -18,6 +18,8 @@ import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.Keyboard
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.ScreenRotation
+import androidx.compose.material.icons.filled.SwapHoriz
+import androidx.compose.material.icons.filled.ViewQuilt
 import androidx.compose.material.icons.filled.TouchApp
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.AlertDialog
@@ -48,6 +50,11 @@ import dev.arnv.bluke.ui.KeyboardCharacterLayout
 import dev.arnv.bluke.ui.KEYBOARD_ORIENTATION_PREFERENCE
 import dev.arnv.bluke.ui.KEY_PREVIEW_PREFERENCE
 import dev.arnv.bluke.ui.KeyboardOrientation
+import dev.arnv.bluke.ui.KEYBOARD_STYLE_PREFERENCE
+import dev.arnv.bluke.ui.KEYBOARD_TRACKPAD_PREFERENCE
+import dev.arnv.bluke.ui.KEYBOARD_TRACKPAD_SIDE_PREFERENCE
+import dev.arnv.bluke.ui.KeyboardStyle
+import dev.arnv.bluke.ui.TrackpadSide
 import dev.arnv.bluke.ui.PORTRAIT_KEYBOARD_LAYOUT_PREFERENCE
 import dev.arnv.bluke.ui.PortraitKeyboardLayout
 import dev.arnv.bluke.ui.STICKY_MODIFIERS_PREFERENCE
@@ -76,6 +83,13 @@ class KeyboardSettingsActivity : ComponentActivity() {
                 }
                 var stickyModifiers by remember { mutableStateOf(preferences.getBoolean(STICKY_MODIFIERS_PREFERENCE, true)) }
                 var keyPreview by remember { mutableStateOf(preferences.getBoolean(KEY_PREVIEW_PREFERENCE, true)) }
+                var keyboardStyle by remember {
+                    mutableStateOf(KeyboardStyle.fromPreference(preferences.getString(KEYBOARD_STYLE_PREFERENCE, null)))
+                }
+                var showTrackpad by remember { mutableStateOf(preferences.getBoolean(KEYBOARD_TRACKPAD_PREFERENCE, false)) }
+                var trackpadSide by remember {
+                    mutableStateOf(TrackpadSide.fromPreference(preferences.getString(KEYBOARD_TRACKPAD_SIDE_PREFERENCE, null)))
+                }
                 var dialog by remember { mutableStateOf<KeyboardDialog?>(null) }
                 val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
 
@@ -152,6 +166,39 @@ class KeyboardSettingsActivity : ComponentActivity() {
                                     },
                                 ),
                             ),
+                        )
+                        SettingsCardGroup(
+                            title = "Screen",
+                            items = listOf(
+                                SettingsItemData(
+                                    title = "Keyboard style",
+                                    subtitle = keyboardStyle.displayName,
+                                    icon = { Icon(Icons.Default.Palette, null, tint = MaterialTheme.colorScheme.primary) },
+                                    onClick = { dialog = KeyboardDialog.STYLE },
+                                ),
+                                SettingsItemData(
+                                    title = "Trackpad with keyboard",
+                                    subtitle = "Show a trackpad above the keyboard in portrait, or beside it in landscape",
+                                    icon = { Icon(Icons.Default.ViewQuilt, null, tint = MaterialTheme.colorScheme.primary) },
+                                    action = {
+                                        Switch(checked = showTrackpad, onCheckedChange = {
+                                            showTrackpad = it
+                                            preferences.edit { putBoolean(KEYBOARD_TRACKPAD_PREFERENCE, it) }
+                                        })
+                                    },
+                                    onClick = {
+                                        showTrackpad = !showTrackpad
+                                        preferences.edit { putBoolean(KEYBOARD_TRACKPAD_PREFERENCE, showTrackpad) }
+                                    },
+                                ),
+                            ) + if (showTrackpad) listOf(
+                                SettingsItemData(
+                                    title = "Trackpad side in landscape",
+                                    subtitle = "${trackpadSide.displayName} · also switchable from the keyboard toolbar",
+                                    icon = { Icon(Icons.Default.SwapHoriz, null, tint = MaterialTheme.colorScheme.primary) },
+                                    onClick = { dialog = KeyboardDialog.TRACKPAD_SIDE },
+                                ),
+                            ) else emptyList(),
                         )
                         SettingsCardGroup(
                             title = "Rotation",
@@ -261,6 +308,30 @@ class KeyboardSettingsActivity : ComponentActivity() {
                         },
                         onDismiss = { dialog = null },
                     )
+                    KeyboardDialog.STYLE -> ChoiceDialog(
+                        title = "Keyboard style",
+                        explanation = "Minimal draws flat keys with less padding, so keys are larger and easier to hit.",
+                        choices = KeyboardStyle.entries.map { it.displayName },
+                        selectedIndex = KeyboardStyle.entries.indexOf(keyboardStyle),
+                        onSelect = { index ->
+                            keyboardStyle = KeyboardStyle.entries[index]
+                            preferences.edit { putString(KEYBOARD_STYLE_PREFERENCE, keyboardStyle.preferenceValue) }
+                            dialog = null
+                        },
+                        onDismiss = { dialog = null },
+                    )
+                    KeyboardDialog.TRACKPAD_SIDE -> ChoiceDialog(
+                        title = "Trackpad side in landscape",
+                        explanation = "In portrait the trackpad is always above the keyboard.",
+                        choices = TrackpadSide.entries.map { it.displayName },
+                        selectedIndex = TrackpadSide.entries.indexOf(trackpadSide),
+                        onSelect = { index ->
+                            trackpadSide = TrackpadSide.entries[index]
+                            preferences.edit { putString(KEYBOARD_TRACKPAD_SIDE_PREFERENCE, trackpadSide.preferenceValue) }
+                            dialog = null
+                        },
+                        onDismiss = { dialog = null },
+                    )
                     null -> Unit
                 }
             }
@@ -268,7 +339,7 @@ class KeyboardSettingsActivity : ComponentActivity() {
     }
 }
 
-private enum class KeyboardDialog { TYPING_LAYOUT, CAPS_LOCK, ORIENTATION, PORTRAIT_LAYOUT }
+private enum class KeyboardDialog { TYPING_LAYOUT, CAPS_LOCK, ORIENTATION, PORTRAIT_LAYOUT, STYLE, TRACKPAD_SIDE }
 
 @Composable
 internal fun ChoiceDialog(

@@ -24,7 +24,11 @@ class TouchKeyboardScreenshotTest {
     @get:Rule
     val composeTestRule = createComposeRule()
 
-    private fun showLayer(layer: TouchLayer, latched: Map<Int, LatchState> = emptyMap()) {
+    private fun showLayer(
+        layer: TouchLayer,
+        latched: Map<Int, LatchState> = emptyMap(),
+        style: KeyboardStyle = KeyboardStyle.MECHANICAL,
+    ) {
         composeTestRule.setContent {
             MyApplicationTheme {
                 Box(Modifier.fillMaxWidth().height(380.dp)) {
@@ -39,6 +43,7 @@ class TouchKeyboardScreenshotTest {
                         fillHeight = true,
                         latchedKeys = latched,
                         legendScale = 1.5f,
+                        style = style,
                         onKeyPressChange = { _, _ -> },
                     )
                 }
@@ -72,5 +77,11 @@ class TouchKeyboardScreenshotTest {
     fun portraitFnLayer() {
         showLayer(TouchLayer.FN)
         composeTestRule.onRoot().captureRoboImage(filePath = "src/test/screenshots/touch-keyboard-fn.png")
+    }
+
+    @Test
+    fun portraitMinimalStyle() {
+        showLayer(TouchLayer.BASE, style = KeyboardStyle.MINIMAL)
+        composeTestRule.onRoot().captureRoboImage(filePath = "src/test/screenshots/touch-keyboard-minimal.png")
     }
 }
