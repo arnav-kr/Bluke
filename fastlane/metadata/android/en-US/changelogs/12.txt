@@ -1,0 +1,5 @@
+• Pair again once: forget the computer on your phone, remove Simply Bluke on the computer, then pair
+• Key presses vibrate, with Light/Medium/Strong strength. Key sounds are removed
+• PC/Mac toggle: Cmd and Opt next to the space bar
+• Two-finger sideways scrolling, plus a natural scrolling setting
+• Status and navigation bars stay visible and no longer cover controls

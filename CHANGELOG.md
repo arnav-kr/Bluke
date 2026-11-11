@@ -3,7 +3,7 @@
 All notable user-facing changes to Simply Bluke, a fork of [Bluke](https://github.com/arnav-kr/Bluke) by Arnav Kumar, are documented in this file. Entries before 1.1.1 come from the original Bluke project.
 For detailed usage instructions, see the [Usage Guide](docs/USAGE.md).
 
-## [Unreleased]
+## [1.1.2] - 2026-11-11
 
 > [!IMPORTANT]
 > **Pair again once:** This update adds horizontal scrolling to the touchpad, which changes what Simply Bluke advertises over Bluetooth. Forget the computer on your phone, remove Simply Bluke on the computer, and pair again. Until then, the touchpad may not work on that computer. The app shows a reminder on first launch.
