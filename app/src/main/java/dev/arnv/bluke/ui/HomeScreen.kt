@@ -28,8 +28,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.VolumeOff
-import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.automirrored.filled.HelpOutline
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -54,15 +52,17 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import android.content.Context
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import dev.arnv.bluke.R
 import dev.arnv.bluke.KeyboardThemesActivity
 import dev.arnv.bluke.KeyboardLayoutsActivity
 import dev.arnv.bluke.HelpActivity
 import dev.arnv.bluke.QuickCycleActivity
-import dev.arnv.bluke.SoundPacksActivity
 import androidx.compose.ui.unit.sp
 import androidx.core.content.edit
+import androidx.core.view.WindowCompat
+import androidx.compose.ui.graphics.luminance
 import androidx.core.net.toUri
 import dev.arnv.bluke.bluetooth.BluetoothKeyboardManager
 import dev.arnv.bluke.bluetooth.BluetoothState
@@ -70,9 +70,6 @@ import dev.arnv.bluke.bluetooth.ConsumerControl
 import dev.arnv.bluke.bluetooth.CURRENT_HID_DESCRIPTOR_REVISION
 import dev.arnv.bluke.bluetooth.HID_DESCRIPTOR_REVISION_PREFERENCE
 import dev.arnv.bluke.bluetooth.requiresHidDescriptorRefresh
-import dev.arnv.bluke.sound.KeyboardSoundSynthesizer
-import dev.arnv.bluke.sound.SwitchType
-import dev.arnv.bluke.sound.soundCycleSelection
 import dev.arnv.bluke.data.CYCLE_KEYBOARD_GEOMETRIES_PREFERENCE
 import dev.arnv.bluke.data.CYCLE_KEYBOARD_THEMES_PREFERENCE
 import dev.arnv.bluke.data.KEYBOARD_GEOMETRY_PREFERENCE
@@ -84,7 +81,6 @@ import kotlinx.coroutines.delay
 @Composable
 fun HomeScreen(
     btManager: BluetoothKeyboardManager,
-    soundSynth: KeyboardSoundSynthesizer
 ) {
     val context = LocalContext.current
     val btLauncher = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) {}
@@ -119,7 +115,13 @@ fun HomeScreen(
     var easterEggClicks by remember { mutableIntStateOf(0) }
     
     val view = LocalView.current
-    var isHapticsEnabled by remember { mutableStateOf(sharedPrefs.getBoolean("haptics_enabled", true)) }
+    var isHapticsEnabled by remember { mutableStateOf(sharedPrefs.getBoolean(HAPTICS_PREFERENCE, true)) }
+    val keyPressVibrator = remember(context) { KeyPressVibrator(context.applicationContext) }
+    var isKeyVibrationEnabled by remember { mutableStateOf(sharedPrefs.isKeyVibrationEnabled()) }
+    var keyVibrationStrength by remember { mutableStateOf(sharedPrefs.keyVibrationStrength()) }
+    fun vibrateKeyPress() {
+        if (isKeyVibrationEnabled) keyPressVibrator.vibrate(keyVibrationStrength)
+    }
     var keySensitivity by remember { mutableFloatStateOf(sharedPrefs.getFloat("key_sensitivity", 6f)) }
     var lockSyncMode by remember { mutableStateOf(sharedPrefs.getString("lock_sync_mode", "host") ?: "host") }
     var keyboardOrientation by remember {
@@ -129,6 +131,7 @@ fun HomeScreen(
         mutableStateOf(PortraitKeyboardLayout.fromPreference(sharedPrefs.getString(PORTRAIT_KEYBOARD_LAYOUT_PREFERENCE, null)))
     }
     var isKeyPreviewEnabled by remember { mutableStateOf(sharedPrefs.getBoolean(KEY_PREVIEW_PREFERENCE, true)) }
+    var keyboardHostOs by remember { mutableStateOf(sharedPrefs.keyboardHostOs()) }
     var keyboardStyle by remember {
         mutableStateOf(KeyboardStyle.fromPreference(sharedPrefs.getString(KEYBOARD_STYLE_PREFERENCE, null)))
     }
@@ -145,28 +148,18 @@ fun HomeScreen(
         mutableIntStateOf(savedMode.takeIf(enabledModes::contains) ?: enabledModes.first())
     }
 
-    // Sound synth switch state
-    var currentSwitch by remember { mutableStateOf(soundSynth.getCurrentSwitch()) }
-    var currentSoundProfileName by remember { mutableStateOf(soundSynth.getSelectedSoundProfileName()) }
-
-    // Mute state
-    var isMuted by rememberSaveable { mutableStateOf(!sharedPrefs.getBoolean("key_sound_enabled", true)) }
-
     var devModeRefreshTrigger by remember { mutableIntStateOf(0) }
 
     val lifecycleOwner = LocalLifecycleOwner.current
-    DisposableEffect(lifecycleOwner, sharedPrefs, soundSynth) {
+    DisposableEffect(lifecycleOwner, sharedPrefs) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) {
                 hideUnknownDevices = sharedPrefs.getBoolean("hide_unknown", false)
                 hideUnsupportedDevices = sharedPrefs.getBoolean("hide_unsupported", true)
                 showMacAddress = sharedPrefs.getBoolean("show_mac", false)
-                val soundEnabled = sharedPrefs.getBoolean("key_sound_enabled", true)
-                isMuted = !soundEnabled
-                soundSynth.setMute(!soundEnabled)
-                currentSwitch = soundSynth.getCurrentSwitch()
-                currentSoundProfileName = soundSynth.getSelectedSoundProfileName()
-                isHapticsEnabled = sharedPrefs.getBoolean("haptics_enabled", true)
+                isHapticsEnabled = sharedPrefs.getBoolean(HAPTICS_PREFERENCE, true)
+                isKeyVibrationEnabled = sharedPrefs.isKeyVibrationEnabled()
+                keyVibrationStrength = sharedPrefs.keyVibrationStrength()
                 keySensitivity = sharedPrefs.getFloat("key_sensitivity", 6f)
                 lockSyncMode = sharedPrefs.getString("lock_sync_mode", "host") ?: "host"
                 keyboardOrientation = KeyboardOrientation.fromPreference(
@@ -176,6 +169,7 @@ fun HomeScreen(
                     sharedPrefs.getString(PORTRAIT_KEYBOARD_LAYOUT_PREFERENCE, null)
                 )
                 isKeyPreviewEnabled = sharedPrefs.getBoolean(KEY_PREVIEW_PREFERENCE, true)
+                keyboardHostOs = sharedPrefs.keyboardHostOs()
                 keyboardStyle = KeyboardStyle.fromPreference(sharedPrefs.getString(KEYBOARD_STYLE_PREFERENCE, null))
                 isKeyboardTrackpadEnabled = sharedPrefs.getBoolean(KEYBOARD_TRACKPAD_PREFERENCE, false)
                 trackpadSide = TrackpadSide.fromPreference(sharedPrefs.getString(KEYBOARD_TRACKPAD_SIDE_PREFERENCE, null))
@@ -310,10 +304,10 @@ fun HomeScreen(
             text = {
                 Text(
                     if (descriptorRefreshRequired) {
-                        "Simply Bluke now uses one shared HID descriptor for Native, Android and Web, " +
-                            "but Bluetooth hosts cache the old layout. To use the new controls, forget the host on this phone, " +
-                            "remove Simply Bluke on the host, then pair again once. Reinstalling the app alone is not enough. " +
-                            "After this one-time refresh, all controller modes switch live without reconnecting or re-pairing."
+                        "This update changes the input layout Simply Bluke advertises over Bluetooth, " +
+                            "for example to add horizontal touchpad scrolling. Bluetooth hosts cache the old layout, " +
+                            "so the touchpad and other controls may misbehave until you forget the host on this phone, " +
+                            "remove Simply Bluke on the host, then pair again once. Reinstalling the app alone is not enough."
                     } else {
                         "We've added new features and made significant underlying changes to the controller!\n" +
                             "For detailed information, see the changelog."
@@ -463,10 +457,22 @@ fun HomeScreen(
         }
     }
 
-    // Toggle orientation and full-screen layout helper automatically
+    // Input modes sit on a black backdrop that also fills the system bar areas,
+    // so the bar icons are light there; elsewhere they follow the app theme.
+    val appUsesLightBars = MaterialTheme.colorScheme.background.luminance() > 0.5f
+    // Keyed on the theme too, so this runs after the theme sets its own bar appearance.
+    LaunchedEffect(isKeyboardActive, appUsesLightBars) {
+        val window = (context as? Activity)?.window ?: return@LaunchedEffect
+        val lightBars = appUsesLightBars && !isKeyboardActive
+        WindowCompat.getInsetsController(window, view).apply {
+            isAppearanceLightStatusBars = lightBars
+            isAppearanceLightNavigationBars = lightBars
+        }
+    }
+
+    // Set the screen orientation for the current mode.
     LaunchedEffect(isKeyboardActive, launchMode, keyboardOrientation) {
         val activity = context as? Activity ?: return@LaunchedEffect
-        val window = activity.window ?: return@LaunchedEffect
         if (isKeyboardActive) {
             try {
                 // Keyboard mode follows the rotation setting; the other modes stay landscape.
@@ -479,44 +485,12 @@ fun HomeScreen(
             } catch (e: Exception) {
                 Log.e("HomeScreen", "Error setting orientation: ${e.message}")
             }
-            // Hide System UI for immersive mechanical keypad experience
-            try {
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                    window.insetsController?.hide(
-                        android.view.WindowInsets.Type.statusBars() or android.view.WindowInsets.Type.navigationBars()
-                    )
-                    window.insetsController?.systemBarsBehavior =
-                        android.view.WindowInsetsController.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
-                } else {
-                    @Suppress("DEPRECATION")
-                    window.decorView.systemUiVisibility = (
-                        View.SYSTEM_UI_FLAG_FULLSCREEN
-                        or View.SYSTEM_UI_FLAG_HIDE_NAVIGATION
-                        or View.SYSTEM_UI_FLAG_IMMERSIVE_STICKY
-                    )
-                }
-            } catch (e: Exception) {
-                Log.e("HomeScreen", "Error hiding system bars: ${e.message}")
-            }
         } else {
             try {
                 @Suppress("SourceLockedOrientationActivity")
                 activity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
             } catch (e: Exception) {
                 Log.e("HomeScreen", "Error setting orientation to portrait: ${e.message}")
-            }
-            // Show system UI normally in config mode
-            try {
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-                    window.insetsController?.show(
-                        android.view.WindowInsets.Type.statusBars() or android.view.WindowInsets.Type.navigationBars()
-                    )
-                } else {
-                    @Suppress("DEPRECATION")
-                    window.decorView.systemUiVisibility = View.SYSTEM_UI_FLAG_VISIBLE
-                }
-            } catch (e: Exception) {
-                Log.e("HomeScreen", "Error showing system bars: ${e.message}")
             }
         }
     }
@@ -594,14 +568,11 @@ fun HomeScreen(
         // Layer keys only change the on-screen layout; nothing is sent to the host.
         if (keyCode in TouchKeyboardLayouts.LAYER_KEYS) {
             if (isPress && !activePressedKeys.contains(keyCode)) {
-                if (isHapticsEnabled) {
-                    view.performHapticFeedback(android.view.HapticFeedbackConstants.KEYBOARD_PRESS)
-                }
                 activePressedKeys.add(keyCode)
-                soundSynth.playPress(keyCode)
+                vibrateKeyPress()
                 touchLayer = touchLayer.afterLayerKey(keyCode)
-            } else if (!isPress && activePressedKeys.remove(keyCode)) {
-                soundSynth.playRelease(keyCode)
+            } else if (!isPress) {
+                activePressedKeys.remove(keyCode)
             }
             return
         }
@@ -613,15 +584,11 @@ fun HomeScreen(
         // Media keys on the Touch layout's Fn layer.
         TouchKeyboardLayouts.consumerControlFor(keyCode)?.let { control ->
             if (isPress && !activePressedKeys.contains(keyCode)) {
-                if (isHapticsEnabled) {
-                    view.performHapticFeedback(android.view.HapticFeedbackConstants.KEYBOARD_PRESS)
-                }
                 activePressedKeys.add(keyCode)
-                soundSynth.playPress(keyCode)
+                vibrateKeyPress()
                 activeConsumerKey = keyCode
                 btManager.sendConsumerControl(control)
             } else if (!isPress && activePressedKeys.remove(keyCode)) {
-                soundSynth.playRelease(keyCode)
                 if (activeConsumerKey == keyCode) {
                     btManager.sendConsumerControl(null)
                     activeConsumerKey = null
@@ -636,12 +603,9 @@ fun HomeScreen(
                 it == KeyboardLayouts.MOD_LSHIFT || it == KeyboardLayouts.MOD_RSHIFT
             }
             if (isPress && isShiftPressed && !layoutCycleSpaceActive) {
-                if (isHapticsEnabled) {
-                    view.performHapticFeedback(android.view.HapticFeedbackConstants.KEYBOARD_PRESS)
-                }
                 layoutCycleSpaceActive = true
                 activePressedKeys.add(keyCode)
-                soundSynth.playPress(keyCode)
+                vibrateKeyPress()
                 pendingCharacterLayout = (pendingCharacterLayout ?: characterLayout).next()
                 showLayoutSwitcher = true
                 layoutSwitcherRevision++
@@ -650,7 +614,6 @@ fun HomeScreen(
             if (!isPress && layoutCycleSpaceActive) {
                 layoutCycleSpaceActive = false
                 activePressedKeys.remove(keyCode)
-                soundSynth.playRelease(keyCode)
                 applyPendingCharacterLayoutIfReleased()
                 return
             }
@@ -658,17 +621,13 @@ fun HomeScreen(
 
         if (isModifier) {
             if (isPress && !activePressedKeys.contains(keyCode)) {
-                if (isHapticsEnabled) {
-                    view.performHapticFeedback(android.view.HapticFeedbackConstants.KEYBOARD_PRESS)
-                }
                 activePressedKeys.add(keyCode)
-                soundSynth.playPress(keyCode)
+                vibrateKeyPress()
                 if (modifierLatch.onModifierDown(keyCode)) {
                     if (keyCode == KeyboardLayouts.KEY_FN) isFnActive = true
                     else btManager.sendKey(keyCode, true)
                 }
             } else if (!isPress && activePressedKeys.remove(keyCode)) {
-                soundSynth.playRelease(keyCode)
                 if (modifierLatch.onModifierUp(keyCode, android.os.SystemClock.uptimeMillis())) {
                     releaseModifierOnHost(keyCode)
                 }
@@ -680,12 +639,9 @@ fun HomeScreen(
 
         val fnControl = if (isPress && isFnActive) consumerControlForFnKey(keyCode) else null
         if (fnControl != null) {
-            if (isHapticsEnabled) {
-                view.performHapticFeedback(android.view.HapticFeedbackConstants.KEYBOARD_PRESS)
-            }
             if (fnConsumedKeys.add(keyCode)) {
                 activePressedKeys.add(keyCode)
-                soundSynth.playPress(keyCode)
+                vibrateKeyPress()
                 activeConsumerKey = keyCode
                 btManager.sendConsumerControl(fnControl)
             }
@@ -694,7 +650,6 @@ fun HomeScreen(
 
         if (!isPress && fnConsumedKeys.remove(keyCode)) {
             activePressedKeys.remove(keyCode)
-            soundSynth.playRelease(keyCode)
             if (activeConsumerKey == keyCode) {
                 btManager.sendConsumerControl(null)
                 activeConsumerKey = null
@@ -704,12 +659,9 @@ fun HomeScreen(
         }
 
         if (isPress) {
-            if (isHapticsEnabled) {
-                view.performHapticFeedback(android.view.HapticFeedbackConstants.KEYBOARD_PRESS)
-            }
             if (!activePressedKeys.contains(keyCode)) {
                 activePressedKeys.add(keyCode)
-                soundSynth.playPress(keyCode)
+                vibrateKeyPress()
                 btManager.sendKey(keyCode, true)
 
                 // Only toggle status indicators locally if we are disconnected OR in device-controlled mode.
@@ -724,7 +676,6 @@ fun HomeScreen(
             }
         } else {
             activePressedKeys.remove(keyCode)
-            soundSynth.playRelease(keyCode)
             btManager.sendKey(keyCode, false)
             releaseOneShotModifiers()
             applyPendingCharacterLayoutIfReleased()
@@ -740,7 +691,13 @@ fun HomeScreen(
         },
         label = "screen_navigation"
     ) { keyboardActive ->
-        if (keyboardActive) {
+        if (keyboardActive) Box(
+            // Keep every control clear of the status bar, navigation bar and display cutout.
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Color.Black)
+                .windowInsetsPadding(WindowInsets.safeDrawing)
+        ) {
             val caseColorVal = Color(selectedKeyboardTheme.caseArgb)
             val caseMetallic = selectedKeyboardTheme.caseMetallic
             val caseBrush = if (caseMetallic) {
@@ -1112,7 +1069,7 @@ fun HomeScreen(
                                                 val nextIndex = if (currentIndexInEnabled < 0) 0 else (currentIndexInEnabled + 1) % enabledLayouts.size
                                                 selectedGeometry = enabledLayouts[nextIndex]
                                                 sharedPrefs.edit { putString(KEYBOARD_GEOMETRY_PREFERENCE, selectedGeometry.name) }
-                                                soundSynth.playPress()
+                                                vibrateKeyPress()
                                             },
                                             onLongClick = {
                                                 context.startActivity(Intent(context, KeyboardLayoutsActivity::class.java))
@@ -1139,44 +1096,42 @@ fun HomeScreen(
                                     )
                                 }
 
-                                // 3. Switch Selector Pill
+                                // 3. PC / Mac modifier keys
                                 Row(
                                     modifier = Modifier
                                         .height(28.dp)
                                         .clip(RoundedCornerShape(6.dp))
                                         .background(Color.White.copy(alpha = 0.15f))
                                         .combinedClickable(
-                                            onClickLabel = "Next key sound",
-                                            onLongClickLabel = "Manage key sounds",
+                                            onClickLabel = "Switch to ${keyboardHostOs.toggled().displayName} keys",
+                                            onLongClickLabel = "Keyboard settings",
                                             onClick = {
-                                                val enabledProfiles = soundCycleSelection(
-                                                    sharedPrefs,
-                                                    dev.arnv.bluke.sound.CustomSoundPackRepository(context).listPacks().map { it.id },
-                                                )
-                                                soundSynth.cycleSoundProfile(enabledProfiles)
-                                                currentSwitch = soundSynth.getCurrentSwitch()
-                                                currentSoundProfileName = soundSynth.getSelectedSoundProfileName()
-                                                soundSynth.playPress()
+                                                // Held or latched modifiers change meaning, so let go of them first.
+                                                resetKeyboardInput()
+                                                keyboardHostOs = keyboardHostOs.toggled()
+                                                sharedPrefs.edit { putString(KEYBOARD_HOST_OS_PREFERENCE, keyboardHostOs.preferenceValue) }
+                                                vibrateKeyPress()
                                             },
                                             onLongClick = {
-                                                context.startActivity(Intent(context, SoundPacksActivity::class.java))
+                                                context.startActivity(Intent(context, dev.arnv.bluke.KeyboardSettingsActivity::class.java))
                                             },
                                         )
-                                        .padding(horizontal = 8.dp),
+                                        .padding(horizontal = 8.dp)
+                                        .testTag("host_os_toggle"),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
                                     Icon(
-                                        imageVector = Icons.Default.MusicNote,
-                                        contentDescription = "Switch",
+                                        imageVector = if (keyboardHostOs == KeyboardHostOs.MAC) Icons.Default.LaptopMac else Icons.Default.LaptopWindows,
+                                        contentDescription = null,
                                         tint = Color.White.copy(alpha = 0.9f),
                                         modifier = Modifier.size(10.dp)
                                     )
                                     Spacer(modifier = Modifier.width(4.dp))
                                     Text(
-                                        text = currentSoundProfileName,
+                                        text = keyboardHostOs.shortName,
                                         color = Color.White,
                                         fontSize = 9.sp,
-                                        fontWeight = FontWeight.Bold
+                                        fontWeight = FontWeight.Bold,
                                     )
                                 }
 
@@ -1210,7 +1165,7 @@ fun HomeScreen(
                                                 }
                                                 selectedKeyboardTheme = enabledThemes[nextIndex]
                                                 keyboardThemeRepository.selectTheme(selectedKeyboardTheme.id)
-                                                soundSynth.playPress()
+                                                vibrateKeyPress()
                                             },
                                             onLongClick = {
                                                 context.startActivity(
@@ -1240,27 +1195,39 @@ fun HomeScreen(
                                     )
                                 }
 
-                                // 5. Mute Speaker Button (Squarish, height 28dp, radius 6dp)
-                                Box(
-                                    modifier = Modifier
-                                        .size(28.dp)
-                                        .clip(RoundedCornerShape(6.dp))
-                                        .background(Color.White.copy(alpha = 0.15f))
-                                        .clickable {
-                                            val muted = !isMuted
-                                            isMuted = muted
-                                            soundSynth.setMute(muted)
-                                            sharedPrefs.edit { putBoolean("key_sound_enabled", !muted) }
+                                // 5. Key vibration toggle (Squarish, height 28dp, radius 6dp)
+                                if (keyPressVibrator.isAvailable) {
+                                    Box(
+                                        modifier = Modifier
+                                            .size(28.dp)
+                                            .clip(RoundedCornerShape(6.dp))
+                                            .background(Color.White.copy(alpha = 0.15f))
+                                            .clickable(
+                                                onClickLabel = if (isKeyVibrationEnabled) "Turn off key vibration" else "Turn on key vibration",
+                                            ) {
+                                                isKeyVibrationEnabled = !isKeyVibrationEnabled
+                                                sharedPrefs.edit { putBoolean(KEY_VIBRATION_PREFERENCE, isKeyVibrationEnabled) }
+                                                vibrateKeyPress()
+                                            }
+                                            .testTag("key_vibration_toggle"),
+                                        contentAlignment = Alignment.Center
+                                    ) {
+                                        if (isKeyVibrationEnabled) {
+                                            Icon(
+                                                imageVector = Icons.Default.Vibration,
+                                                contentDescription = "Key vibration on",
+                                                tint = Color.White,
+                                                modifier = Modifier.size(14.dp)
+                                            )
+                                        } else {
+                                            Icon(
+                                                painter = painterResource(R.drawable.ic_vibration_off),
+                                                contentDescription = "Key vibration off",
+                                                tint = Color.White,
+                                                modifier = Modifier.size(14.dp)
+                                            )
                                         }
-                                        .testTag("mute_toggle"),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    Icon(
-                                        imageVector = if (isMuted) Icons.AutoMirrored.Filled.VolumeOff else Icons.AutoMirrored.Filled.VolumeUp,
-                                        contentDescription = "Mute",
-                                        tint = Color.White,
-                                        modifier = Modifier.size(14.dp)
-                                    )
+                                    }
                                 }
                             }
                         }
@@ -1272,9 +1239,10 @@ fun HomeScreen(
                         // so the Touch layout is used there too.
                         val useTouchLayout = (isPortrait && portraitKeyboardLayout == PortraitKeyboardLayout.TOUCH) ||
                             (showTrackpad && !isPortrait)
-                        val keyboardRows = remember(useTouchLayout, touchLayer, characterLayout, selectedGeometry) {
-                            if (useTouchLayout) TouchKeyboardLayouts.getLayout(touchLayer, characterLayout)
+                        val keyboardRows = remember(useTouchLayout, touchLayer, characterLayout, selectedGeometry, keyboardHostOs) {
+                            val rows = if (useTouchLayout) TouchKeyboardLayouts.getLayout(touchLayer, characterLayout)
                             else KeyboardLayouts.getLayout(selectedGeometry, characterLayout)
+                            rows.withHostOs(keyboardHostOs)
                         }
                         // Keys are a bit shorter with the trackpad above, leaving it more room.
                         val keyAspect = if (showTrackpad && isPortrait) 1.25f else 1.45f

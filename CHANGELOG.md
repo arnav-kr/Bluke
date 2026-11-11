@@ -3,6 +3,26 @@
 All notable user-facing changes to Simply Bluke, a fork of [Bluke](https://github.com/arnav-kr/Bluke) by Arnav Kumar, are documented in this file. Entries before 1.1.1 come from the original Bluke project.
 For detailed usage instructions, see the [Usage Guide](docs/USAGE.md).
 
+## [Unreleased]
+
+> [!IMPORTANT]
+> **Pair again once:** This update adds horizontal scrolling to the touchpad, which changes what Simply Bluke advertises over Bluetooth. Forget the computer on your phone, remove Simply Bluke on the computer, and pair again. Until then, the touchpad may not work on that computer. The app shows a reminder on first launch.
+
+### Added
+- **Key press vibration:** The phone vibrates on each key press, even when the system touch feedback setting is off. Turn it on or off from the new vibration button in the keyboard toolbar, and choose Light, Medium or Strong in Keyboard settings.
+- **Mac modifier keys:** A new PC/Mac button in the keyboard toolbar (also in Keyboard settings → Modifier keys) swaps Alt and Win so Command sits next to the space bar and Option outside it, labelled Cmd and Opt.
+- **Natural scrolling setting:** Settings → Controls & connection → Natural scrolling chooses whether two-finger scrolling follows your fingers (natural, the default and the previous behavior) or works like a mouse wheel. It applies to the Touchpad mode, the keyboard's trackpad and the Multimedia touchpad.
+- **Horizontal two-finger scrolling:** Swipe two fingers left or right to scroll sideways on every touchpad. Each swipe locks to one direction, so vertical scrolling doesn't drift sideways. It follows the natural scrolling setting and the scroll speed.
+
+### Improved & Fixed
+- **System bars stay visible:** Keyboard, Touchpad, Gamepad and Multimedia modes no longer hide the status and navigation bars, and their controls stay clear of the bars and the camera cutout instead of sliding under them.
+- **Status bar icons match the app theme:** When the app's dark theme setting differs from the phone's, the status and navigation bar icons now stay readable.
+
+### Removed
+- **Key sounds:** The switch sound profiles, Mechvibes sound pack import, the sound button in the keyboard toolbar and the sound settings are gone. Imported sound packs are deleted from the phone on first launch.
+
+---
+
 ## [1.1.1] - 2026-11-11
 
 > [!NOTE]

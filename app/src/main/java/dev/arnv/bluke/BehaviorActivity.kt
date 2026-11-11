@@ -17,6 +17,8 @@ import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.unit.dp
 import androidx.core.content.edit
 import dev.arnv.bluke.ui.HARDWARE_VOLUME_REMOTE_PREFERENCE
+import dev.arnv.bluke.ui.NATURAL_SCROLL_PREFERENCE
+import dev.arnv.bluke.ui.isNaturalScrollEnabled
 import dev.arnv.bluke.ui.SettingsCardGroup
 import dev.arnv.bluke.ui.SettingsItemData
 import dev.arnv.bluke.ui.theme.MyApplicationTheme
@@ -33,6 +35,7 @@ class BehaviorActivity : ComponentActivity() {
                 var showMac by remember { mutableStateOf(preferences.getBoolean("show_mac", false)) }
                 var reconnect by remember { mutableStateOf(preferences.getBoolean("auto_connect", true)) }
                 var keepAudio by remember { mutableStateOf(preferences.getBoolean("disconnect_audio_profiles", false)) }
+                var naturalScroll by remember { mutableStateOf(preferences.isNaturalScrollEnabled()) }
                 var volumeControlsHost by remember { mutableStateOf(preferences.getBoolean(HARDWARE_VOLUME_REMOTE_PREFERENCE, false)) }
                 val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
                 Scaffold(
@@ -59,6 +62,30 @@ class BehaviorActivity : ComponentActivity() {
                                 SettingsItemData("Show MAC addresses", "Useful when similarly named Bluetooth devices are nearby", { Icon(Icons.Default.Fingerprint, null, tint = MaterialTheme.colorScheme.primary) }, { Switch(showMac, { showMac = it; preferences.edit { putBoolean("show_mac", it) } }) }),
                                 SettingsItemData("Keep audio on this phone", "Best-effort workaround when a host takes over phone audio", { Icon(Icons.Default.MusicNote, null, tint = MaterialTheme.colorScheme.primary) }, { Switch(keepAudio, { keepAudio = it; preferences.edit { putBoolean("disconnect_audio_profiles", it) } }) }),
                                 SettingsItemData("Volume buttons control host volume", "Only while Multimedia is open", { Icon(Icons.AutoMirrored.Filled.VolumeUp, null, tint = MaterialTheme.colorScheme.primary) }, { Switch(volumeControlsHost, { volumeControlsHost = it; preferences.edit { putBoolean(HARDWARE_VOLUME_REMOTE_PREFERENCE, it) } }) }),
+                            ),
+                        )
+                        SettingsCardGroup(
+                            title = "Touchpad",
+                            items = listOf(
+                                SettingsItemData(
+                                    title = "Natural scrolling",
+                                    subtitle = if (naturalScroll) {
+                                        "Content follows your fingers, like on a phone. If scrolling feels reversed on a Mac, turn this off."
+                                    } else {
+                                        "Moving two fingers down scrolls down, like a mouse wheel"
+                                    },
+                                    icon = { Icon(Icons.Default.SwipeVertical, null, tint = MaterialTheme.colorScheme.primary) },
+                                    action = {
+                                        Switch(naturalScroll, {
+                                            naturalScroll = it
+                                            preferences.edit { putBoolean(NATURAL_SCROLL_PREFERENCE, it) }
+                                        })
+                                    },
+                                    onClick = {
+                                        naturalScroll = !naturalScroll
+                                        preferences.edit { putBoolean(NATURAL_SCROLL_PREFERENCE, naturalScroll) }
+                                    },
+                                ),
                             ),
                         )
                         Spacer(Modifier.height(32.dp))

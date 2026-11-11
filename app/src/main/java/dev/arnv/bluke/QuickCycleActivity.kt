@@ -49,7 +49,7 @@ class QuickCycleActivity : ComponentActivity() {
                         verticalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
                         Text(
-                            "Toolbar taps only visit checked input modes. Configure layout, theme, and sound cycles in their own Keyboard settings lists.",
+                            "Toolbar taps only visit checked input modes. Configure layout and theme cycles in their own Keyboard settings lists.",
                             style = MaterialTheme.typography.bodyLarge,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp),

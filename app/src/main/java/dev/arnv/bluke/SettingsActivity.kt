@@ -77,7 +77,7 @@ class SettingsActivity : ComponentActivity() {
                             items = listOf(
                                 SettingsItemData(
                                     title = "Look & Feel",
-                                    subtitle = "App colors, dark theme, haptics, and key sounds",
+                                    subtitle = "App colors, dark theme, and haptics",
                                     icon = { Icon(Icons.Default.ColorLens, null, tint = MaterialTheme.colorScheme.primary) },
                                     onClick = { 
                                         startActivity(Intent(this@SettingsActivity, LookAndFeelActivity::class.java))
@@ -85,7 +85,7 @@ class SettingsActivity : ComponentActivity() {
                                 ),
                                 SettingsItemData(
                                     title = "Keyboard",
-                                    subtitle = "Typing behavior, layouts, themes, and key sounds",
+                                    subtitle = "Typing behavior, vibration, layouts, and themes",
                                     icon = { Icon(Icons.Default.Keyboard, null, tint = MaterialTheme.colorScheme.primary) },
                                     onClick = {
                                         startActivity(Intent(this@SettingsActivity, KeyboardSettingsActivity::class.java))
@@ -106,7 +106,7 @@ class SettingsActivity : ComponentActivity() {
                             items = listOf(
                                 SettingsItemData(
                                     title = "Behavior",
-                                    subtitle = "Bluetooth discovery, reconnect, and remote controls",
+                                    subtitle = "Bluetooth discovery, reconnect, touchpad scrolling, and remote controls",
                                     icon = { Icon(Icons.Default.Settings, null, tint = MaterialTheme.colorScheme.primary) },
                                     onClick = { 
                                         startActivity(Intent(this@SettingsActivity, BehaviorActivity::class.java))

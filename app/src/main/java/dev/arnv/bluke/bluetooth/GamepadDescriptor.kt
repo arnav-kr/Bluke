@@ -67,6 +67,13 @@ internal val SHARED_HID_DESCRIPTOR = byteArrayOf(
     0x75.toByte(), 0x08.toByte(),         //     REPORT_SIZE (8)
     0x95.toByte(), 0x01.toByte(),         //     REPORT_COUNT (1)
     0x81.toByte(), 0x06.toByte(),         //     INPUT (Data,Var,Rel) - scroll wheel
+    0x05.toByte(), 0x0c.toByte(),         //     USAGE_PAGE (Consumer)
+    0x0a.toByte(), 0x38.toByte(), 0x02.toByte(), // USAGE (AC Pan)
+    0x15.toByte(), 0x81.toByte(),         //     LOGICAL_MINIMUM (-127)
+    0x25.toByte(), 0x7f.toByte(),         //     LOGICAL_MAXIMUM (127)
+    0x75.toByte(), 0x08.toByte(),         //     REPORT_SIZE (8)
+    0x95.toByte(), 0x01.toByte(),         //     REPORT_COUNT (1)
+    0x81.toByte(), 0x06.toByte(),         //     INPUT (Data,Var,Rel) - horizontal scroll
     0xc0.toByte(),                        //   END_COLLECTION
     0xc0.toByte(),                        // END_COLLECTION
 

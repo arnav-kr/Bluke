@@ -140,5 +140,17 @@ fun MyApplicationTheme(
       )
     }
 
+  // Bar icons follow the in-app dark theme setting, which can differ from the system one.
+  val view = androidx.compose.ui.platform.LocalView.current
+  if (!view.isInEditMode) {
+    androidx.compose.runtime.LaunchedEffect(useDarkTheme) {
+      val window = (view.context as? android.app.Activity)?.window ?: return@LaunchedEffect
+      androidx.core.view.WindowCompat.getInsetsController(window, view).apply {
+        isAppearanceLightStatusBars = !useDarkTheme
+        isAppearanceLightNavigationBars = !useDarkTheme
+      }
+    }
+  }
+
   MaterialTheme(colorScheme = colorScheme, typography = Typography, content = content)
 }

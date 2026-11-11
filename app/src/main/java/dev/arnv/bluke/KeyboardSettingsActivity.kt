@@ -14,13 +14,15 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.Keyboard
+import androidx.compose.material.icons.filled.LaptopMac
+import androidx.compose.material.icons.filled.LaptopWindows
 import androidx.compose.material.icons.filled.Palette
 import androidx.compose.material.icons.filled.ScreenRotation
 import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material.icons.filled.ViewQuilt
 import androidx.compose.material.icons.filled.TouchApp
+import androidx.compose.material.icons.filled.Vibration
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -47,8 +49,17 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.edit
 import dev.arnv.bluke.ui.KEYBOARD_CHARACTER_LAYOUT_PREFERENCE
 import dev.arnv.bluke.ui.KeyboardCharacterLayout
+import dev.arnv.bluke.ui.KEYBOARD_HOST_OS_PREFERENCE
 import dev.arnv.bluke.ui.KEYBOARD_ORIENTATION_PREFERENCE
+import dev.arnv.bluke.ui.KeyboardHostOs
+import dev.arnv.bluke.ui.keyboardHostOs
 import dev.arnv.bluke.ui.KEY_PREVIEW_PREFERENCE
+import dev.arnv.bluke.ui.KEY_VIBRATION_PREFERENCE
+import dev.arnv.bluke.ui.KEY_VIBRATION_STRENGTH_PREFERENCE
+import dev.arnv.bluke.ui.KeyPressVibrator
+import dev.arnv.bluke.ui.KeyVibrationStrength
+import dev.arnv.bluke.ui.isKeyVibrationEnabled
+import dev.arnv.bluke.ui.keyVibrationStrength
 import dev.arnv.bluke.ui.KeyboardOrientation
 import dev.arnv.bluke.ui.KEYBOARD_STYLE_PREFERENCE
 import dev.arnv.bluke.ui.KEYBOARD_TRACKPAD_PREFERENCE
@@ -68,6 +79,7 @@ class KeyboardSettingsActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         val preferences = getSharedPreferences("app_prefs", MODE_PRIVATE)
+        val keyPressVibrator = KeyPressVibrator(applicationContext)
         setContent {
             MyApplicationTheme {
                 var keySensitivity by remember { mutableFloatStateOf(preferences.getFloat("key_sensitivity", 6f)) }
@@ -81,8 +93,11 @@ class KeyboardSettingsActivity : ComponentActivity() {
                 var portraitLayout by remember {
                     mutableStateOf(PortraitKeyboardLayout.fromPreference(preferences.getString(PORTRAIT_KEYBOARD_LAYOUT_PREFERENCE, null)))
                 }
+                var hostOs by remember { mutableStateOf(preferences.keyboardHostOs()) }
                 var stickyModifiers by remember { mutableStateOf(preferences.getBoolean(STICKY_MODIFIERS_PREFERENCE, true)) }
                 var keyPreview by remember { mutableStateOf(preferences.getBoolean(KEY_PREVIEW_PREFERENCE, true)) }
+                var keyVibration by remember { mutableStateOf(preferences.isKeyVibrationEnabled()) }
+                var keyVibrationStrength by remember { mutableStateOf(preferences.keyVibrationStrength()) }
                 var keyboardStyle by remember {
                     mutableStateOf(KeyboardStyle.fromPreference(preferences.getString(KEYBOARD_STYLE_PREFERENCE, null)))
                 }
@@ -145,6 +160,22 @@ class KeyboardSettingsActivity : ComponentActivity() {
                                     onClick = { dialog = KeyboardDialog.TYPING_LAYOUT },
                                 ),
                                 SettingsItemData(
+                                    title = "Modifier keys",
+                                    subtitle = if (hostOs == KeyboardHostOs.MAC) {
+                                        "Mac · Cmd next to the space bar, then Opt"
+                                    } else {
+                                        "Windows / Linux · Alt next to the space bar, then Win"
+                                    },
+                                    icon = {
+                                        Icon(
+                                            if (hostOs == KeyboardHostOs.MAC) Icons.Default.LaptopMac else Icons.Default.LaptopWindows,
+                                            null,
+                                            tint = MaterialTheme.colorScheme.primary,
+                                        )
+                                    },
+                                    onClick = { dialog = KeyboardDialog.HOST_OS },
+                                ),
+                                SettingsItemData(
                                     title = "Caps Lock",
                                     subtitle = if (lockSyncMode == "host") "Follow host indicators" else "Track locally on this phone",
                                     icon = { Icon(Icons.Default.Settings, null, tint = MaterialTheme.colorScheme.primary) },
@@ -167,6 +198,35 @@ class KeyboardSettingsActivity : ComponentActivity() {
                                 ),
                             ),
                         )
+                        if (keyPressVibrator.isAvailable) {
+                            SettingsCardGroup(
+                                title = "Vibration",
+                                items = listOf(
+                                    SettingsItemData(
+                                        title = "Vibrate on key press",
+                                        subtitle = "Also switchable from the keyboard toolbar",
+                                        icon = { Icon(Icons.Default.Vibration, null, tint = MaterialTheme.colorScheme.primary) },
+                                        action = {
+                                            Switch(checked = keyVibration, onCheckedChange = {
+                                                keyVibration = it
+                                                preferences.edit { putBoolean(KEY_VIBRATION_PREFERENCE, it) }
+                                            })
+                                        },
+                                        onClick = {
+                                            keyVibration = !keyVibration
+                                            preferences.edit { putBoolean(KEY_VIBRATION_PREFERENCE, keyVibration) }
+                                        },
+                                    ),
+                                ) + if (keyVibration) listOf(
+                                    SettingsItemData(
+                                        title = "Vibration strength",
+                                        subtitle = keyVibrationStrength.displayName,
+                                        icon = { Icon(Icons.Default.Vibration, null, tint = MaterialTheme.colorScheme.primary) },
+                                        onClick = { dialog = KeyboardDialog.VIBRATION_STRENGTH },
+                                    ),
+                                ) else emptyList(),
+                            )
+                        }
                         SettingsCardGroup(
                             title = "Screen",
                             items = listOf(
@@ -247,12 +307,6 @@ class KeyboardSettingsActivity : ComponentActivity() {
                                     icon = { Icon(Icons.Default.Palette, null, tint = MaterialTheme.colorScheme.primary) },
                                     onClick = { startActivity(Intent(this@KeyboardSettingsActivity, KeyboardThemesActivity::class.java)) },
                                 ),
-                                SettingsItemData(
-                                    title = "Key sound packs",
-                                    subtitle = "Choose, import, and configure toolbar cycle choices",
-                                    icon = { Icon(Icons.Default.GraphicEq, null, tint = MaterialTheme.colorScheme.primary) },
-                                    onClick = { startActivity(Intent(this@KeyboardSettingsActivity, SoundPacksActivity::class.java)) },
-                                ),
                             ),
                         )
                         Spacer(Modifier.height(32.dp))
@@ -332,6 +386,31 @@ class KeyboardSettingsActivity : ComponentActivity() {
                         },
                         onDismiss = { dialog = null },
                     )
+                    KeyboardDialog.HOST_OS -> ChoiceDialog(
+                        title = "Modifier keys",
+                        explanation = "Mac swaps Alt and Win so Cmd sits next to the space bar. Also switchable from the keyboard toolbar.",
+                        choices = KeyboardHostOs.entries.map { it.displayName },
+                        selectedIndex = KeyboardHostOs.entries.indexOf(hostOs),
+                        onSelect = { index ->
+                            hostOs = KeyboardHostOs.entries[index]
+                            preferences.edit { putString(KEYBOARD_HOST_OS_PREFERENCE, hostOs.preferenceValue) }
+                            dialog = null
+                        },
+                        onDismiss = { dialog = null },
+                    )
+                    KeyboardDialog.VIBRATION_STRENGTH -> ChoiceDialog(
+                        title = "Vibration strength",
+                        explanation = "How strongly the phone vibrates for each key press.",
+                        choices = KeyVibrationStrength.entries.map { it.displayName },
+                        selectedIndex = KeyVibrationStrength.entries.indexOf(keyVibrationStrength),
+                        onSelect = { index ->
+                            keyVibrationStrength = KeyVibrationStrength.entries[index]
+                            preferences.edit { putString(KEY_VIBRATION_STRENGTH_PREFERENCE, keyVibrationStrength.preferenceValue) }
+                            keyPressVibrator.vibrate(keyVibrationStrength)
+                            dialog = null
+                        },
+                        onDismiss = { dialog = null },
+                    )
                     null -> Unit
                 }
             }
@@ -339,7 +418,7 @@ class KeyboardSettingsActivity : ComponentActivity() {
     }
 }
 
-private enum class KeyboardDialog { TYPING_LAYOUT, CAPS_LOCK, ORIENTATION, PORTRAIT_LAYOUT, STYLE, TRACKPAD_SIDE }
+private enum class KeyboardDialog { TYPING_LAYOUT, CAPS_LOCK, ORIENTATION, PORTRAIT_LAYOUT, STYLE, TRACKPAD_SIDE, VIBRATION_STRENGTH, HOST_OS }
 
 @Composable
 internal fun ChoiceDialog(

@@ -121,7 +121,6 @@ fun TouchpadView(
         modifier = Modifier
             .fillMaxSize()
             .background(caseBrush)
-            .navigationBarsPadding()
             .testTag("touchpad_view_root")
     ) {
         Column(
@@ -752,10 +751,20 @@ fun TouchGestureLayer(
     var lastPointX by remember { mutableFloatStateOf(0f) }
     var lastPointY by remember { mutableFloatStateOf(0f) }
 
+    // Read here so every trackpad (Touchpad mode, keyboard trackpad, Multimedia) follows it.
+    val context = LocalContext.current
+    val preferences = remember(context) {
+        context.getSharedPreferences("app_prefs", android.content.Context.MODE_PRIVATE)
+    }
+    val naturalScroll by rememberNaturalScroll(preferences)
+
     // Multi-touch tracking
     var isTwoFingerActive by remember { mutableStateOf(false) }
+    var lastTwoFingerX by remember { mutableFloatStateOf(0f) }
     var lastTwoFingerY by remember { mutableFloatStateOf(0f) }
+    var accumulatedScrollX by remember { mutableFloatStateOf(0f) }
     var accumulatedScrollY by remember { mutableFloatStateOf(0f) }
+    val scrollAxisLock = remember { TwoFingerScrollAxisLock() }
 
     // Tap tracking
     val pointerDownInfo = remember { mutableMapOf<PointerId, Pair<Long, Offset>>() }
@@ -839,6 +848,7 @@ fun TouchGestureLayer(
 
                         if (downCount == 1) {
                             isTwoFingerActive = false
+                            accumulatedScrollX = 0f
                             accumulatedScrollY = 0f
                             val pointer = changes.first { it.pressed }
                             
@@ -902,22 +912,34 @@ fun TouchGestureLayer(
                         } else if (downCount == 2) {
                             val pressedList = changes.filter { it.pressed }
                             if (pressedList.size == 2) {
+                                val currentXAverage = (pressedList[0].position.x + pressedList[1].position.x) / 2f
                                 val currentYAverage = (pressedList[0].position.y + pressedList[1].position.y) / 2f
                                 if (!isTwoFingerActive) {
                                     isTwoFingerActive = true
+                                    accumulatedScrollX = 0f
                                     accumulatedScrollY = 0f
+                                    scrollAxisLock.reset()
+                                    lastTwoFingerX = currentXAverage
                                     lastTwoFingerY = currentYAverage
                                 } else {
-                                    accumulatedScrollY += (currentYAverage - lastTwoFingerY) * 0.06f * scrollSensitivity
+                                    val (scrollDx, scrollDy) = scrollAxisLock.filter(
+                                        dx = currentXAverage - lastTwoFingerX,
+                                        dy = currentYAverage - lastTwoFingerY,
+                                    )
+                                    accumulatedScrollX += scrollPanDelta(scrollDx, scrollSensitivity, naturalScroll)
+                                    accumulatedScrollY += scrollWheelDelta(scrollDy, scrollSensitivity, naturalScroll)
                                     val now = System.currentTimeMillis()
                                     if (now - lastReportTime >= 10L) {
                                         val sendScroll = accumulatedScrollY.roundToInt().coerceIn(-127, 127)
-                                        if (sendScroll != 0) {
-                                            btManager.sendMouseReport(0, 0, 0, sendScroll.toByte())
+                                        val sendPan = accumulatedScrollX.roundToInt().coerceIn(-127, 127)
+                                        if (sendScroll != 0 || sendPan != 0) {
+                                            btManager.sendMouseReport(0, 0, 0, sendScroll.toByte(), sendPan.toByte())
                                             accumulatedScrollY -= sendScroll
+                                            accumulatedScrollX -= sendPan
                                             lastReportTime = now
                                         }
                                     }
+                                    lastTwoFingerX = currentXAverage
                                     lastTwoFingerY = currentYAverage
                                 }
                             }
@@ -935,11 +957,13 @@ fun TouchGestureLayer(
                                 }
                             }
                             val sendScroll = accumulatedScrollY.roundToInt().coerceIn(-127, 127)
-                            if (sendScroll != 0) {
-                                btManager.sendMouseReport(0, 0, 0, sendScroll.toByte())
+                            val sendPan = accumulatedScrollX.roundToInt().coerceIn(-127, 127)
+                            if (sendScroll != 0 || sendPan != 0) {
+                                btManager.sendMouseReport(0, 0, 0, sendScroll.toByte(), sendPan.toByte())
                             }
                             accumulatedX = 0f
                             accumulatedY = 0f
+                            accumulatedScrollX = 0f
                             accumulatedScrollY = 0f
                         }
 
@@ -1005,6 +1029,7 @@ fun TouchGestureLayer(
                     maxPointersInTap = 0
                     accumulatedX = 0f
                     accumulatedY = 0f
+                    accumulatedScrollX = 0f
                     accumulatedScrollY = 0f
                     isTwoFingerActive = false
                     isTouchActive = false

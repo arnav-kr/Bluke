@@ -21,7 +21,8 @@ Bluke turns your Android phone into a Bluetooth keyboard, touchpad, gamepad, and
 
 - Direct Bluetooth HID connection with no companion apps or server software running on the host
 - Four input modes: Keyboard, Touchpad, Gamepad, and Multimedia remote
-- 12 mechanical switch sound profiles, plus support for importing custom Mechvibes sound packs
+- Key press vibration with adjustable strength, switchable from the keyboard toolbar
+- PC or Mac modifier keys (Cmd and Opt next to the space bar), switchable from the keyboard toolbar
 - Multiple typing layouts (QWERTY, AZERTY, QWERTZ, Dvorak, Colemak, Russian ЙЦУКЕН) with `Shift + Space` cycling
 - Multiple keyboard geometries (60%, 65%, 75%) and custom themes with case, plate, and keycap styling
 - Gamepad controller with live switching between Native, Android, and Web mappings
@@ -83,7 +84,7 @@ This project is licensed under the [AGPL-3.0](LICENSE).
 ## Credits
 
 * **[Bluke](https://github.com/arnav-kr/Bluke)** by [Arnav Kumar](https://github.com/arnav-kr): the original app this fork is based on. To install the original, download the APK from its [releases page](https://github.com/arnav-kr/Bluke/releases/latest). It can be installed next to Simply Bluke.
-* **[kbsim](https://github.com/tplai/kbsim)**: Part of mechanical switch audio assets are sourced from [kbs.im](https://kbs.im).
+* **[kbsim](https://github.com/tplai/kbsim)**: The keycap styling is based on [kbs.im](https://kbs.im).
 
 ## Original Bluke contributors
 

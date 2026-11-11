@@ -555,7 +555,6 @@ fun GamepadView(
         modifier = Modifier
             .fillMaxSize()
             .background(Color(0xFF28282A))
-            .navigationBarsPadding()
             .testTag("gamepad_view_root")
     ) {
         Column(modifier = Modifier.fillMaxSize()) {

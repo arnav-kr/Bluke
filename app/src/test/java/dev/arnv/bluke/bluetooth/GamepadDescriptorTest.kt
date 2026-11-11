@@ -42,18 +42,26 @@ class GamepadDescriptorTest {
     @Test fun allProfilesShareDescriptorAndPreserveOriginalFields() {
         for (mode in GamepadDpadOutputMode.entries) {
             val descriptor = hidDescriptorForMode(mode)
-            assertEquals(239, descriptor.size)
+            assertEquals(254, descriptor.size)
             assertArrayEquals(hidDescriptorForMode(GamepadDpadOutputMode.NATIVE_HAT), descriptor)
             val axes = byteArrayOf(0x09, 0x30, 0x09, 0x31, 0x09, 0x32, 0x09, 0x33, 0x09, 0x35)
             val offset = (0..descriptor.size - axes.size).single { start ->
                 axes.indices.all { descriptor[start + it] == axes[it] }
             }
-            val original = descriptor.toMutableList()
-            original.removeAt(offset + 9)
-            original.removeAt(offset + 8)
-            assertEquals(0x95.toByte(), original[offset + 17])
-            assertEquals(5.toByte(), original[offset + 18])
-            original[offset + 18] = 4
+            // Without the horizontal scroll field added in revision 6, the rest must be unchanged.
+            val pan = byteArrayOf(0x05, 0x0c, 0x0a, 0x38, 0x02, 0x15, 0x81.toByte(), 0x25, 0x7f, 0x75, 0x08, 0x95.toByte(), 0x01, 0x81.toByte(), 0x06)
+            val panOffset = (0..descriptor.size - pan.size).single { start ->
+                pan.indices.all { descriptor[start + it] == pan[it] }
+            }
+            assertTrue(panOffset < offset)
+            val original = (descriptor.copyOfRange(0, panOffset) +
+                descriptor.copyOfRange(panOffset + pan.size, descriptor.size)).toMutableList()
+            val axesOffset = offset - pan.size
+            original.removeAt(axesOffset + 9)
+            original.removeAt(axesOffset + 8)
+            assertEquals(0x95.toByte(), original[axesOffset + 17])
+            assertEquals(5.toByte(), original[axesOffset + 18])
+            original[axesOffset + 18] = 4
             val hash = MessageDigest.getInstance("SHA-256").digest(original.toByteArray())
                 .joinToString("") { "%02X".format(it.toInt() and 0xff) }
             assertEquals("6A99D5607B74B803329498B709761B898616A6F7905527456FDCD5A3BBD2DB62", hash)
@@ -109,7 +117,7 @@ class GamepadDescriptorTest {
                 0x80 -> bits[id] = bits.getOrDefault(id, 0) + size * count
             }
         }
-        assertEquals(mapOf(1 to 64, 2 to 32, 3 to 112, 4 to 16), bits)
+        assertEquals(mapOf(1 to 64, 2 to 40, 3 to 112, 4 to 16), bits)
         assertEquals(GAMEPAD_REPORT_SIZE_BYTES * 8, bits[3])
     }
 }

@@ -31,7 +31,7 @@ Simply Bluke communicates directly with your host device (PC, laptop, tablet, or
 
 Every control surface in Simply Bluke shares a consistent, unified top toolbar built around two simple actions:
 
-* **Tap to Cycle:** Tapping any toolbar button quickly cycles through your active favorites (such as typing layouts, color themes, switch sound profiles, gamepad modes, or pointer speeds).
+* **Tap to Cycle:** Tapping any toolbar button quickly cycles through your active favorites (such as typing layouts, color themes, gamepad modes, or pointer speeds).
 * **Hold to Configure:** Long-pressing any toolbar button opens its full settings screen, allowing you to choose from the complete library or customize which options appear in your quick-cycle loop.
 
 The toolbar also displays your connection status (green for active, red/gray for offline), the connected device name, and buttons to return Home or disconnect.
@@ -41,7 +41,7 @@ The toolbar also displays your connection status (green for active, red/gray for
 ## 3. Input Modes & Controls
 
 ### Mechanical Keyboard
-An authentic mechanical typing surface featuring tactile haptics, realistic acoustics, and customizable layouts.
+An authentic mechanical typing surface featuring key press vibration and customizable layouts.
 
 - **Typing Layouts:** Choose between **QWERTY**, **AZERTY**, **QWERTZ**, **Dvorak**, **Colemak**, and **Russian (ЙЦУКЕН)**.
 - **On-Screen Shortcut:** Hold on-screen **Shift** and tap **Space** to switch typing layouts on the fly without leaving the keyboard.
@@ -49,7 +49,8 @@ An authentic mechanical typing surface featuring tactile haptics, realistic acou
   > Keyboards send physical key positions rather than typed letters. To type in Russian (ЙЦУКЕН) or French (AZERTY), make sure your computer is also set to that language. See [Troubleshooting: Host Keyboard Languages](#russian-or-accented-characters-do-not-type-correctly).
 - **Physical Layouts (Geometries):** Choose your preferred keyboard form factor: **Classic 75%**, **Compact 75%**, **Inline 75%**, **Standard 65%**, **Balanced 65%**, **Extended 65%**, or **HHKB 60%**.
 - **In-Place Fn Shortcuts:** Holding the **Fn** key transforms F1–F12 keys into media and presentation controls right on the keycaps.
-- **Switch Acoustics:** Turn typing sounds on/off or cycle between 12 mechanical switch profiles directly from the toolbar.
+- **Mac Modifier Keys:** Tap the **PC / Mac** button in the toolbar to switch. Mac swaps Alt and Win so **Cmd** sits next to the space bar and **Opt** outside it, like a Mac keyboard. Hold the button to open Keyboard settings, where the same choice is under *Modifier keys*.
+- **Key Vibration:** The phone vibrates on each key press. Turn it on or off from the vibration button in the toolbar, and pick Light, Medium or Strong in *Settings → Keyboard → Vibration*.
 
 ---
 
@@ -59,11 +60,12 @@ A smooth pointer surface with multi-touch gestures and optional modifier keys.
 - **Tap-and-Drag:** Position your cursor over an item, **tap once, immediately touch down again nearby (within 180 ms), and move without lifting**. Lift your finger to drop.
   - *Tip:* Touching the screen with a 3rd finger immediately cancels an active drag.
 - **Multi-Touch Gestures:**
-  - Two-finger drag: scroll vertically or horizontally.
+  - Two-finger drag: scroll vertically or horizontally. Each swipe locks to the direction you start in, so up-and-down scrolling doesn't drift sideways.
   - Two-finger tap: right-click.
   - Three-finger tap: middle-click.
 - **Modifier Key Strips:** Add a strip of modifier keys (Ctrl, Alt, Shift, Meta) to the **Left**, **Right**, or turn it **Off** from the toolbar. This gives you easy access to shortcuts without covering the touchpad surface.
 - **Pointer & Scroll Speeds:** Adjust pointer and scrolling sensitivity from fine control (0.25x, 0.5x) to high speed (1.5x, 2.0x) from the toolbar.
+- **Natural Scrolling:** On by default, so content follows your fingers like on a phone. Turn it off in *Settings → Controls & connection → Natural scrolling* to scroll like a mouse wheel. On a Mac with its own *Natural scrolling* turned on, scrolling may feel reversed; turn this setting off to fix that. It applies to every touchpad in the app.
 
 ---
 
@@ -101,15 +103,12 @@ A dedicated remote for couch media browsing and presentations.
   * Choose from built-in theme presets: *Olivia, Dracula, Model M, Mizu, Oblivion, Cafe, Laser, HHKB, 9009, 8008*.
   * Create custom themes using the visual color picker.
   * Customize case color, matte or metallic finish, plate accents, keycap groups, and individual keys.
-* **Key Sound Packs & Mechvibes Import:**
-  * Choose from 12 built-in switch sounds: *Cherry MX Brown, Holy Panda, Alpaca, Turquoise Tealios, Gateron Black Ink, Cherry MX Black, Cherry MX Blue, Kailh Box Navy, Buckling Spring, SKCM Blue Alps, Topre 45g, NovelKeys Cream*.
-  * **Import Mechvibes Packs:** Tap Import to load any standard Mechvibes ZIP sound pack (including audio sprite packs) from your phone's files.
-  * Delete imported packs anytime (built-in switch sounds are permanently available).
-* **Look & Feel:** Toggle pure OLED black mode, keypress vibration (haptics), and Material You dynamic system colors.
+* **Key Vibration:** In *Keyboard* settings, turn key press vibration on or off and choose its strength (Light, Medium, Strong).
+* **Look & Feel:** Toggle pure OLED black mode, long-press haptics, and Material You dynamic system colors.
 
 ### Controls & Connection
-* **Quick-Cycle Choices:** Pick which layouts, themes, sounds, and controller modes appear when tapping toolbar buttons.
-* **Behavior:** Turn on phone volume button forwarding, or enable the experimental *Keep audio on this phone* setting.
+* **Quick-Cycle Choices:** Pick which layouts, themes, and controller modes appear when tapping toolbar buttons.
+* **Behavior:** Turn on phone volume button forwarding, switch touchpad natural scrolling on or off, or enable the experimental *Keep audio on this phone* setting.
 * **Controller Settings:** Set your default gamepad mode.
 
 ### Support & Developer Options

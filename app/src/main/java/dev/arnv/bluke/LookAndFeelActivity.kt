@@ -13,7 +13,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -22,6 +21,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.unit.dp
+import dev.arnv.bluke.ui.HAPTICS_PREFERENCE
 import dev.arnv.bluke.ui.SettingsCardGroup
 import dev.arnv.bluke.ui.SettingsItemData
 import dev.arnv.bluke.ui.theme.MyApplicationTheme
@@ -48,8 +48,7 @@ class LookAndFeelActivity : ComponentActivity() {
                 var accentColorIndex by remember { mutableIntStateOf(sharedPrefs.getInt("accent_color_index", 0)) }
                 var paletteStyleState by remember { mutableStateOf(sharedPrefs.getString("palette_style", "Tonal Spot") ?: "Tonal Spot") }
                 
-                var hapticsEnabled by remember { mutableStateOf(sharedPrefs.getBoolean("haptics_enabled", true)) }
-                var keySoundEnabled by remember { mutableStateOf(sharedPrefs.getBoolean("key_sound_enabled", true)) }
+                var hapticsEnabled by remember { mutableStateOf(sharedPrefs.getBoolean(HAPTICS_PREFERENCE, true)) }
                 
                 var showPaletteDialog by remember { mutableStateOf(false) }
                 val themeMode by themeModeState
@@ -261,32 +260,15 @@ class LookAndFeelActivity : ComponentActivity() {
                                     }
                                 ),
                                 SettingsItemData(
-                                    title = "Haptics & Vibration",
-                                    subtitle = "Interactive haptics for touch feedback",
+                                    title = "Haptics",
+                                    subtitle = "Touch feedback on long presses. Key press vibration is in Keyboard settings.",
                                     icon = { Icon(Icons.Default.Vibration, null, tint = MaterialTheme.colorScheme.primary) },
                                     action = {
                                         Switch(
                                             checked = hapticsEnabled,
                                             onCheckedChange = { 
                                                 hapticsEnabled = it
-                                                sharedPrefs.edit { putBoolean("haptics_enabled", it) }
-                                            }
-                                        )
-                                    }
-                                ),
-                                SettingsItemData(
-                                    title = "Enable sounds",
-                                    subtitle = "Play sound effect on key press",
-                                    icon = { Icon(Icons.AutoMirrored.Filled.VolumeUp, null, tint = MaterialTheme.colorScheme.primary) },
-                                    action = {
-                                        Switch(
-                                            checked = keySoundEnabled,
-                                            onCheckedChange = { 
-                                                keySoundEnabled = it
-                                                sharedPrefs.edit {
-                                                    putBoolean("key_sound_enabled", it)
-                                                    putBoolean("sound_toggle", it)
-                                                }
+                                                sharedPrefs.edit { putBoolean(HAPTICS_PREFERENCE, it) }
                                             }
                                         )
                                     }

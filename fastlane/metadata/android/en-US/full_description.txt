@@ -5,7 +5,7 @@ It utilizes your phone's built-in Bluetooth HID profile and acts like how a typi
 No installing server apps or background clients, just pair, connect and it works.
 
 Features:
-* Keyboard mode with real mechanical typing sounds (12 built-in switches, custom Mechvibes pack import, Fn media shortcuts, and international layouts).
+* Keyboard mode with key press vibration, Fn media shortcuts, and international layouts.
 * Trackpad mode with smooth cursor control, natural two-finger scrolling, tap-and-drag, and an LED numpad overlay.
 * Gamepad mode with dual analog sticks, Xbox/PS5 button styles, stick inversion, and Native/Web/Android controller profiles.
 * Multimedia remote mode for media playback and slideshow presentations, with optional phone volume rocker control.

@@ -7,7 +7,6 @@ import android.view.View
 import android.view.ViewTreeObserver
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
@@ -16,8 +15,6 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.collect
 import dev.arnv.bluke.bluetooth.BluetoothKeyboardManager
 import dev.arnv.bluke.bluetooth.BluetoothState
-import dev.arnv.bluke.sound.KeyboardSoundSynthesizer
-import dev.arnv.bluke.sound.migrateSoundPreferences
 import dev.arnv.bluke.data.migrateKeyboardCustomizationPreferences
 import dev.arnv.bluke.ui.theme.MyApplicationTheme
 import dev.arnv.bluke.ui.HomeScreen
@@ -28,7 +25,6 @@ interface RemoteVolumeKeyHost {
 
 class MainActivity : ComponentActivity(), RemoteVolumeKeyHost {
     private lateinit var btManager: BluetoothKeyboardManager
-    private lateinit var soundSynth: KeyboardSoundSynthesizer
     private var remoteVolumeKeyHandler: ((keyCode: Int, isPressed: Boolean) -> Unit)? = null
 
     private val permissionLauncher = registerForActivityResult(
@@ -44,7 +40,6 @@ class MainActivity : ComponentActivity(), RemoteVolumeKeyHost {
         super.onCreate(savedInstanceState)
         
         val sharedPrefs = getSharedPreferences("app_prefs", MODE_PRIVATE)
-        migrateSoundPreferences(sharedPrefs)
         migrateKeyboardCustomizationPreferences(sharedPrefs)
         if (!sharedPrefs.getBoolean("has_seen_onboarding", false)) {
             startActivity(android.content.Intent(this, OnboardingActivity::class.java))
@@ -80,8 +75,6 @@ class MainActivity : ComponentActivity(), RemoteVolumeKeyHost {
             }
         )
 
-        soundSynth = KeyboardSoundSynthesizer(applicationContext)
-
         // Request Bluetooth and Location permissions dynamically
         val permissions = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             arrayOf(
@@ -97,13 +90,9 @@ class MainActivity : ComponentActivity(), RemoteVolumeKeyHost {
         }
         permissionLauncher.launch(permissions)
 
-        enableEdgeToEdge()
         setContent {
             MyApplicationTheme {
-                HomeScreen(
-                    btManager = btManager,
-                    soundSynth = soundSynth
-                )
+                HomeScreen(btManager = btManager)
             }
         }
     }
@@ -150,9 +139,6 @@ class MainActivity : ComponentActivity(), RemoteVolumeKeyHost {
             btManager.checkBluetoothCapabilities()
             ensureBluetoothSessionService()
         }
-        if (::soundSynth.isInitialized) {
-            soundSynth.reloadSelectedSoundPack()
-        }
     }
 
     override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean {
@@ -188,8 +174,5 @@ class MainActivity : ComponentActivity(), RemoteVolumeKeyHost {
     override fun onDestroy() {
         remoteVolumeKeyHandler = null
         super.onDestroy()
-        if (::soundSynth.isInitialized) {
-            soundSynth.release()
-        }
     }
 }

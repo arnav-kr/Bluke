@@ -1652,14 +1652,16 @@ class BluetoothKeyboardManager(private val context: Context) {
     }
 
     @SuppressLint("MissingPermission")
-    fun sendMouseReport(buttons: Byte, x: Byte, y: Byte, wheel: Byte) {
+    /** [wheel] is positive to scroll up; [pan] is positive to scroll right. */
+    fun sendMouseReport(buttons: Byte, x: Byte, y: Byte, wheel: Byte, pan: Byte = 0) {
         val dev = _connectedDevice.value
         if (dev != null) {
-            val report = ByteArray(4)
+            val report = ByteArray(5)
             report[0] = buttons
             report[1] = x
             report[2] = y
             report[3] = wheel
+            report[4] = pan
             submitReport(dev, 2, report) // Mouse report ID is 2
         }
     }
