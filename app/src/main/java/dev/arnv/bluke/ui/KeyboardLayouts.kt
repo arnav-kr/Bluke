@@ -398,6 +398,8 @@ object KeyboardLayouts {
         }
     }
 
+    internal fun parseKle(kle: String): List<List<KeyLayoutInfo>> = parseKleString(kle)
+
     private fun parseKleString(kle: String): List<List<KeyLayoutInfo>> {
         val rows = mutableListOf<List<KeyLayoutInfo>>()
         

@@ -30,7 +30,8 @@ fun KeyCap(
     isSelected: Boolean = false,
     baseUnitWidth: androidx.compose.ui.unit.Dp,
     modifier: Modifier = Modifier,
-    glowColor: Color? = null
+    glowColor: Color? = null,
+    latchState: LatchState = LatchState.OFF,
 ) {
     val keyBorderColor = keyBgColor.darker()
     
@@ -169,6 +170,22 @@ fun KeyCap(
                     modifier = Modifier.padding(
                         (baseUnitWidth.value * 0.04f).coerceIn(0.5f, 2f).dp,
                     ),
+                )
+            }
+
+            // Sticky modifier marker: a faint bar for "next key only", a solid bar when locked.
+            if (latchState != LatchState.OFF) {
+                Box(
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .padding(bottom = 2.dp)
+                        .fillMaxWidth(0.45f)
+                        .height(if (latchState == LatchState.LOCKED) 3.dp else 2.dp)
+                        .background(
+                            legendColor.copy(alpha = if (latchState == LatchState.LOCKED) 1f else 0.55f),
+                            RoundedCornerShape(2.dp),
+                        )
+                        .testTag("latch_${latchState.name.lowercase()}_$legend")
                 )
             }
         }

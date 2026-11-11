@@ -20,6 +20,10 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
+import android.content.res.Configuration
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -118,6 +122,14 @@ fun HomeScreen(
     var isHapticsEnabled by remember { mutableStateOf(sharedPrefs.getBoolean("haptics_enabled", true)) }
     var keySensitivity by remember { mutableFloatStateOf(sharedPrefs.getFloat("key_sensitivity", 6f)) }
     var lockSyncMode by remember { mutableStateOf(sharedPrefs.getString("lock_sync_mode", "host") ?: "host") }
+    var keyboardOrientation by remember {
+        mutableStateOf(KeyboardOrientation.fromPreference(sharedPrefs.getString(KEYBOARD_ORIENTATION_PREFERENCE, null)))
+    }
+    var portraitKeyboardLayout by remember {
+        mutableStateOf(PortraitKeyboardLayout.fromPreference(sharedPrefs.getString(PORTRAIT_KEYBOARD_LAYOUT_PREFERENCE, null)))
+    }
+    var isKeyPreviewEnabled by remember { mutableStateOf(sharedPrefs.getBoolean(KEY_PREVIEW_PREFERENCE, true)) }
+    val isPortrait = LocalConfiguration.current.orientation == Configuration.ORIENTATION_PORTRAIT
     var launchMode by rememberSaveable {
         val enabledModes = sharedPrefs.enabledInputModes().map(InputMode::id)
         val savedMode = sharedPrefs.getInt("launch_mode", InputMode.KEYBOARD.id)
@@ -148,6 +160,13 @@ fun HomeScreen(
                 isHapticsEnabled = sharedPrefs.getBoolean("haptics_enabled", true)
                 keySensitivity = sharedPrefs.getFloat("key_sensitivity", 6f)
                 lockSyncMode = sharedPrefs.getString("lock_sync_mode", "host") ?: "host"
+                keyboardOrientation = KeyboardOrientation.fromPreference(
+                    sharedPrefs.getString(KEYBOARD_ORIENTATION_PREFERENCE, null)
+                )
+                portraitKeyboardLayout = PortraitKeyboardLayout.fromPreference(
+                    sharedPrefs.getString(PORTRAIT_KEYBOARD_LAYOUT_PREFERENCE, null)
+                )
+                isKeyPreviewEnabled = sharedPrefs.getBoolean(KEY_PREVIEW_PREFERENCE, true)
                 characterLayout = KeyboardCharacterLayout.fromPreference(
                     sharedPrefs.getString(KEYBOARD_CHARACTER_LAYOUT_PREFERENCE, null)
                 )
@@ -192,6 +211,11 @@ fun HomeScreen(
     var isFnActive by remember { mutableStateOf(false) }
     var activeConsumerKey by remember { mutableStateOf<Int?>(null) }
     val fnConsumedKeys = remember { mutableSetOf<Int>() }
+    val modifierLatch = remember {
+        ModifierLatch(enabled = sharedPrefs.getBoolean(STICKY_MODIFIERS_PREFERENCE, true))
+    }
+    var latchedKeys by remember { mutableStateOf<Map<Int, LatchState>>(emptyMap()) }
+    var touchLayer by remember { mutableStateOf(TouchLayer.BASE) }
     var layoutCycleSpaceActive by remember { mutableStateOf(false) }
     var pendingCharacterLayout by remember { mutableStateOf<KeyboardCharacterLayout?>(null) }
     var layoutSwitcherRevision by remember { mutableIntStateOf(0) }
@@ -428,14 +452,20 @@ fun HomeScreen(
     }
 
     // Toggle orientation and full-screen layout helper automatically
-    LaunchedEffect(isKeyboardActive) {
+    LaunchedEffect(isKeyboardActive, launchMode, keyboardOrientation) {
         val activity = context as? Activity ?: return@LaunchedEffect
         val window = activity.window ?: return@LaunchedEffect
         if (isKeyboardActive) {
             try {
-                activity.requestedOrientation = ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
+                // Keyboard mode follows the rotation setting; the other modes stay landscape.
+                @Suppress("SourceLockedOrientationActivity")
+                activity.requestedOrientation = if (launchMode == InputMode.KEYBOARD.id) {
+                    keyboardOrientation.activityOrientation
+                } else {
+                    ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
+                }
             } catch (e: Exception) {
-                Log.e("HomeScreen", "Error setting orientation to landscape: ${e.message}")
+                Log.e("HomeScreen", "Error setting orientation: ${e.message}")
             }
             // Hide System UI for immersive mechanical keypad experience
             try {
@@ -479,6 +509,59 @@ fun HomeScreen(
         }
     }
 
+    fun releaseModifierOnHost(keyCode: Int) {
+        if (keyCode == KeyboardLayouts.KEY_FN) {
+            isFnActive = false
+            if (activeConsumerKey != null) {
+                btManager.sendConsumerControl(null)
+                activeConsumerKey = null
+            }
+        } else {
+            btManager.sendKey(keyCode, false)
+        }
+    }
+
+    fun releaseOneShotModifiers() {
+        modifierLatch.onOtherKeyUp().forEach(::releaseModifierOnHost)
+        latchedKeys = modifierLatch.latched
+    }
+
+    /** Lets go of every key, latch and layer, on screen and on the host. */
+    fun resetKeyboardInput() {
+        modifierLatch.clear()
+        latchedKeys = emptyMap()
+        activePressedKeys.clear()
+        fnConsumedKeys.clear()
+        isFnActive = false
+        activeConsumerKey = null
+        layoutCycleSpaceActive = false
+        touchLayer = TouchLayer.BASE
+        btManager.releaseAllInputs()
+    }
+
+    // Rotating, leaving the keyboard or leaving the app lets go of every key,
+    // so nothing stays stuck down on the host.
+    var lastKeyboardShape by remember { mutableStateOf(isKeyboardActive to isPortrait) }
+    LaunchedEffect(isKeyboardActive, isPortrait) {
+        val shape = isKeyboardActive to isPortrait
+        if (shape != lastKeyboardShape) {
+            lastKeyboardShape = shape
+            resetKeyboardInput()
+        }
+    }
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            when (event) {
+                Lifecycle.Event.ON_PAUSE -> resetKeyboardInput()
+                Lifecycle.Event.ON_RESUME ->
+                    modifierLatch.enabled = sharedPrefs.getBoolean(STICKY_MODIFIERS_PREFERENCE, true)
+                else -> Unit
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
     // Process local screen-press inputs
     fun handleLocalKeyPress(keyCode: Int, isPress: Boolean) {
         fun applyPendingCharacterLayoutIfReleased() {
@@ -494,6 +577,46 @@ fun HomeScreen(
                     pendingCharacterLayout = null
                 }
             }
+        }
+
+        // Layer keys only change the on-screen layout; nothing is sent to the host.
+        if (keyCode in TouchKeyboardLayouts.LAYER_KEYS) {
+            if (isPress && !activePressedKeys.contains(keyCode)) {
+                if (isHapticsEnabled) {
+                    view.performHapticFeedback(android.view.HapticFeedbackConstants.KEYBOARD_PRESS)
+                }
+                activePressedKeys.add(keyCode)
+                soundSynth.playPress(keyCode)
+                touchLayer = touchLayer.afterLayerKey(keyCode)
+            } else if (!isPress && activePressedKeys.remove(keyCode)) {
+                soundSynth.playRelease(keyCode)
+            }
+            return
+        }
+
+        val isModifier = keyCode in KeyboardLayouts.MOD_LCTRL..KeyboardLayouts.MOD_RWIN ||
+            keyCode == KeyboardLayouts.KEY_FN
+        if (isPress && !isModifier) modifierLatch.onOtherKeyDown()
+
+        // Media keys on the Touch layout's Fn layer.
+        TouchKeyboardLayouts.consumerControlFor(keyCode)?.let { control ->
+            if (isPress && !activePressedKeys.contains(keyCode)) {
+                if (isHapticsEnabled) {
+                    view.performHapticFeedback(android.view.HapticFeedbackConstants.KEYBOARD_PRESS)
+                }
+                activePressedKeys.add(keyCode)
+                soundSynth.playPress(keyCode)
+                activeConsumerKey = keyCode
+                btManager.sendConsumerControl(control)
+            } else if (!isPress && activePressedKeys.remove(keyCode)) {
+                soundSynth.playRelease(keyCode)
+                if (activeConsumerKey == keyCode) {
+                    btManager.sendConsumerControl(null)
+                    activeConsumerKey = null
+                }
+                releaseOneShotModifiers()
+            }
+            return
         }
 
         if (keyCode == KeyboardLayouts.KEY_SPACE) {
@@ -521,23 +644,25 @@ fun HomeScreen(
             }
         }
 
-        if (keyCode == KeyboardLayouts.KEY_FN) {
-            if (isPress && !isFnActive) {
+        if (isModifier) {
+            if (isPress && !activePressedKeys.contains(keyCode)) {
                 if (isHapticsEnabled) {
                     view.performHapticFeedback(android.view.HapticFeedbackConstants.KEYBOARD_PRESS)
                 }
-                isFnActive = true
                 activePressedKeys.add(keyCode)
                 soundSynth.playPress(keyCode)
-            } else if (!isPress && isFnActive) {
-                isFnActive = false
-                activePressedKeys.remove(keyCode)
-                soundSynth.playRelease(keyCode)
-                if (activeConsumerKey != null) {
-                    btManager.sendConsumerControl(null)
-                    activeConsumerKey = null
+                if (modifierLatch.onModifierDown(keyCode)) {
+                    if (keyCode == KeyboardLayouts.KEY_FN) isFnActive = true
+                    else btManager.sendKey(keyCode, true)
                 }
+            } else if (!isPress && activePressedKeys.remove(keyCode)) {
+                soundSynth.playRelease(keyCode)
+                if (modifierLatch.onModifierUp(keyCode, android.os.SystemClock.uptimeMillis())) {
+                    releaseModifierOnHost(keyCode)
+                }
+                applyPendingCharacterLayoutIfReleased()
             }
+            latchedKeys = modifierLatch.latched
             return
         }
 
@@ -562,6 +687,7 @@ fun HomeScreen(
                 btManager.sendConsumerControl(null)
                 activeConsumerKey = null
             }
+            releaseOneShotModifiers()
             return
         }
 
@@ -588,6 +714,7 @@ fun HomeScreen(
             activePressedKeys.remove(keyCode)
             soundSynth.playRelease(keyCode)
             btManager.sendKey(keyCode, false)
+            releaseOneShotModifiers()
             applyPendingCharacterLayoutIfReleased()
         }
     }
@@ -683,11 +810,14 @@ fun HomeScreen(
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
                         // 1. Sleek Frosted Glass Top Settings Bar (KBSim Web Style Toggles Toolbar)
+                        // Too wide for an upright phone, so it scrolls sideways in portrait.
+                        val toolbarScroll = rememberScrollState()
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .height(38.dp)
                                 .background(Color.Black.copy(alpha = 0.45f))
+                                .then(if (isPortrait) Modifier.horizontalScroll(toolbarScroll) else Modifier)
                                 .padding(horizontal = 8.dp, vertical = 2.dp),
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
@@ -1098,6 +1228,11 @@ fun HomeScreen(
                                 .padding(horizontal = 6.dp, vertical = 2.dp),
                             contentAlignment = Alignment.Center
                         ) {
+                            val useTouchLayout = isPortrait &&
+                                portraitKeyboardLayout == PortraitKeyboardLayout.TOUCH
+                            val touchRows = remember(useTouchLayout, touchLayer, characterLayout) {
+                                if (useTouchLayout) TouchKeyboardLayouts.getLayout(touchLayer, characterLayout) else null
+                            }
                             KeyboardView(
                                 geometry = selectedGeometry,
                                 theme = selectedKeyboardTheme,
@@ -1109,6 +1244,11 @@ fun HomeScreen(
                                 isScrollLockActive = isScrollLockActive,
                                 isFnActive = isFnActive,
                                 keySensitivity = keySensitivity,
+                                rowsOverride = touchRows,
+                                fillHeight = useTouchLayout,
+                                latchedKeys = latchedKeys,
+                                legendScale = if (useTouchLayout) 1.5f else 1f,
+                                showKeyPreview = useTouchLayout && isKeyPreviewEnabled,
                                 onKeyPressChange = { code, press -> handleLocalKeyPress(code, press) }
                             )
                             KeyboardLayoutSwitcherOverlay(

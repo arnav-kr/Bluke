@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -11,8 +12,12 @@ import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.unit.LayoutDirection
+import androidx.compose.ui.zIndex
 
 @Suppress("UnusedBoxWithConstraintsScope")
 @Composable
@@ -28,15 +33,23 @@ fun KeyboardView(
     isFnActive: Boolean = false,
     keySensitivity: Float = 6f,
     selectedStyleId: String? = null,
+    /** Rows to draw instead of the [geometry] layout, e.g. a Touch layout layer. */
+    rowsOverride: List<List<KeyLayoutInfo>>? = null,
+    /** Stretch keys vertically to use the available height (up to [maxKeyAspect]). */
+    fillHeight: Boolean = false,
+    maxKeyAspect: Float = 1.45f,
+    latchedKeys: Map<Int, LatchState> = emptyMap(),
+    legendScale: Float = 1f,
+    showKeyPreview: Boolean = false,
     onKeySelected: ((KeyLayoutInfo) -> Unit)? = null,
     onKeyPressChange: (Int, Boolean) -> Unit
 ) {
     CompositionLocalProvider(LocalLayoutDirection provides LayoutDirection.Ltr) {
         BoxWithConstraints(
             modifier = Modifier.fillMaxSize(),
-            contentAlignment = Alignment.Center
+            contentAlignment = if (fillHeight) Alignment.BottomCenter else Alignment.Center
         ) {
-            val keyboardRows = KeyboardLayouts.getLayout(geometry, characterLayout)
+            val keyboardRows = rowsOverride ?: KeyboardLayouts.getLayout(geometry, characterLayout)
             val allKeys = keyboardRows.flatten()
 
         val totalLayoutWidthInUnits = allKeys.maxOfOrNull { it.x + it.widthRatio } ?: 15.0f
@@ -51,17 +64,34 @@ fun KeyboardView(
 
         val widthBasedUnit = usableWidthDp / totalLayoutWidthInUnits
         val heightBasedUnit = usableHeightDp / totalLayoutHeightInUnits
-        val baseUnitWidth = minOf(widthBasedUnit, heightBasedUnit)
+        val baseUnitWidth: Dp
+        val baseUnitHeight: Dp
+        if (fillHeight) {
+            baseUnitWidth = widthBasedUnit
+            baseUnitHeight = minOf(heightBasedUnit, widthBasedUnit * maxKeyAspect)
+        } else {
+            baseUnitWidth = minOf(widthBasedUnit, heightBasedUnit)
+            baseUnitHeight = baseUnitWidth
+        }
+        // Keycap bevels and fonts follow the smaller side so tall keys don't look bloated.
+        val keyStyleUnit = minOf(baseUnitWidth, baseUnitHeight)
 
         val plateWidth = baseUnitWidth * totalLayoutWidthInUnits
-        val plateHeight = baseUnitWidth * totalLayoutHeightInUnits
+        val plateHeight = baseUnitHeight * totalLayoutHeightInUnits
 
-        val context = androidx.compose.ui.platform.LocalContext.current
-        val sharedPrefs = remember { context.getSharedPreferences("app_prefs", android.content.Context.MODE_PRIVATE) }
+        // The pointer loop below reads these through State so it keeps tracking fingers
+        // when the layout changes (for example switching Touch layers mid-press).
+        val currentKeys by rememberUpdatedState(allKeys)
+        val currentUnitWidth by rememberUpdatedState(baseUnitWidth)
+        val currentUnitHeight by rememberUpdatedState(baseUnitHeight)
+        val currentSensitivity by rememberUpdatedState(keySensitivity)
+        val currentOnKeySelected by rememberUpdatedState(onKeySelected)
+        val currentOnKeyPressChange by rememberUpdatedState(onKeyPressChange)
 
         // Keyboard Case plate well holding absolutely-positioned keycaps (guarantees perfect grid alignments)
         Box(
             modifier = Modifier
+                .padding(bottom = if (fillHeight) outerBoxPadding else 0.dp)
                 .width(plateWidth + (platePadding * 2))
                 .height(plateHeight + (platePadding * 2))
                 .shadow(
@@ -73,90 +103,74 @@ fun KeyboardView(
                 .background(Color(theme.plateArgb), RoundedCornerShape(10.dp))
                 .border(1.5.dp, Color.White.copy(alpha = 0.15f), RoundedCornerShape(10.dp))
                 .padding(platePadding)
-                .pointerInput(baseUnitWidth, allKeys, onKeySelected) {
+                .pointerInput(onKeySelected != null) {
                         awaitPointerEventScope {
-                            if (onKeySelected != null) {
+                            fun keyAt(x: Float, y: Float, radiusPx: Float) = findKeyAt(
+                                keys = currentKeys,
+                                x = x,
+                                y = y,
+                                unitWidthPx = currentUnitWidth.toPx(),
+                                unitHeightPx = currentUnitHeight.toPx(),
+                                touchRadiusPx = radiusPx,
+                            )
+
+                            if (currentOnKeySelected != null) {
                                 var pointerWasDown = false
                                 while (true) {
                                     val event = awaitPointerEvent()
                                     val pressedChange = event.changes.firstOrNull { it.pressed }
                                     if (pressedChange != null && !pointerWasDown) {
                                         val pos = pressedChange.position
-                                        allKeys.lastOrNull { key ->
-                                            val keyLeft = baseUnitWidth.toPx() * key.x
-                                            val keyRight = keyLeft + baseUnitWidth.toPx() * key.widthRatio
-                                            val keyTop = baseUnitWidth.toPx() * key.y
-                                            val keyBottom = keyTop + baseUnitWidth.toPx() * key.heightRatio
-                                            pos.x in keyLeft..keyRight && pos.y in keyTop..keyBottom
-                                        }?.let(onKeySelected)
+                                        keyAt(pos.x, pos.y, 0f)?.let { currentOnKeySelected?.invoke(it) }
                                     }
                                     pointerWasDown = pressedChange != null
                                     event.changes.forEach { it.consume() }
                                 }
                             }
 
-                            // Map of PointerId to List of KeyCodes currently being pressed by that pointer
-                            val currentPointers = mutableMapOf<Long, List<Int>>()
-                            
+                            // Key code currently pressed by each finger.
+                            val currentPointers = mutableMapOf<Long, Int>()
+
                             while (true) {
                                 val event = awaitPointerEvent()
-                                val eventChanges = event.changes
-                                
-                                val newPointerStates = mutableMapOf<Long, List<Int>>()
-                                
-                                eventChanges.forEach { change ->
+                                val newPointerStates = mutableMapOf<Long, Int>()
+                                val touchRadius = currentSensitivity.dp.toPx()
+
+                                event.changes.forEach { change ->
                                     if (change.pressed) {
-                                        val pos = change.position
-                                        val touchRadius = keySensitivity.dp.toPx()
-                                        
-                                        // Find all keys that intersect the touch radius
-                                        val intersectedKeys = allKeys.filter { key ->
-                                            val keyLeft = baseUnitWidth.toPx() * key.x
-                                            val keyRight = keyLeft + baseUnitWidth.toPx() * key.widthRatio
-                                            val keyTop = baseUnitWidth.toPx() * key.y
-                                            val keyBottom = keyTop + baseUnitWidth.toPx() * key.heightRatio
-                                            
-                                            // Closest point on the rectangle to the touch center
-                                            val closestX = pos.x.coerceIn(keyLeft, keyRight)
-                                            val closestY = pos.y.coerceIn(keyTop, keyBottom)
-                                            
-                                            val dx = pos.x - closestX
-                                            val dy = pos.y - closestY
-                                            
-                                            (dx * dx + dy * dy) <= (touchRadius * touchRadius)
-                                        }.map { it.keyCode }
-                                        
-                                        newPointerStates[change.id.value] = intersectedKeys
+                                        keyAt(change.position.x, change.position.y, touchRadius)?.let {
+                                            newPointerStates[change.id.value] = it.keyCode
+                                        }
                                         change.consume()
                                     }
                                 }
-                                
+
                                 // Synthesize differences to send onKeyPressChange
-                                val oldAllPressed = currentPointers.values.flatten().toSet()
-                                val newAllPressed = newPointerStates.values.flatten().toSet()
-                                
-                                val newlyPressed = newAllPressed - oldAllPressed
-                                val newlyReleased = oldAllPressed - newAllPressed
-                                
-                                newlyReleased.forEach { keyCode ->
-                                    onKeyPressChange(keyCode, false)
+                                val oldAllPressed = currentPointers.values.toSet()
+                                val newAllPressed = newPointerStates.values.toSet()
+
+                                (oldAllPressed - newAllPressed).forEach { keyCode ->
+                                    currentOnKeyPressChange(keyCode, false)
                                 }
-                                newlyPressed.forEach { keyCode ->
-                                    onKeyPressChange(keyCode, true)
+                                (newAllPressed - oldAllPressed).forEach { keyCode ->
+                                    currentOnKeyPressChange(keyCode, true)
                                 }
-                                
+
                                 currentPointers.clear()
                                 currentPointers.putAll(newPointerStates)
                             }
                         }
                     }
             ) {
-                allKeys.forEach { key ->
-                    val keyX = key.x
-                    val keyY = key.y
+                val isShiftActive = activePressedKeys.contains(KeyboardLayouts.MOD_LSHIFT) ||
+                    activePressedKeys.contains(KeyboardLayouts.MOD_RSHIFT) ||
+                    latchedKeys.containsKey(KeyboardLayouts.MOD_LSHIFT) ||
+                    latchedKeys.containsKey(KeyboardLayouts.MOD_RSHIFT)
+                val isUppercase = isCapsLockActive xor isShiftActive
 
+                allKeys.forEach { key ->
                     val keyWidth = baseUnitWidth * key.widthRatio
-                    val keyHeight = baseUnitWidth * key.heightRatio
+                    val keyHeight = baseUnitHeight * key.heightRatio
 
                     val keyStyle = theme.styleFor(key)
                     val keyColor = Color(keyStyle.backgroundArgb)
@@ -164,8 +178,6 @@ fun KeyboardView(
 
                     val isPressed = activePressedKeys.contains(key.keyCode)
 
-                    val isShiftActive = activePressedKeys.contains(0xE1) || activePressedKeys.contains(0xE5)
-                    val isUppercase = isCapsLockActive xor isShiftActive
                     val isAlphabetic = key.legend.length == 1 && key.legend[0].isLetter()
                     val baseDisplayLegend = if (isAlphabetic) {
                         if (isUppercase) key.legend.uppercase() else key.legend.lowercase()
@@ -182,9 +194,12 @@ fun KeyboardView(
                         0x47 -> isScrollLockActive
                         else -> false
                     }
+                    val latchState = latchedKeys[key.keyCode] ?: LatchState.OFF
 
-                    val finalGlowColor = if (isIndicatorActive) {
-                        Color(theme.accentStyle.backgroundArgb).copy(alpha = 0.25f)
+                    val finalGlowColor = if (isIndicatorActive || latchState != LatchState.OFF) {
+                        Color(theme.accentStyle.backgroundArgb).copy(
+                            alpha = if (latchState == LatchState.LOCKED) 0.5f else 0.25f
+                        )
                     } else {
                         null
                     }
@@ -197,18 +212,76 @@ fun KeyboardView(
                         isPressed = isPressed,
                         keyBgColor = keyColor,
                         legendColor = legendColor,
-                        legendScale = keyStyle.legendScale,
+                        legendScale = keyStyle.legendScale * legendBoost(displayLegend, key.widthRatio, legendScale),
                         isSelected = selectedStyleId == key.styleId,
-                        baseUnitWidth = baseUnitWidth,
+                        baseUnitWidth = keyStyleUnit,
+                        latchState = latchState,
                         modifier = Modifier
                             .offset(
-                                x = baseUnitWidth * keyX,
-                                y = baseUnitWidth * keyY
+                                x = baseUnitWidth * key.x,
+                                y = baseUnitHeight * key.y
                             ),
                         glowColor = finalGlowColor
                     )
+
+                    if (showKeyPreview && isPressed && key.category == KeyColorCategory.ALPHA && displayLegend.isNotBlank()) {
+                        KeyPreviewBubble(
+                            legend = displayLegend,
+                            background = keyColor,
+                            legendColor = legendColor,
+                            keyWidth = keyWidth,
+                            keyHeight = keyHeight,
+                            modifier = Modifier
+                                .zIndex(1f)
+                                .offset(
+                                    x = baseUnitWidth * key.x,
+                                    y = baseUnitHeight * key.y - keyHeight * 1.1f
+                                ),
+                        )
+                    }
                 }
             }
         }
         }
     }
+
+/** Full [boost] for short labels, fading to none for labels that already fill the key. */
+internal fun legendBoost(legend: String, widthRatio: Float, boost: Float): Float {
+    if (boost <= 1f) return boost
+    val charsPerUnit = legend.length / widthRatio.coerceAtLeast(0.5f)
+    val smallest = 0.9f
+    return when {
+        charsPerUnit <= 2.5f -> boost
+        charsPerUnit >= 4f -> smallest
+        else -> smallest + (boost - smallest) * (4f - charsPerUnit) / 1.5f
+    }
+}
+
+/** Enlarged copy of the pressed key, drawn above the finger so the letter stays visible. */
+@Composable
+private fun KeyPreviewBubble(
+    legend: String,
+    background: Color,
+    legendColor: Color,
+    keyWidth: Dp,
+    keyHeight: Dp,
+    modifier: Modifier = Modifier,
+) {
+    Box(
+        modifier = modifier
+            .width(keyWidth)
+            .height(keyHeight)
+            .shadow(6.dp, RoundedCornerShape(8.dp))
+            .background(background, RoundedCornerShape(8.dp))
+            .border(1.dp, Color.Black.copy(alpha = 0.3f), RoundedCornerShape(8.dp)),
+        contentAlignment = Alignment.Center,
+    ) {
+        Text(
+            text = legend,
+            color = legendColor,
+            fontSize = (keyHeight.value * 0.45f).coerceIn(14f, 28f).sp,
+            fontWeight = FontWeight.Bold,
+            maxLines = 1,
+        )
+    }
+}
