@@ -92,9 +92,7 @@ class OnboardingActivity : ComponentActivity() {
             arrayOf(
                 Manifest.permission.BLUETOOTH_CONNECT,
                 Manifest.permission.BLUETOOTH_ADVERTISE,
-                Manifest.permission.BLUETOOTH_SCAN,
-                Manifest.permission.ACCESS_FINE_LOCATION,
-                Manifest.permission.ACCESS_COARSE_LOCATION
+                Manifest.permission.BLUETOOTH_SCAN
             )
         } else {
             arrayOf(
@@ -110,9 +108,7 @@ class OnboardingActivity : ComponentActivity() {
             arrayOf(
                 Manifest.permission.BLUETOOTH_CONNECT,
                 Manifest.permission.BLUETOOTH_ADVERTISE,
-                Manifest.permission.BLUETOOTH_SCAN,
-                Manifest.permission.ACCESS_FINE_LOCATION,
-                Manifest.permission.ACCESS_COARSE_LOCATION
+                Manifest.permission.BLUETOOTH_SCAN
             )
         } else {
             arrayOf(
@@ -303,6 +299,8 @@ fun WelcomePage() {
 @Composable
 fun PermissionsPage(isGranted: Boolean, attempts: Int, openSettings: () -> Unit) {
     val context = LocalContext.current
+    // Location is only needed for Bluetooth on Android 11 and older.
+    val needsLocation = Build.VERSION.SDK_INT < Build.VERSION_CODES.S
     val hasLocation = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) == PackageManager.PERMISSION_GRANTED || ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_COARSE_LOCATION) == PackageManager.PERMISSION_GRANTED
     val hasBluetooth = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
         ContextCompat.checkSelfPermission(context, Manifest.permission.BLUETOOTH_CONNECT) == PackageManager.PERMISSION_GRANTED
@@ -338,7 +336,11 @@ fun PermissionsPage(isGranted: Boolean, attempts: Int, openSettings: () -> Unit)
             // Bluetooth Permission item
             Surface(
                 color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
-                shape = RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp, bottomStart = 4.dp, bottomEnd = 4.dp),
+                shape = if (needsLocation) {
+                    RoundedCornerShape(topStart = 28.dp, topEnd = 28.dp, bottomStart = 4.dp, bottomEnd = 4.dp)
+                } else {
+                    RoundedCornerShape(28.dp)
+                },
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -355,7 +357,7 @@ fun PermissionsPage(isGranted: Boolean, attempts: Int, openSettings: () -> Unit)
             }
 
             // Location Permission item
-            Surface(
+            if (needsLocation) Surface(
                 color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
                 shape = RoundedCornerShape(topStart = 4.dp, topEnd = 4.dp, bottomStart = 28.dp, bottomEnd = 28.dp),
                 modifier = Modifier.fillMaxWidth()
