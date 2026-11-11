@@ -91,10 +91,29 @@ jobs:
         run: |
           mv app/build/outputs/apk/release/app-release.apk app/build/outputs/apk/release/simply-bluke-${{ steps.get_version.outputs.version }}.apk
 
+      - name: Extract Release Notes
+        env:
+          VERSION: ${{ steps.get_version.outputs.version }}
+        run: |
+          # Take the "## [VERSION]" section of CHANGELOG.md, up to the next heading or "---".
+          awk -v v="$VERSION" '
+            index($0, "## [" v "]") == 1 { found = 1; next }
+            found && (/^## \[/ || /^---$/) { exit }
+            found { print }
+          ' CHANGELOG.md > release-notes.md
+          if ! grep -q '[^[:space:]]' release-notes.md; then
+            echo "::warning::No section for $VERSION in CHANGELOG.md, so the release links to the changelog instead."
+            echo "See [CHANGELOG.md](https://github.com/${{ github.repository }}/blob/${{ github.ref_name }}/CHANGELOG.md) for changes." > release-notes.md
+          fi
+          printf '\nSimply Bluke is an unofficial fork of [Bluke](https://github.com/arnav-kr/Bluke) by Arnav Kumar.\n' >> release-notes.md
+          cat release-notes.md
+
       - name: Create GitHub Release
         id: create_release
         uses: softprops/action-gh-release@v2
         with:
+          name: Simply Bluke ${{ steps.get_version.outputs.version }}
+          body_path: release-notes.md
           files: app/build/outputs/apk/release/simply-bluke-${{ steps.get_version.outputs.version }}.apk
           draft: false
           prerelease: false
