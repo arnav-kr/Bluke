@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -40,8 +41,12 @@ fun KeyboardTrackpadPanel(
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
-    val sensitivity = remember { sharedPrefs.getFloat("touchpad_sensitivity", 1.5f) }
-    val scrollSensitivity = remember { sharedPrefs.getFloat("touchpad_scroll_sensitivity", 1.0f) }
+    val sensitivity by rememberTouchpadSpeed(
+        sharedPrefs, TOUCHPAD_POINTER_SPEED_PREFERENCE, DEFAULT_TOUCHPAD_POINTER_SPEED,
+    )
+    val scrollSensitivity by rememberTouchpadSpeed(
+        sharedPrefs, TOUCHPAD_SCROLL_SPEED_PREFERENCE, DEFAULT_TOUCHPAD_SCROLL_SPEED,
+    )
     val vibrationEnabled = remember { sharedPrefs.getBoolean("touchpad_vibration_enabled", true) }
     val vibrate = remember(context, vibrationEnabled) {
         { milliseconds: Long ->

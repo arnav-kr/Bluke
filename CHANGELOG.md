@@ -3,6 +3,21 @@
 All notable user-facing changes to Simply Bluke, a fork of [Bluke](https://github.com/arnav-kr/Bluke) by Arnav Kumar, are documented in this file. Entries before 1.1.1 come from the original Bluke project.
 For detailed usage instructions, see the [Usage Guide](docs/USAGE.md).
 
+## [Unreleased]
+
+### Added
+- **Touchpad settings:** Settings → Controls & connection → Touchpad now has pointer speed and scroll speed sliders (0.25x to 3x), a **Gesture sensitivity** choice (Low, Medium, High) for how easily taps and scrolls are picked up, and switches for the new scrolling options below. Changes apply straight away to the Touchpad mode, the keyboard's trackpad and the Multimedia touchpad.
+- **Scroll in any direction:** A two-finger swipe that starts diagonally scrolls both ways at once. A swipe that starts straight still stays on its line, and turning firmly sideways frees it.
+- **Scroll glide:** Lift both fingers while still moving and the scroll coasts to a stop. Touch the pad to stop it. Can be turned off.
+- **Shift + wheel sideways scrolling:** An alternative for computers where sideways scrolling does nothing because they were paired before 1.1.2. It needs no new pairing.
+
+### Improved & Fixed
+- **No pointer jump after scrolling:** Lifting one finger at the end of a two-finger scroll no longer makes the pointer jump or drift.
+- **Two-finger taps don't scroll, and scrolls don't right-click:** Scrolling starts only after the fingers have moved a little, and a short scroll no longer ends in a right-click.
+- **Smoother touchpad:** The finger markers no longer redraw the whole touchpad on every movement.
+
+---
+
 ## [1.1.2] - 2026-11-11
 
 > [!IMPORTANT]

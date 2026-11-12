@@ -106,7 +106,7 @@ class SettingsActivity : ComponentActivity() {
                             items = listOf(
                                 SettingsItemData(
                                     title = "Behavior",
-                                    subtitle = "Bluetooth discovery, reconnect, touchpad scrolling, and remote controls",
+                                    subtitle = "Bluetooth discovery, reconnect, touchpad speed and gestures, and remote controls",
                                     icon = { Icon(Icons.Default.Settings, null, tint = MaterialTheme.colorScheme.primary) },
                                     onClick = { 
                                         startActivity(Intent(this@SettingsActivity, BehaviorActivity::class.java))

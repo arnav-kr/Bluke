@@ -25,4 +25,26 @@ class TouchpadGesturePolicyTest {
             TouchpadGesturePolicy.isSecondTap(elapsedSinceReleaseMillis = 120)
         )
     }
+
+    @Test
+    fun mediumSensitivityMatchesTheOriginalTapRules() {
+        val medium = TouchpadGestureSensitivity.MEDIUM
+        assertTrue(medium.tapSlopDp == TouchpadGesturePolicy.TAP_SLOP_DP)
+        assertTrue(medium.tapTimeoutMillis == TouchpadGesturePolicy.TAP_TIMEOUT_MILLIS)
+        assertTrue(TouchpadGestureSensitivity.fromPreference(null) == medium)
+        assertTrue(TouchpadGestureSensitivity.fromPreference("unknown") == medium)
+    }
+
+    @Test
+    fun higherSensitivityAcceptsSlowerAndLooserTaps() {
+        val levels = TouchpadGestureSensitivity.entries
+        levels.zipWithNext().forEach { (lower, higher) ->
+            assertTrue(higher.tapSlopDp > lower.tapSlopDp)
+            assertTrue(higher.tapTimeoutMillis > lower.tapTimeoutMillis)
+            assertTrue(higher.scrollStartSlopDp < lower.scrollStartSlopDp)
+        }
+        val high = TouchpadGestureSensitivity.HIGH
+        assertTrue(TouchpadGesturePolicy.isTap(300, 0f, 12f, high.tapTimeoutMillis))
+        assertFalse(TouchpadGesturePolicy.isTap(300, 0f, 12f, TouchpadGestureSensitivity.LOW.tapTimeoutMillis))
+    }
 }

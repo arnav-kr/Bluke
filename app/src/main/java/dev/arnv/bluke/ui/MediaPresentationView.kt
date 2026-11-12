@@ -160,12 +160,12 @@ internal fun MediaPresentationView(
         mutableStateOf(lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED))
     }
     var posture by rememberSaveable { mutableStateOf(MultimediaPosture.LANDSCAPE) }
-    var sensitivity by remember {
-        mutableFloatStateOf(sharedPrefs.getFloat("touchpad_sensitivity", 1.5f))
-    }
-    var scrollSensitivity by remember {
-        mutableFloatStateOf(sharedPrefs.getFloat("touchpad_scroll_sensitivity", 1f))
-    }
+    var sensitivity by rememberTouchpadSpeed(
+        sharedPrefs, TOUCHPAD_POINTER_SPEED_PREFERENCE, DEFAULT_TOUCHPAD_POINTER_SPEED,
+    )
+    var scrollSensitivity by rememberTouchpadSpeed(
+        sharedPrefs, TOUCHPAD_SCROLL_SPEED_PREFERENCE, DEFAULT_TOUCHPAD_SCROLL_SPEED,
+    )
     var isVibrationEnabled by remember {
         mutableStateOf(sharedPrefs.getBoolean("touchpad_vibration_enabled", true))
     }

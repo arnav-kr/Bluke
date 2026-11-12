@@ -60,11 +60,12 @@ A smooth pointer surface with multi-touch gestures and optional modifier keys.
 - **Tap-and-Drag:** Position your cursor over an item, **tap once, immediately touch down again nearby (within 180 ms), and move without lifting**. Lift your finger to drop.
   - *Tip:* Touching the screen with a 3rd finger immediately cancels an active drag.
 - **Multi-Touch Gestures:**
-  - Two-finger drag: scroll vertically or horizontally. Each swipe locks to the direction you start in, so up-and-down scrolling doesn't drift sideways.
+  - Two-finger drag: scroll in any direction. A swipe that starts straight up, down or sideways stays on that line so it doesn't drift; a swipe that starts diagonally, or turns firmly sideways, scrolls both ways at once. Lift both fingers while still moving and the scroll glides to a stop; touch the pad to stop it.
   - Two-finger tap: right-click.
   - Three-finger tap: middle-click.
 - **Modifier Key Strips:** Add a strip of modifier keys (Ctrl, Alt, Shift, Meta) to the **Left**, **Right**, or turn it **Off** from the toolbar. This gives you easy access to shortcuts without covering the touchpad surface.
 - **Pointer & Scroll Speeds:** Adjust pointer and scrolling sensitivity from fine control (0.25x, 0.5x) to high speed (1.5x, 2.0x) from the toolbar.
+- **Touchpad settings:** *Settings → Controls & connection → Touchpad* has sliders for pointer and scroll speed (0.25x to 3x), **Gesture sensitivity** (how easily taps and scrolls are picked up), **Scroll glide**, and **Sideways scrolling**. They apply to every touchpad in the app.
 - **Natural Scrolling:** On by default, so content follows your fingers like on a phone. Turn it off in *Settings → Controls & connection → Natural scrolling* to scroll like a mouse wheel. On a Mac with its own *Natural scrolling* turned on, scrolling may feel reversed; turn this setting off to fix that. It applies to every touchpad in the app.
 
 ---
@@ -180,6 +181,14 @@ A dedicated remote for couch media browsing and presentations.
 #### Tap-and-drag drops items or does not engage
 * **Cause:** Tap-and-drag requires two quick taps: **tap once, immediately land a second finger nearby (within 180 ms), and drag without lifting**. It is not a single long-press.
 * **Fix:** Practice the two-touch motion. Make sure a second or third finger is not resting on the screen, as extra touch points cancel the drag.
+
+#### Scrolling sideways does nothing
+* **Cause:** The computer remembers how Simply Bluke described itself when it was first paired. A pairing made before version 1.1.2 has no sideways scrolling in it.
+* **Fix:** Forget the computer on your phone, remove Simply Bluke on the computer, and pair again. If you can't pair again, set *Settings → Controls & connection → Sideways scrolling* to **Shift + wheel**. This holds Shift while you scroll sideways, which most apps treat as horizontal scrolling. It scrolls one direction at a time and a few apps ignore it.
+
+#### Scrolling moves in coarse steps
+* **Cause:** Simply Bluke connects as a standard Bluetooth mouse, which scrolls in wheel notches rather than pixel by pixel like a built-in laptop trackpad.
+* **Fix:** Lower the scroll speed for finer control. On a Mac, an app such as Mos or LinearMouse smooths wheel scrolling.
 
 ---
 

@@ -1651,6 +1651,11 @@ class BluetoothKeyboardManager(private val context: Context) {
         }
     }
 
+    /** True while a modifier key (0xE0..0xE7) is held, by any part of the app. */
+    fun isModifierHeld(keyCode: Int): Boolean = synchronized(activeKeys) {
+        keyCode in 0xE0..0xE7 && activeModifiers and (1 shl (keyCode - 0xE0)) != 0
+    }
+
     @SuppressLint("MissingPermission")
     /** [wheel] is positive to scroll up; [pan] is positive to scroll right. */
     fun sendMouseReport(buttons: Byte, x: Byte, y: Byte, wheel: Byte, pan: Byte = 0) {

@@ -4,6 +4,7 @@ import android.annotation.SuppressLint
 import android.content.Context
 import android.content.SharedPreferences
 import android.content.Intent
+import android.os.SystemClock
 import android.os.VibrationEffect
 import android.os.Vibrator
 import androidx.compose.animation.*
@@ -35,6 +36,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.*
+import androidx.compose.ui.input.pointer.util.VelocityTracker
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontFamily
@@ -48,6 +50,8 @@ import androidx.core.content.edit
 import dev.arnv.bluke.R
 import dev.arnv.bluke.QuickCycleActivity
 import dev.arnv.bluke.data.KeyboardThemeRepository
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 
@@ -77,12 +81,12 @@ fun TouchpadView(
     var isVibrationEnabled by remember {
         mutableStateOf(sharedPrefs.getBoolean("touchpad_vibration_enabled", true))
     }
-    var sensitivity by remember {
-        mutableFloatStateOf(sharedPrefs.getFloat("touchpad_sensitivity", 1.5f))
-    }
-    var scrollSensitivity by remember {
-        mutableFloatStateOf(sharedPrefs.getFloat("touchpad_scroll_sensitivity", 1.0f))
-    }
+    var sensitivity by rememberTouchpadSpeed(
+        sharedPrefs, TOUCHPAD_POINTER_SPEED_PREFERENCE, DEFAULT_TOUCHPAD_POINTER_SPEED,
+    )
+    var scrollSensitivity by rememberTouchpadSpeed(
+        sharedPrefs, TOUCHPAD_SCROLL_SPEED_PREFERENCE, DEFAULT_TOUCHPAD_SCROLL_SPEED,
+    )
     var modifierPosition by remember {
         mutableStateOf(
             TouchpadModifierPosition.fromPreference(
@@ -735,6 +739,18 @@ fun NumpadLedGrid(onKeyPress: (Int, Boolean) -> Unit) {
     }
 }
 
+/** Sideways travel that turns a straight two-finger scroll into a free one. */
+private const val SCROLL_UNLOCK_DISTANCE_DP = 28f
+/** Slowest and fastest two-finger lift-off that still glides. */
+private const val MIN_FLING_DP_PER_SECOND = 300f
+private const val MAX_FLING_DP_PER_SECOND = 4000f
+/** Both fingers must be up this soon after the first one for the scroll to glide. */
+private const val FLING_LIFT_WINDOW_MILLIS = 120L
+private const val INERTIA_FRAME_MILLIS = 12L
+/** Rate limit that keeps reports from flooding the Bluetooth link. */
+private const val MIN_REPORT_INTERVAL_MILLIS = 10L
+private const val KEY_LEFT_SHIFT = 0xE1
+
 @Composable
 fun TouchGestureLayer(
     btManager: BluetoothKeyboardManager,
@@ -744,31 +760,13 @@ fun TouchGestureLayer(
     triggerVibration: (Long) -> Unit,
     showNumpadLed: Boolean,
 ) {
-    // Tracking points and states for reliable swipe gesture translation
-    var lastActivePointerId by remember { mutableStateOf<PointerId?>(null) }
-    var accumulatedX by remember { mutableFloatStateOf(0f) }
-    var accumulatedY by remember { mutableFloatStateOf(0f) }
-    var lastPointX by remember { mutableFloatStateOf(0f) }
-    var lastPointY by remember { mutableFloatStateOf(0f) }
-
     // Read here so every trackpad (Touchpad mode, keyboard trackpad, Multimedia) follows it.
     val context = LocalContext.current
     val preferences = remember(context) {
         context.getSharedPreferences("app_prefs", android.content.Context.MODE_PRIVATE)
     }
-    val naturalScroll by rememberNaturalScroll(preferences)
+    val settings = rememberTouchpadSettings(preferences)
 
-    // Multi-touch tracking
-    var isTwoFingerActive by remember { mutableStateOf(false) }
-    var lastTwoFingerX by remember { mutableFloatStateOf(0f) }
-    var lastTwoFingerY by remember { mutableFloatStateOf(0f) }
-    var accumulatedScrollX by remember { mutableFloatStateOf(0f) }
-    var accumulatedScrollY by remember { mutableFloatStateOf(0f) }
-    val scrollAxisLock = remember { TwoFingerScrollAxisLock() }
-
-    // Tap tracking
-    val pointerDownInfo = remember { mutableMapOf<PointerId, Pair<Long, Offset>>() }
-    var maxPointersInTap by remember { mutableIntStateOf(0) }
     val gestureScope = rememberCoroutineScope()
     val currentVibration by rememberUpdatedState(triggerVibration)
     val tapDrag = remember(btManager, sensitivity, scrollSensitivity, buttonMode, showNumpadLed) {
@@ -776,41 +774,108 @@ fun TouchGestureLayer(
             sendButton = { btManager.sendMouseReport(it, 0, 0, 0) },
             vibrate = { currentVibration(it) })
     }
+    val scrollOutput = remember(btManager) {
+        // Shift + wheel mode borrows Shift only when the user isn't already holding it.
+        var ownsShift = false
+        TouchpadScrollOutput(
+            sendScroll = { wheel, pan -> btManager.sendMouseReport(0, 0, 0, wheel.toByte(), pan.toByte()) },
+            setShift = { held ->
+                if (held) {
+                    ownsShift = !btManager.isModifierHeld(KEY_LEFT_SHIFT)
+                    if (ownsShift) btManager.sendKey(KEY_LEFT_SHIFT, true)
+                } else if (ownsShift) {
+                    ownsShift = false
+                    btManager.sendKey(KEY_LEFT_SHIFT, false)
+                }
+            },
+        )
+    }
 
-    // Rate limiting to prevent Bluetooth L2CAP packet flooding
-    var lastReportTime by remember { mutableLongStateOf(0L) }
+    // Finger markers. Held as state objects so that only the markers redraw on each
+    // touch event, not this whole layer.
+    val isTouchActive = remember { mutableStateOf(false) }
+    val activeTouchPoints = remember { mutableStateOf<List<Offset>>(emptyList()) }
+    val touchCount = remember { mutableIntStateOf(0) }
 
-    // Visual pointer (touchpad thumb) tracking states
-    var isTouchActive by remember { mutableStateOf(false) }
-    var activeTouchPoints by remember { mutableStateOf<List<Offset>>(emptyList()) }
-    var touchCount by remember { mutableIntStateOf(0) }
-    var activeMouseButton by remember { mutableStateOf<Byte>(0) }
-
-    DisposableEffect(btManager, tapDrag) {
+    DisposableEffect(btManager, tapDrag, scrollOutput) {
         onDispose {
             tapDrag.cancel()
+            scrollOutput.end()
             // Pointer cancellation (mode change, rotation, backgrounding) must never strand a host button down.
             btManager.sendMouseReport(0, 0, 0, 0)
         }
     }
 
-    val density = androidx.compose.ui.platform.LocalDensity.current
-    val thumbActiveAlpha by animateFloatAsState(
-        targetValue = if (isTouchActive && !showNumpadLed) 0.85f else 0f,
-        animationSpec = spring(stiffness = Spring.StiffnessMedium),
-        label = "thumbAlpha"
-    )
-    val thumbScale by animateFloatAsState(
-        targetValue = if (touchCount >= 2) 0.78f else (if (isTouchActive) 0.88f else 1.0f),
-        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessHigh),
-        label = "thumbScale"
-    )
-
     Box(
         modifier = Modifier
             .fillMaxSize()
             .pointerInput(sensitivity, scrollSensitivity, buttonMode, showNumpadLed) {
-                val tapSlopPx = TouchpadGesturePolicy.TAP_SLOP_DP.dp.toPx()
+                val unlockDistancePx = SCROLL_UNLOCK_DISTANCE_DP.dp.toPx()
+                val minFlingPx = MIN_FLING_DP_PER_SECOND.dp.toPx()
+                val maxFlingPx = MAX_FLING_DP_PER_SECOND.dp.toPx()
+                val axisAssist = TwoFingerScrollAxisAssist()
+                val momentum = ScrollMomentum()
+                val velocityTracker = VelocityTracker()
+                val pointerDownInfo = mutableMapOf<PointerId, Pair<Long, Offset>>()
+
+                // One-finger pointer movement
+                var lastActivePointerId: PointerId? = null
+                var accumulatedX = 0f
+                var accumulatedY = 0f
+                var lastPointX = 0f
+                var lastPointY = 0f
+                var lastReportTime = 0L
+                var activeMouseButton: Byte = 0
+                var maxPointersInTap = 0
+                // After a multi-finger gesture, the finger left behind must move past the
+                // tap slop before it steers the pointer again.
+                var holdPointer = false
+                var holdX = 0f
+                var holdY = 0f
+
+                // Two-finger scrolling
+                var twoFingerActive = false
+                var firstScrollPointer: PointerId? = null
+                var secondScrollPointer: PointerId? = null
+                var startCentroidX = 0f
+                var startCentroidY = 0f
+                var lastCentroidX = 0f
+                var lastCentroidY = 0f
+                var gestureScrolled = false
+                var flingVx = 0f
+                var flingVy = 0f
+                var flingTime = 0L
+                var inertiaJob: Job? = null
+
+                fun stopScrolling() {
+                    inertiaJob?.cancel()
+                    inertiaJob = null
+                    momentum.stop()
+                    flingTime = 0L
+                    scrollOutput.end()
+                }
+
+                fun startInertia() {
+                    inertiaJob = gestureScope.launch {
+                        var last = SystemClock.uptimeMillis()
+                        while (momentum.isActive) {
+                            delay(INERTIA_FRAME_MILLIS)
+                            val now = SystemClock.uptimeMillis()
+                            momentum.advance((now - last).toFloat())
+                            last = now
+                            val current = settings.value
+                            scrollOutput.add(
+                                wheelSteps = scrollWheelDelta(momentum.stepY, scrollSensitivity, current.naturalScroll),
+                                panSteps = scrollPanDelta(momentum.stepX, scrollSensitivity, current.naturalScroll),
+                            )
+                            scrollOutput.flush(current.horizontalScroll)
+                        }
+                        // Only reached when the glide runs out; stopScrolling() cleans up a cancelled one.
+                        scrollOutput.end()
+                        inertiaJob = null
+                    }
+                }
+
                 try {
                 awaitPointerEventScope {
                     while (true) {
@@ -818,17 +883,22 @@ fun TouchGestureLayer(
                         val changes = event.changes
 
                         if (showNumpadLed) {
-                            isTouchActive = false
-                            touchCount = 0
+                            isTouchActive.value = false
+                            touchCount.intValue = 0
                             continue
                         }
+
+                        val current = settings.value
+                        val gesture = current.gestureSensitivity
+                        val tapSlopPx = gesture.tapSlopDp.dp.toPx()
+                        val now = SystemClock.uptimeMillis()
 
                         // Determine active pointers
                         val pressedChanges = changes.filter { it.pressed }
                         val downCount = pressedChanges.size
-                        touchCount = downCount
-                        isTouchActive = downCount > 0
-                        activeTouchPoints = pressedChanges.map { it.position }
+                        touchCount.intValue = downCount
+                        isTouchActive.value = downCount > 0
+                        activeTouchPoints.value = pressedChanges.map { it.position }
                         if (downCount > maxPointersInTap) {
                             maxPointersInTap = downCount
                         }
@@ -836,8 +906,10 @@ fun TouchGestureLayer(
                         // 1. Process Down Events for Taps
                         changes.forEach { change ->
                             if (change.pressed && !change.previousPressed) {
+                                // A finger landing stops a gliding scroll, like on a laptop trackpad.
+                                stopScrolling()
                                 pointerDownInfo[change.id] = change.uptimeMillis to change.position
-                                
+
                                 if (pointerDownInfo.size == 1) {
                                     tapDrag.down(change.uptimeMillis, change.position.x, change.position.y)
                                 } else {
@@ -846,24 +918,43 @@ fun TouchGestureLayer(
                             }
                         }
 
+                        // 2. A two-finger scroll ends as soon as the finger count changes.
+                        if (twoFingerActive && downCount != 2) {
+                            twoFingerActive = false
+                            scrollOutput.flush(current.horizontalScroll)
+                            scrollOutput.end()
+                            if (current.scrollInertia && downCount < 2 && axisAssist.isScrolling) {
+                                val velocity = velocityTracker.calculateVelocity()
+                                val (vx, vy) = axisAssist.project(velocity.x, velocity.y)
+                                flingVx = vx
+                                flingVy = vy
+                                flingTime = now
+                            }
+                        }
+
                         if (downCount == 1) {
-                            isTwoFingerActive = false
-                            accumulatedScrollX = 0f
-                            accumulatedScrollY = 0f
-                            val pointer = changes.first { it.pressed }
-                            
+                            val pointer = pressedChanges[0]
+
                             if (lastActivePointerId != pointer.id || !pointer.previousPressed) {
                                 lastActivePointerId = pointer.id
                                 accumulatedX = 0f
                                 accumulatedY = 0f
                                 lastPointX = pointer.position.x
                                 lastPointY = pointer.position.y
+                                if (!pointer.previousPressed) holdPointer = false
+                                holdX = pointer.position.x
+                                holdY = pointer.position.y
+                            } else if (holdPointer) {
+                                val hx = pointer.position.x - holdX
+                                val hy = pointer.position.y - holdY
+                                if (hx * hx + hy * hy > tapSlopPx * tapSlopPx) holdPointer = false
+                                lastPointX = pointer.position.x
+                                lastPointY = pointer.position.y
                             } else {
                                 accumulatedX += (pointer.position.x - lastPointX) * sensitivity
                                 accumulatedY += (pointer.position.y - lastPointY) * sensitivity
 
-                                val now = System.currentTimeMillis()
-                                if (now - lastReportTime >= 10L) {
+                                if (now - lastReportTime >= MIN_REPORT_INTERVAL_MILLIS) {
                                     val sendX = accumulatedX.roundToInt().coerceIn(-127, 127)
                                     val sendY = accumulatedY.roundToInt().coerceIn(-127, 127)
 
@@ -910,43 +1001,57 @@ fun TouchGestureLayer(
                             }
 
                         } else if (downCount == 2) {
-                            val pressedList = changes.filter { it.pressed }
-                            if (pressedList.size == 2) {
-                                val currentXAverage = (pressedList[0].position.x + pressedList[1].position.x) / 2f
-                                val currentYAverage = (pressedList[0].position.y + pressedList[1].position.y) / 2f
-                                if (!isTwoFingerActive) {
-                                    isTwoFingerActive = true
-                                    accumulatedScrollX = 0f
-                                    accumulatedScrollY = 0f
-                                    scrollAxisLock.reset()
-                                    lastTwoFingerX = currentXAverage
-                                    lastTwoFingerY = currentYAverage
-                                } else {
-                                    val (scrollDx, scrollDy) = scrollAxisLock.filter(
-                                        dx = currentXAverage - lastTwoFingerX,
-                                        dy = currentYAverage - lastTwoFingerY,
-                                    )
-                                    accumulatedScrollX += scrollPanDelta(scrollDx, scrollSensitivity, naturalScroll)
-                                    accumulatedScrollY += scrollWheelDelta(scrollDy, scrollSensitivity, naturalScroll)
-                                    val now = System.currentTimeMillis()
-                                    if (now - lastReportTime >= 10L) {
-                                        val sendScroll = accumulatedScrollY.roundToInt().coerceIn(-127, 127)
-                                        val sendPan = accumulatedScrollX.roundToInt().coerceIn(-127, 127)
-                                        if (sendScroll != 0 || sendPan != 0) {
-                                            btManager.sendMouseReport(0, 0, 0, sendScroll.toByte(), sendPan.toByte())
-                                            accumulatedScrollY -= sendScroll
-                                            accumulatedScrollX -= sendPan
-                                            lastReportTime = now
-                                        }
-                                    }
-                                    lastTwoFingerX = currentXAverage
-                                    lastTwoFingerY = currentYAverage
+                            val first = pressedChanges[0]
+                            val second = pressedChanges[1]
+                            val centroidX = (first.position.x + second.position.x) / 2f
+                            val centroidY = (first.position.y + second.position.y) / 2f
+                            lastActivePointerId = null
+                            holdPointer = true
+
+                            if (!twoFingerActive || first.id != firstScrollPointer || second.id != secondScrollPointer) {
+                                twoFingerActive = true
+                                firstScrollPointer = first.id
+                                secondScrollPointer = second.id
+                                accumulatedX = 0f
+                                accumulatedY = 0f
+                                scrollOutput.end()
+                                axisAssist.reset(
+                                    startSlopPx = gesture.scrollStartSlopDp.dp.toPx(),
+                                    unlockDistancePx = unlockDistancePx,
+                                )
+                                velocityTracker.resetTracking()
+                                startCentroidX = centroidX
+                                startCentroidY = centroidY
+                            } else {
+                                val (scrollDx, scrollDy) = axisAssist.filter(
+                                    dx = centroidX - lastCentroidX,
+                                    dy = centroidY - lastCentroidY,
+                                    // Shift + wheel can only scroll one way at a time.
+                                    allowDiagonal = current.horizontalScroll == TouchpadHorizontalScroll.STANDARD,
+                                )
+                                if (!gestureScrolled) {
+                                    val travelX = centroidX - startCentroidX
+                                    val travelY = centroidY - startCentroidY
+                                    // Past the tap slop this is a scroll, so lifting must not right-click.
+                                    gestureScrolled = travelX * travelX + travelY * travelY > tapSlopPx * tapSlopPx
+                                }
+                                scrollOutput.add(
+                                    wheelSteps = scrollWheelDelta(scrollDy, scrollSensitivity, current.naturalScroll),
+                                    panSteps = scrollPanDelta(scrollDx, scrollSensitivity, current.naturalScroll),
+                                )
+                                if (now - lastReportTime >= MIN_REPORT_INTERVAL_MILLIS &&
+                                    scrollOutput.flush(current.horizontalScroll)
+                                ) {
+                                    lastReportTime = now
                                 }
                             }
+                            velocityTracker.addPosition(first.uptimeMillis, Offset(centroidX, centroidY))
+                            lastCentroidX = centroidX
+                            lastCentroidY = centroidY
                         } else {
-                            isTwoFingerActive = false
                             lastActivePointerId = null
-                            
+                            if (downCount >= 3) holdPointer = true
+
                             val sendX = accumulatedX.roundToInt().coerceIn(-127, 127)
                             val sendY = accumulatedY.roundToInt().coerceIn(-127, 127)
                             if (sendX != 0 || sendY != 0) {
@@ -956,15 +1061,8 @@ fun TouchGestureLayer(
                                     btManager.sendMouseReport(activeMouseButton, sendX.toByte(), sendY.toByte(), 0)
                                 }
                             }
-                            val sendScroll = accumulatedScrollY.roundToInt().coerceIn(-127, 127)
-                            val sendPan = accumulatedScrollX.roundToInt().coerceIn(-127, 127)
-                            if (sendScroll != 0 || sendPan != 0) {
-                                btManager.sendMouseReport(0, 0, 0, sendScroll.toByte(), sendPan.toByte())
-                            }
                             accumulatedX = 0f
                             accumulatedY = 0f
-                            accumulatedScrollX = 0f
-                            accumulatedScrollY = 0f
                         }
 
                         // 3. Process Up Events for Taps (Clicks)
@@ -986,17 +1084,18 @@ fun TouchGestureLayer(
                                         val dx = change.position.x - downInfo.second.x
                                         val dy = change.position.y - downInfo.second.y
                                         val distanceSq = dx * dx + dy * dy
-                                        
-                                        if (TouchpadGesturePolicy.isTap(
+
+                                        if (!gestureScrolled && TouchpadGesturePolicy.isTap(
                                             durationMillis = duration,
                                             distanceSquaredPx = distanceSq,
                                             tapSlopPx = tapSlopPx,
+                                            tapTimeoutMillis = gesture.tapTimeoutMillis,
                                         )) {
                                             if (downCount == 0) {
                                                 triggerVibration(20)
-                                                
+
                                                 val clickButton = if (maxPointersInTap >= 3) 4 else if (maxPointersInTap == 2) 2 else 1
-                                                
+
                                                 if (clickButton == 1) {
                                                     // Match main: defer the click so tap-then-drag holds a
                                                     // single press instead of starting with a double-click.
@@ -1015,26 +1114,29 @@ fun TouchGestureLayer(
 
                         if (downCount == 0) {
                             maxPointersInTap = 0
+                            holdPointer = false
+                            gestureScrolled = false
+                            // Both fingers left together while still moving: let the scroll glide.
+                            if (flingTime != 0L) {
+                                val liftedTogether = now - flingTime <= FLING_LIFT_WINDOW_MILLIS
+                                flingTime = 0L
+                                if (liftedTogether && momentum.start(flingVx, flingVy, minFlingPx, maxFlingPx)) {
+                                    startInertia()
+                                }
+                            }
                         }
                     }
                 }
                 } finally {
                     // A cancelled pointer handler may remain composed (for example after
-                    // changing sensitivity). Never leave a delayed click or held button behind.
+                    // changing sensitivity). Never leave a delayed click, a held button,
+                    // a held Shift or a gliding scroll behind.
+                    stopScrolling()
                     tapDrag.cancel()
                     btManager.sendMouseReport(0, 0, 0, 0)
-                    activeMouseButton = 0
-                    pointerDownInfo.clear()
-                    lastActivePointerId = null
-                    maxPointersInTap = 0
-                    accumulatedX = 0f
-                    accumulatedY = 0f
-                    accumulatedScrollX = 0f
-                    accumulatedScrollY = 0f
-                    isTwoFingerActive = false
-                    isTouchActive = false
-                    touchCount = 0
-                    activeTouchPoints = emptyList()
+                    isTouchActive.value = false
+                    touchCount.intValue = 0
+                    activeTouchPoints.value = emptyList()
                 }
             }
     ) {
@@ -1112,48 +1214,75 @@ fun TouchGestureLayer(
             }
         }
 
-        // Draw touchpad thumbs for all active finger coordinates (Themed slate/gradient style)
-        val thumbSize = 28.dp
-        if (thumbActiveAlpha > 0.01f && !showNumpadLed) {
-            activeTouchPoints.forEach { point ->
+        TouchThumbs(
+            points = activeTouchPoints,
+            isTouchActive = isTouchActive,
+            touchCount = touchCount,
+            hidden = showNumpadLed,
+        )
+    }
+}
+
+/** Finger markers for every active touch (themed slate/gradient style). */
+@Composable
+private fun TouchThumbs(
+    points: State<List<Offset>>,
+    isTouchActive: State<Boolean>,
+    touchCount: State<Int>,
+    hidden: Boolean,
+) {
+    val density = androidx.compose.ui.platform.LocalDensity.current
+    val thumbActiveAlpha by animateFloatAsState(
+        targetValue = if (isTouchActive.value && !hidden) 0.85f else 0f,
+        animationSpec = spring(stiffness = Spring.StiffnessMedium),
+        label = "thumbAlpha"
+    )
+    val thumbScale by animateFloatAsState(
+        targetValue = if (touchCount.value >= 2) 0.78f else (if (isTouchActive.value) 0.88f else 1.0f),
+        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy, stiffness = Spring.StiffnessHigh),
+        label = "thumbScale"
+    )
+    val thumbSize = 28.dp
+    val halfThumbPx = with(density) { (thumbSize / 2).toPx() }
+    if (thumbActiveAlpha > 0.01f && !hidden) {
+        points.value.forEach { point ->
+            Box(
+                modifier = Modifier
+                    .offset {
+                        IntOffset(
+                            x = (point.x - halfThumbPx).roundToInt(),
+                            y = (point.y - halfThumbPx).roundToInt()
+                        )
+                    }
+                    .size(thumbSize)
+                    .graphicsLayer {
+                        scaleX = thumbScale
+                        scaleY = thumbScale
+                        alpha = thumbActiveAlpha
+                    }
+                    .shadow(
+                        elevation = 4.dp,
+                        shape = CircleShape,
+                        clip = false,
+                        ambientColor = Color.Black,
+                        spotColor = Color.Black.copy(alpha = 0.5f)
+                    )
+                    .background(
+                        brush = Brush.verticalGradient(
+                            colors = listOf(Color(0xFF38383B), Color(0xFF232325))
+                        ),
+                        shape = CircleShape
+                    )
+                    .border(1.dp, Color.White.copy(alpha = 0.12f), CircleShape),
+                contentAlignment = Alignment.Center
+            ) {
+                // Subtle inner core
                 Box(
                     modifier = Modifier
-                        .offset {
-                            IntOffset(
-                                x = (point.x - with(density) { (thumbSize / 2).toPx() }).roundToInt(),
-                                y = (point.y - with(density) { (thumbSize / 2).toPx() }).roundToInt()
-                            )
-                        }
-                        .size(thumbSize)
-                        .graphicsLayer {
-                            scaleX = thumbScale
-                            scaleY = thumbScale
-                            alpha = thumbActiveAlpha
-                        }
-                        .shadow(
-                            elevation = 4.dp,
-                            shape = CircleShape,
-                            clip = false,
-                            ambientColor = Color.Black,
-                            spotColor = Color.Black.copy(alpha = 0.5f)
-                        )
-                        .background(
-                            brush = Brush.verticalGradient(
-                                colors = listOf(Color(0xFF38383B), Color(0xFF232325))
-                            ),
-                            shape = CircleShape
-                        )
-                        .border(1.dp, Color.White.copy(alpha = 0.12f), CircleShape),
-                    contentAlignment = Alignment.Center
-                ) {
-                    // Subtle inner core
-                    Box(
-                        modifier = Modifier
-                            .size(6.dp)
-                            .clip(CircleShape)
-                            .background(Color.White.copy(alpha = 0.25f))
-                    )
-                }
+                        .size(6.dp)
+                        .clip(CircleShape)
+                        .background(Color.White.copy(alpha = 0.25f))
+                )
             }
         }
     }
