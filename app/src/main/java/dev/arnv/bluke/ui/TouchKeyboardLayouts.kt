@@ -86,6 +86,42 @@ object TouchKeyboardLayouts {
             TouchLayer.SYMBOLS -> SYMBOLS_KLE
             TouchLayer.FN -> FN_KLE
         }
+        return build(kle, layer, characterLayout)
+    }
+
+    // Hardware keyboard strip: only the keys phone keyboards lack. The layer key and
+    // modifiers keep their spot on both pages, like the Touch layout.
+    private const val STRIP_MODIFIERS = """{w:1.5},"@FN",{w:1.5},"Ctrl",{w:1.5},"Win",{w:1.5},"Alt""""
+
+    private val STRIP_BASE_KLE = """
+        [["Esc","Tab","Home","End","PgUp","PgDn","Delete","Ins","↑","PrtSc"],
+        [$STRIP_MODIFIERS,{x:1},"←","↓","→"]]
+    """.trimIndent()
+
+    private val STRIP_FN_KLE = """
+        [["F1","F2","F3","F4","F5","F6","F7","F8","F9","F10"],
+        [$STRIP_MODIFIERS,"F11","F12","Vol −","Vol +"]]
+    """.trimIndent()
+
+    /**
+     * Two-row strip shown in hardware keyboard mode. [layer] FN shows F-keys and
+     * volume; any other layer shows navigation keys.
+     */
+    fun hardwareStripLayout(layer: TouchLayer): List<List<KeyLayoutInfo>> {
+        val fnPage = layer == TouchLayer.FN
+        return build(if (fnPage) STRIP_FN_KLE else STRIP_BASE_KLE, layer, KeyboardCharacterLayout.US_QWERTY)
+            .map { row ->
+                row.map { key ->
+                    if (key.keyCode == KEY_LAYER_FN) key.copy(legend = if (fnPage) "Nav" else "F1–12") else key
+                }
+            }
+    }
+
+    private fun build(
+        kle: String,
+        layer: TouchLayer,
+        characterLayout: KeyboardCharacterLayout,
+    ): List<List<KeyLayoutInfo>> {
         val occurrences = mutableMapOf<Int, Int>()
         return KeyboardLayouts.parseKle(kle)
             .withCharacterLayout(characterLayout)

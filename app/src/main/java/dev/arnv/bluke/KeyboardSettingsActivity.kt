@@ -45,8 +45,15 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.unit.dp
 import androidx.core.content.edit
+import dev.arnv.bluke.ui.HARDWARE_KEYBOARD_MODE_PREFERENCE
+import dev.arnv.bluke.ui.HARDWARE_KEYBOARD_TRACKPAD_PREFERENCE
+import dev.arnv.bluke.ui.HardwareKeyboardMode
+import dev.arnv.bluke.ui.hardwareKeyboardMode
+import dev.arnv.bluke.ui.hasPhysicalKeyboard
+import dev.arnv.bluke.ui.isHardwareKeyboardTrackpadEnabled
 import dev.arnv.bluke.ui.KEYBOARD_CHARACTER_LAYOUT_PREFERENCE
 import dev.arnv.bluke.ui.KeyboardCharacterLayout
 import dev.arnv.bluke.ui.KEYBOARD_HOST_OS_PREFERENCE
@@ -105,6 +112,9 @@ class KeyboardSettingsActivity : ComponentActivity() {
                 var trackpadSide by remember {
                     mutableStateOf(TrackpadSide.fromPreference(preferences.getString(KEYBOARD_TRACKPAD_SIDE_PREFERENCE, null)))
                 }
+                var hardwareMode by remember { mutableStateOf(preferences.hardwareKeyboardMode()) }
+                var hardwareTrackpad by remember { mutableStateOf(preferences.isHardwareKeyboardTrackpadEnabled()) }
+                val physicalKeyboardFound = LocalConfiguration.current.hasPhysicalKeyboard()
                 var dialog by remember { mutableStateOf<KeyboardDialog?>(null) }
                 val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
 
@@ -261,6 +271,38 @@ class KeyboardSettingsActivity : ComponentActivity() {
                             ) else emptyList(),
                         )
                         SettingsCardGroup(
+                            title = "Hardware keyboard",
+                            items = listOf(
+                                SettingsItemData(
+                                    title = "Hardware keyboard mode",
+                                    subtitle = hardwareMode.displayName + " · " + when {
+                                        hardwareMode.isActive(physicalKeyboardFound) ->
+                                            "type on the phone's keyboard; only special keys stay on screen"
+                                        physicalKeyboardFound -> "phone keyboard found, mode is off"
+                                        else -> "no phone keyboard found"
+                                    },
+                                    icon = { Icon(Icons.Default.Keyboard, null, tint = MaterialTheme.colorScheme.primary) },
+                                    onClick = { dialog = KeyboardDialog.HARDWARE_MODE },
+                                ),
+                            ) + if (hardwareMode != HardwareKeyboardMode.OFF) listOf(
+                                SettingsItemData(
+                                    title = "Trackpad in hardware keyboard mode",
+                                    subtitle = "Fill the screen above the special keys with a trackpad",
+                                    icon = { Icon(Icons.Default.ViewQuilt, null, tint = MaterialTheme.colorScheme.primary) },
+                                    action = {
+                                        Switch(checked = hardwareTrackpad, onCheckedChange = {
+                                            hardwareTrackpad = it
+                                            preferences.edit { putBoolean(HARDWARE_KEYBOARD_TRACKPAD_PREFERENCE, it) }
+                                        })
+                                    },
+                                    onClick = {
+                                        hardwareTrackpad = !hardwareTrackpad
+                                        preferences.edit { putBoolean(HARDWARE_KEYBOARD_TRACKPAD_PREFERENCE, hardwareTrackpad) }
+                                    },
+                                ),
+                            ) else emptyList(),
+                        )
+                        SettingsCardGroup(
                             title = "Rotation",
                             items = listOf(
                                 SettingsItemData(
@@ -411,6 +453,21 @@ class KeyboardSettingsActivity : ComponentActivity() {
                         },
                         onDismiss = { dialog = null },
                     )
+                    KeyboardDialog.HARDWARE_MODE -> ChoiceDialog(
+                        title = "Hardware keyboard mode",
+                        explanation = "For phones with a keyboard, like the Clicks Communicator or Unihertz Titan, " +
+                            "or an attached keyboard. Letter keys are hidden and the phone's keys are sent to the host. " +
+                            "The phone's Alt key types the symbols printed on its keys; use the on-screen Alt for host shortcuts. " +
+                            "Automatic turns on when Android reports a keyboard.",
+                        choices = HardwareKeyboardMode.entries.map { it.displayName },
+                        selectedIndex = HardwareKeyboardMode.entries.indexOf(hardwareMode),
+                        onSelect = { index ->
+                            hardwareMode = HardwareKeyboardMode.entries[index]
+                            preferences.edit { putString(HARDWARE_KEYBOARD_MODE_PREFERENCE, hardwareMode.preferenceValue) }
+                            dialog = null
+                        },
+                        onDismiss = { dialog = null },
+                    )
                     null -> Unit
                 }
             }
@@ -418,7 +475,7 @@ class KeyboardSettingsActivity : ComponentActivity() {
     }
 }
 
-private enum class KeyboardDialog { TYPING_LAYOUT, CAPS_LOCK, ORIENTATION, PORTRAIT_LAYOUT, STYLE, TRACKPAD_SIDE, VIBRATION_STRENGTH, HOST_OS }
+private enum class KeyboardDialog { TYPING_LAYOUT, CAPS_LOCK, ORIENTATION, PORTRAIT_LAYOUT, STYLE, TRACKPAD_SIDE, VIBRATION_STRENGTH, HOST_OS, HARDWARE_MODE }
 
 @Composable
 internal fun ChoiceDialog(

@@ -51,6 +51,10 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import android.content.Context
+import android.content.ContextWrapper
+import android.view.InputDevice
+import android.view.KeyEvent
+import dev.arnv.bluke.HardwareKeyHost
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -142,6 +146,11 @@ fun HomeScreen(
         mutableStateOf(TrackpadSide.fromPreference(sharedPrefs.getString(KEYBOARD_TRACKPAD_SIDE_PREFERENCE, null)))
     }
     val isPortrait = LocalConfiguration.current.orientation == Configuration.ORIENTATION_PORTRAIT
+    var hardwareKeyboardMode by remember { mutableStateOf(sharedPrefs.hardwareKeyboardMode()) }
+    var isHardwareTrackpadEnabled by remember { mutableStateOf(sharedPrefs.isHardwareKeyboardTrackpadEnabled()) }
+    val hasPhysicalKeyboard = LocalConfiguration.current.hasPhysicalKeyboard()
+    // Letter keys are hidden and the phone's own keyboard types instead.
+    val isHardwareKeyboardMode = hardwareKeyboardMode.isActive(hasPhysicalKeyboard)
     var launchMode by rememberSaveable {
         val enabledModes = sharedPrefs.enabledInputModes().map(InputMode::id)
         val savedMode = sharedPrefs.getInt("launch_mode", InputMode.KEYBOARD.id)
@@ -172,6 +181,8 @@ fun HomeScreen(
                 keyboardHostOs = sharedPrefs.keyboardHostOs()
                 keyboardStyle = KeyboardStyle.fromPreference(sharedPrefs.getString(KEYBOARD_STYLE_PREFERENCE, null))
                 isKeyboardTrackpadEnabled = sharedPrefs.getBoolean(KEYBOARD_TRACKPAD_PREFERENCE, false)
+                hardwareKeyboardMode = sharedPrefs.hardwareKeyboardMode()
+                isHardwareTrackpadEnabled = sharedPrefs.isHardwareKeyboardTrackpadEnabled()
                 trackpadSide = TrackpadSide.fromPreference(sharedPrefs.getString(KEYBOARD_TRACKPAD_SIDE_PREFERENCE, null))
                 characterLayout = KeyboardCharacterLayout.fromPreference(
                     sharedPrefs.getString(KEYBOARD_CHARACTER_LAYOUT_PREFERENCE, null)
@@ -221,6 +232,16 @@ fun HomeScreen(
         ModifierLatch(enabled = sharedPrefs.getBoolean(STICKY_MODIFIERS_PREFERENCE, true))
     }
     var latchedKeys by remember { mutableStateOf<Map<Int, LatchState>>(emptyMap()) }
+    // The physical Alt/Sym key picks the phone keyboard's printed symbols. It latches
+    // like the on-screen modifiers but is never sent to the host itself.
+    val phoneLayerLatch = remember {
+        ModifierLatch(enabled = sharedPrefs.getBoolean(STICKY_MODIFIERS_PREFERENCE, true))
+    }
+    var phoneLayerState by remember { mutableStateOf(LatchState.OFF) }
+    // Physical keys currently down, keyed by Android key code, with what they sent.
+    val hardwarePresses = remember { mutableMapOf<Int, HardwareKeyPress>() }
+    // Physical keys that were down during a reset; their release is swallowed.
+    val staleHardwareKeys = remember { mutableSetOf<Int>() }
     var touchLayer by remember { mutableStateOf(TouchLayer.BASE) }
     var layoutCycleSpaceActive by remember { mutableStateOf(false) }
     var pendingCharacterLayout by remember { mutableStateOf<KeyboardCharacterLayout?>(null) }
@@ -516,6 +537,10 @@ fun HomeScreen(
     fun resetKeyboardInput() {
         modifierLatch.clear()
         latchedKeys = emptyMap()
+        phoneLayerLatch.clear()
+        phoneLayerState = LatchState.OFF
+        staleHardwareKeys += hardwarePresses.keys
+        hardwarePresses.clear()
         activePressedKeys.clear()
         fnConsumedKeys.clear()
         isFnActive = false
@@ -527,9 +552,9 @@ fun HomeScreen(
 
     // Rotating, leaving the keyboard or leaving the app lets go of every key,
     // so nothing stays stuck down on the host.
-    var lastKeyboardShape by remember { mutableStateOf(isKeyboardActive to isPortrait) }
-    LaunchedEffect(isKeyboardActive, isPortrait) {
-        val shape = isKeyboardActive to isPortrait
+    var lastKeyboardShape by remember { mutableStateOf(Triple(isKeyboardActive, isPortrait, isHardwareKeyboardMode)) }
+    LaunchedEffect(isKeyboardActive, isPortrait, isHardwareKeyboardMode) {
+        val shape = Triple(isKeyboardActive, isPortrait, isHardwareKeyboardMode)
         if (shape != lastKeyboardShape) {
             lastKeyboardShape = shape
             resetKeyboardInput()
@@ -539,8 +564,10 @@ fun HomeScreen(
         val observer = LifecycleEventObserver { _, event ->
             when (event) {
                 Lifecycle.Event.ON_PAUSE -> resetKeyboardInput()
-                Lifecycle.Event.ON_RESUME ->
+                Lifecycle.Event.ON_RESUME -> {
                     modifierLatch.enabled = sharedPrefs.getBoolean(STICKY_MODIFIERS_PREFERENCE, true)
+                    phoneLayerLatch.enabled = modifierLatch.enabled
+                }
                 else -> Unit
             }
         }
@@ -549,7 +576,12 @@ fun HomeScreen(
     }
 
     // Process local screen-press inputs
-    fun handleLocalKeyPress(keyCode: Int, isPress: Boolean) {
+    /** [fromHardware] presses come from a physical keyboard: no vibration or layout cycling. */
+    fun handleLocalKeyPress(keyCode: Int, isPress: Boolean, fromHardware: Boolean = false) {
+        // A physical keyboard has its own feel, so its presses don't vibrate.
+        fun vibrateForKey() {
+            if (!fromHardware) vibrateKeyPress()
+        }
         fun applyPendingCharacterLayoutIfReleased() {
             val shiftStillPressed = activePressedKeys.any {
                 it == KeyboardLayouts.MOD_LSHIFT || it == KeyboardLayouts.MOD_RSHIFT
@@ -569,7 +601,7 @@ fun HomeScreen(
         if (keyCode in TouchKeyboardLayouts.LAYER_KEYS) {
             if (isPress && !activePressedKeys.contains(keyCode)) {
                 activePressedKeys.add(keyCode)
-                vibrateKeyPress()
+                vibrateForKey()
                 touchLayer = touchLayer.afterLayerKey(keyCode)
             } else if (!isPress) {
                 activePressedKeys.remove(keyCode)
@@ -585,7 +617,7 @@ fun HomeScreen(
         TouchKeyboardLayouts.consumerControlFor(keyCode)?.let { control ->
             if (isPress && !activePressedKeys.contains(keyCode)) {
                 activePressedKeys.add(keyCode)
-                vibrateKeyPress()
+                vibrateForKey()
                 activeConsumerKey = keyCode
                 btManager.sendConsumerControl(control)
             } else if (!isPress && activePressedKeys.remove(keyCode)) {
@@ -598,14 +630,14 @@ fun HomeScreen(
             return
         }
 
-        if (keyCode == KeyboardLayouts.KEY_SPACE) {
+        if (keyCode == KeyboardLayouts.KEY_SPACE && !fromHardware) {
             val isShiftPressed = activePressedKeys.any {
                 it == KeyboardLayouts.MOD_LSHIFT || it == KeyboardLayouts.MOD_RSHIFT
             }
             if (isPress && isShiftPressed && !layoutCycleSpaceActive) {
                 layoutCycleSpaceActive = true
                 activePressedKeys.add(keyCode)
-                vibrateKeyPress()
+                vibrateForKey()
                 pendingCharacterLayout = (pendingCharacterLayout ?: characterLayout).next()
                 showLayoutSwitcher = true
                 layoutSwitcherRevision++
@@ -622,7 +654,7 @@ fun HomeScreen(
         if (isModifier) {
             if (isPress && !activePressedKeys.contains(keyCode)) {
                 activePressedKeys.add(keyCode)
-                vibrateKeyPress()
+                vibrateForKey()
                 if (modifierLatch.onModifierDown(keyCode)) {
                     if (keyCode == KeyboardLayouts.KEY_FN) isFnActive = true
                     else btManager.sendKey(keyCode, true)
@@ -641,7 +673,7 @@ fun HomeScreen(
         if (fnControl != null) {
             if (fnConsumedKeys.add(keyCode)) {
                 activePressedKeys.add(keyCode)
-                vibrateKeyPress()
+                vibrateForKey()
                 activeConsumerKey = keyCode
                 btManager.sendConsumerControl(fnControl)
             }
@@ -661,7 +693,7 @@ fun HomeScreen(
         if (isPress) {
             if (!activePressedKeys.contains(keyCode)) {
                 activePressedKeys.add(keyCode)
-                vibrateKeyPress()
+                vibrateForKey()
                 btManager.sendKey(keyCode, true)
 
                 // Only toggle status indicators locally if we are disconnected OR in device-controlled mode.
@@ -683,6 +715,119 @@ fun HomeScreen(
     }
 
 
+
+
+    fun activeHostModifiers(): Set<Int> =
+        (KeyboardLayouts.MOD_LCTRL..KeyboardLayouts.MOD_RWIN).filterTo(mutableSetOf(), modifierLatch::isActive)
+
+    fun updatePhoneLayerState() {
+        val layerKey = HardwareKeyMap.PHONE_LAYER_KEY
+        phoneLayerState = when {
+            phoneLayerLatch.state(layerKey) == LatchState.LOCKED -> LatchState.LOCKED
+            phoneLayerLatch.isActive(layerKey) -> LatchState.ONE_SHOT
+            else -> LatchState.OFF
+        }
+    }
+
+    fun pressHardwareKey(press: HardwareKeyPress) {
+        if (press.throughKeyboard) {
+            press.addedModifiers.forEach { btManager.sendKey(it, true) }
+            handleLocalKeyPress(press.usage, true, fromHardware = true)
+        } else {
+            modifierLatch.onOtherKeyDown()
+            press.suppressedModifiers.forEach { btManager.sendKey(it, false) }
+            press.addedModifiers.forEach { btManager.sendKey(it, true) }
+            btManager.sendKey(press.usage, true)
+        }
+        if (!press.isModifier) phoneLayerLatch.onOtherKeyDown()
+    }
+
+    fun releaseHardwareKey(press: HardwareKeyPress) {
+        if (press.throughKeyboard) {
+            handleLocalKeyPress(press.usage, false, fromHardware = true)
+            press.addedModifiers.forEach { btManager.sendKey(it, false) }
+        } else {
+            btManager.sendKey(press.usage, false)
+            press.addedModifiers.forEach { btManager.sendKey(it, false) }
+            releaseOneShotModifiers()
+            // Put back a Shift that is still held or latched.
+            press.suppressedModifiers.filter(modifierLatch::isActive).forEach { btManager.sendKey(it, true) }
+        }
+        if (!press.isModifier) {
+            phoneLayerLatch.onOtherKeyUp()
+            updatePhoneLayerState()
+        }
+    }
+
+    /** Sends a physical key press to the host. Returns false to leave the key to Android. */
+    fun handleHardwareKey(event: KeyEvent): Boolean {
+        // Injected keys may carry no source; gamepads, remotes and mice are left alone.
+        if (event.source != InputDevice.SOURCE_UNKNOWN && !event.isFromSource(InputDevice.SOURCE_KEYBOARD)) {
+            return false
+        }
+        val keyCode = event.keyCode
+        val isDown = when (event.action) {
+            KeyEvent.ACTION_DOWN -> true
+            KeyEvent.ACTION_UP -> false
+            else -> return false
+        }
+
+        if (keyCode in staleHardwareKeys) {
+            if (!isDown) staleHardwareKeys.remove(keyCode)
+            return true
+        }
+
+        if (HardwareKeyMap.isPhoneLayerKey(keyCode)) {
+            val layerKey = HardwareKeyMap.PHONE_LAYER_KEY
+            if (isDown) {
+                if (event.repeatCount == 0) phoneLayerLatch.onModifierDown(layerKey)
+            } else {
+                phoneLayerLatch.onModifierUp(layerKey, event.eventTime)
+            }
+            updatePhoneLayerState()
+            return true
+        }
+
+        if (!isDown) {
+            val press = hardwarePresses.remove(keyCode) ?: return false
+            releaseHardwareKey(press)
+            return true
+        }
+        // The host repeats held keys itself.
+        if (event.repeatCount > 0 || keyCode in hardwarePresses) return keyCode in hardwarePresses
+
+        val hostModifiers = activeHostModifiers()
+        val shiftMeta = if (HOST_SHIFT_MODIFIERS.any { it in hostModifiers }) {
+            KeyEvent.META_SHIFT_ON or KeyEvent.META_SHIFT_LEFT_ON
+        } else {
+            0
+        }
+        val layerMeta = if (keyCode == KeyEvent.KEYCODE_SYM || event.isSymPressed) {
+            KeyEvent.META_SYM_ON
+        } else {
+            KeyEvent.META_ALT_ON or KeyEvent.META_ALT_LEFT_ON
+        }
+        val charMap = event.keyCharacterMap
+        val press = HardwareKeyMap.plan(
+            androidKeyCode = keyCode,
+            phoneLayerActive = phoneLayerLatch.isActive(HardwareKeyMap.PHONE_LAYER_KEY),
+            layerChar = charMap.get(keyCode, layerMeta or shiftMeta),
+            baseChar = charMap.get(keyCode, shiftMeta),
+            typedChar = event.unicodeChar,
+            activeHostModifiers = hostModifiers,
+        ) ?: return false
+        hardwarePresses[keyCode] = press
+        pressHardwareKey(press)
+        return true
+    }
+
+    val hardwareKeyHost = remember(context) { context.findHardwareKeyHost() }
+    val takesHardwareKeys = isKeyboardActive && launchMode == InputMode.KEYBOARD.id && isHardwareKeyboardMode
+    val currentHardwareKeyHandler by rememberUpdatedState(::handleHardwareKey)
+    DisposableEffect(hardwareKeyHost, takesHardwareKeys) {
+        if (takesHardwareKeys) hardwareKeyHost?.setHardwareKeyHandler { currentHardwareKeyHandler(it) }
+        onDispose { hardwareKeyHost?.setHardwareKeyHandler(null) }
+    }
 
     AnimatedContent(
         targetState = isKeyboardActive,
@@ -889,7 +1034,7 @@ fun HomeScreen(
                                 ReconnectHostButton(btManager)
 
                                 // Move the trackpad to the other side (landscape only)
-                                if (isKeyboardTrackpadEnabled && !isPortrait) {
+                                if (isKeyboardTrackpadEnabled && !isPortrait && !isHardwareKeyboardMode) {
                                     Row(
                                         modifier = Modifier
                                             .height(28.dp)
@@ -1047,53 +1192,90 @@ fun HomeScreen(
                                             )
                                         )
                                     }
+
+                                    // Phone keyboard Alt layer (hardware keyboard mode only)
+                                    if (isHardwareKeyboardMode) {
+                                        val altOn = phoneLayerState != LatchState.OFF
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(4.dp),
+                                            modifier = Modifier
+                                                .padding(horizontal = 4.dp, vertical = 2.dp)
+                                                .testTag("phone_alt_indicator")
+                                        ) {
+                                            Box(
+                                                modifier = Modifier
+                                                    .size(5.dp)
+                                                    .clip(CircleShape)
+                                                    .background(
+                                                        when (phoneLayerState) {
+                                                            LatchState.LOCKED -> Color(0xFF39FF14)
+                                                            LatchState.ONE_SHOT -> Color(0xFF39FF14).copy(alpha = 0.5f)
+                                                            LatchState.OFF -> Color.White.copy(alpha = 0.15f)
+                                                        }
+                                                    )
+                                            )
+                                            Text(
+                                                text = "ALT",
+                                                color = if (altOn) Color.White else Color.White.copy(alpha = 0.4f),
+                                                fontSize = 8.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                fontFamily = FontFamily.SansSerif,
+                                                style = androidx.compose.ui.text.TextStyle(
+                                                    platformStyle = androidx.compose.ui.text.PlatformTextStyle(includeFontPadding = false)
+                                                )
+                                            )
+                                        }
+                                    }
                                 }
 
-                                // 2. Layout Selector Pill
-                                Row(
-                                    modifier = Modifier
-                                        .height(28.dp)
-                                        .clip(RoundedCornerShape(6.dp))
-                                        .background(Color.White.copy(alpha = 0.15f))
-                                        .combinedClickable(
-                                            onClickLabel = "Next keyboard layout",
-                                            onLongClickLabel = "Configure keyboard layout cycle",
-                                            onClick = {
-                                                val savedSet = sharedPrefs.getStringSet(CYCLE_KEYBOARD_GEOMETRIES_PREFERENCE, null)
-                                                val enabledLayouts = if (savedSet == null) {
-                                                    KeyboardGeometry.entries
-                                                } else {
-                                                    KeyboardGeometry.entries.filter { savedSet.contains(it.name) }
-                                                }.ifEmpty { listOf(selectedGeometry) }
-                                                val currentIndexInEnabled = enabledLayouts.indexOf(selectedGeometry)
-                                                val nextIndex = if (currentIndexInEnabled < 0) 0 else (currentIndexInEnabled + 1) % enabledLayouts.size
-                                                selectedGeometry = enabledLayouts[nextIndex]
-                                                sharedPrefs.edit { putString(KEYBOARD_GEOMETRY_PREFERENCE, selectedGeometry.name) }
-                                                vibrateKeyPress()
-                                            },
-                                            onLongClick = {
-                                                context.startActivity(Intent(context, KeyboardLayoutsActivity::class.java))
-                                            },
+                                // 2. Layout Selector Pill (the hardware keyboard strip has a fixed layout)
+                                if (!isHardwareKeyboardMode) {
+                                    Row(
+                                        modifier = Modifier
+                                            .height(28.dp)
+                                            .clip(RoundedCornerShape(6.dp))
+                                            .background(Color.White.copy(alpha = 0.15f))
+                                            .combinedClickable(
+                                                onClickLabel = "Next keyboard layout",
+                                                onLongClickLabel = "Configure keyboard layout cycle",
+                                                onClick = {
+                                                    val savedSet = sharedPrefs.getStringSet(CYCLE_KEYBOARD_GEOMETRIES_PREFERENCE, null)
+                                                    val enabledLayouts = if (savedSet == null) {
+                                                        KeyboardGeometry.entries
+                                                    } else {
+                                                        KeyboardGeometry.entries.filter { savedSet.contains(it.name) }
+                                                    }.ifEmpty { listOf(selectedGeometry) }
+                                                    val currentIndexInEnabled = enabledLayouts.indexOf(selectedGeometry)
+                                                    val nextIndex = if (currentIndexInEnabled < 0) 0 else (currentIndexInEnabled + 1) % enabledLayouts.size
+                                                    selectedGeometry = enabledLayouts[nextIndex]
+                                                    sharedPrefs.edit { putString(KEYBOARD_GEOMETRY_PREFERENCE, selectedGeometry.name) }
+                                                    vibrateKeyPress()
+                                                },
+                                                onLongClick = {
+                                                    context.startActivity(Intent(context, KeyboardLayoutsActivity::class.java))
+                                                },
+                                            )
+                                            .padding(horizontal = 8.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Icon(
+                                            imageVector = Icons.Default.Keyboard,
+                                            contentDescription = "Layout",
+                                            tint = Color.White.copy(alpha = 0.9f),
+                                            modifier = Modifier.size(10.dp)
                                         )
-                                        .padding(horizontal = 8.dp),
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Icon(
-                                        imageVector = Icons.Default.Keyboard,
-                                        contentDescription = "Layout",
-                                        tint = Color.White.copy(alpha = 0.9f),
-                                        modifier = Modifier.size(10.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(4.dp))
-                                    Text(
-                                        text = selectedGeometry.displayName,
-                                        color = Color.White,
-                                        fontSize = 9.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis,
-                                        modifier = Modifier.widthIn(max = 90.dp),
-                                    )
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text(
+                                            text = selectedGeometry.displayName,
+                                            color = Color.White,
+                                            fontSize = 9.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis,
+                                            modifier = Modifier.widthIn(max = 90.dp),
+                                        )
+                                    }
                                 }
 
                                 // 3. PC / Mac modifier keys
@@ -1234,18 +1416,31 @@ fun HomeScreen(
 
                         // 2. Keyboard, optionally with a trackpad above it (portrait) or beside it (landscape)
                         val isMinimal = keyboardStyle == KeyboardStyle.MINIMAL
-                        val showTrackpad = isKeyboardTrackpadEnabled
+                        // Hardware keyboard mode shows only a strip of keys the phone's keyboard lacks.
+                        val useHardwareStrip = isHardwareKeyboardMode
+                        val showTrackpad = if (useHardwareStrip) isHardwareTrackpadEnabled else isKeyboardTrackpadEnabled
                         // A full-size layout is too cramped next to a trackpad in landscape,
                         // so the Touch layout is used there too.
-                        val useTouchLayout = (isPortrait && portraitKeyboardLayout == PortraitKeyboardLayout.TOUCH) ||
-                            (showTrackpad && !isPortrait)
-                        val keyboardRows = remember(useTouchLayout, touchLayer, characterLayout, selectedGeometry, keyboardHostOs) {
-                            val rows = if (useTouchLayout) TouchKeyboardLayouts.getLayout(touchLayer, characterLayout)
-                            else KeyboardLayouts.getLayout(selectedGeometry, characterLayout)
+                        val useTouchLayout = !useHardwareStrip && (
+                            (isPortrait && portraitKeyboardLayout == PortraitKeyboardLayout.TOUCH) ||
+                                (showTrackpad && !isPortrait)
+                            )
+                        val keyboardRows = remember(useHardwareStrip, useTouchLayout, touchLayer, characterLayout, selectedGeometry, keyboardHostOs) {
+                            val rows = when {
+                                useHardwareStrip -> TouchKeyboardLayouts.hardwareStripLayout(touchLayer)
+                                useTouchLayout -> TouchKeyboardLayouts.getLayout(touchLayer, characterLayout)
+                                else -> KeyboardLayouts.getLayout(selectedGeometry, characterLayout)
+                            }
                             rows.withHostOs(keyboardHostOs)
                         }
                         // Keys are a bit shorter with the trackpad above, leaving it more room.
-                        val keyAspect = if (showTrackpad && isPortrait) 1.25f else 1.45f
+                        // The strip's keys are short and wide in landscape so it stays a strip.
+                        val keyAspect = when {
+                            useHardwareStrip -> if (isPortrait) 1.1f else 0.55f
+                            showTrackpad && isPortrait -> 1.25f
+                            else -> 1.45f
+                        }
+                        val fillKeyboardHeight = useTouchLayout || useHardwareStrip
 
                         @Composable
                         fun KeyboardPanel(modifier: Modifier) {
@@ -1262,10 +1457,14 @@ fun HomeScreen(
                                     isFnActive = isFnActive,
                                     keySensitivity = keySensitivity,
                                     rowsOverride = keyboardRows,
-                                    fillHeight = useTouchLayout,
+                                    fillHeight = fillKeyboardHeight,
                                     maxKeyAspect = keyAspect,
                                     latchedKeys = latchedKeys,
-                                    legendScale = if (useTouchLayout) 1.5f else 1f,
+                                    legendScale = when {
+                                        useTouchLayout -> 1.5f
+                                        useHardwareStrip -> 1.2f
+                                        else -> 1f
+                                    },
                                     showKeyPreview = useTouchLayout && isKeyPreviewEnabled,
                                     style = keyboardStyle,
                                     onKeyPressChange = { code, press -> handleLocalKeyPress(code, press) }
@@ -1280,11 +1479,12 @@ fun HomeScreen(
 
                         KeyboardTrackpadSplit(
                             showTrackpad = showTrackpad,
-                            isPortrait = isPortrait,
+                            // The strip always sits below the trackpad, even in landscape.
+                            isPortrait = isPortrait || useHardwareStrip,
                             trackpadSide = trackpadSide,
                             style = keyboardStyle,
                             keyboardRows = keyboardRows,
-                            keyAspect = if (useTouchLayout) keyAspect else 1f,
+                            keyAspect = if (fillKeyboardHeight) keyAspect else 1f,
                             modifier = Modifier
                                 .weight(1f)
                                 .fillMaxWidth()
@@ -1563,4 +1763,10 @@ private fun TroubleshootingNudgeCard(
             }
         }
     }
+}
+
+private tailrec fun Context.findHardwareKeyHost(): HardwareKeyHost? = when (this) {
+    is HardwareKeyHost -> this
+    is ContextWrapper -> if (baseContext === this) null else baseContext.findHardwareKeyHost()
+    else -> null
 }

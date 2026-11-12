@@ -23,9 +23,16 @@ interface RemoteVolumeKeyHost {
     fun setRemoteVolumeKeyHandler(handler: ((keyCode: Int, isPressed: Boolean) -> Unit)?)
 }
 
-class MainActivity : ComponentActivity(), RemoteVolumeKeyHost {
+/** Lets the keyboard screen take presses from a physical keyboard before Android does. */
+interface HardwareKeyHost {
+    /** [handler] returns true when it used the event. */
+    fun setHardwareKeyHandler(handler: ((KeyEvent) -> Boolean)?)
+}
+
+class MainActivity : ComponentActivity(), RemoteVolumeKeyHost, HardwareKeyHost {
     private lateinit var btManager: BluetoothKeyboardManager
     private var remoteVolumeKeyHandler: ((keyCode: Int, isPressed: Boolean) -> Unit)? = null
+    private var hardwareKeyHandler: ((KeyEvent) -> Boolean)? = null
 
     private val permissionLauncher = registerForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
@@ -141,6 +148,15 @@ class MainActivity : ComponentActivity(), RemoteVolumeKeyHost {
         }
     }
 
+    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        if (hardwareKeyHandler?.invoke(event) == true) return true
+        return super.dispatchKeyEvent(event)
+    }
+
+    override fun setHardwareKeyHandler(handler: ((KeyEvent) -> Boolean)?) {
+        hardwareKeyHandler = handler
+    }
+
     override fun onKeyDown(keyCode: Int, event: KeyEvent): Boolean {
         val handler = remoteVolumeKeyHandler
         val isVolumeKey = keyCode == KeyEvent.KEYCODE_VOLUME_UP ||
@@ -173,6 +189,7 @@ class MainActivity : ComponentActivity(), RemoteVolumeKeyHost {
 
     override fun onDestroy() {
         remoteVolumeKeyHandler = null
+        hardwareKeyHandler = null
         super.onDestroy()
     }
 }

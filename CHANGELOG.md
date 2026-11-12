@@ -3,6 +3,11 @@
 All notable user-facing changes to Simply Bluke, a fork of [Bluke](https://github.com/arnav-kr/Bluke) by Arnav Kumar, are documented in this file. Entries before 1.1.1 come from the original Bluke project.
 For detailed usage instructions, see the [Usage Guide](docs/USAGE.md).
 
+## [Unreleased]
+
+### Added
+- **Hardware keyboard mode:** On phones with a keyboard, like the Clicks Communicator or Unihertz Titan 2 Elite, or with a keyboard attached, the phone's keys type on the computer and the on-screen letters are hidden. A small strip keeps Esc, Tab, Ctrl, Win/Cmd, Alt/Opt, arrows, navigation keys and an F1–F12 page, and a trackpad fills the rest of the screen. The phone's Alt key types the symbols printed on its keys. Turns on automatically when a keyboard is found; change it in Settings → Keyboard → Hardware keyboard.
+
 ## [1.1.3] - 2026-11-12
 
 ### Added

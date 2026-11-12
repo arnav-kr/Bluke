@@ -51,6 +51,9 @@ An authentic mechanical typing surface featuring key press vibration and customi
 - **In-Place Fn Shortcuts:** Holding the **Fn** key transforms F1–F12 keys into media and presentation controls right on the keycaps.
 - **Mac Modifier Keys:** Tap the **PC / Mac** button in the toolbar to switch. Mac swaps Alt and Win so **Cmd** sits next to the space bar and **Opt** outside it, like a Mac keyboard. Hold the button to open Keyboard settings, where the same choice is under *Modifier keys*.
 - **Key Vibration:** The phone vibrates on each key press. Turn it on or off from the vibration button in the toolbar, and pick Light, Medium or Strong in *Settings → Keyboard → Vibration*.
+- **Hardware Keyboard Mode:** On phones with a built-in keyboard (such as the Clicks Communicator or Unihertz Titan), or with a keyboard attached, the on-screen letter keys are hidden and you type on the phone's keys instead. A two-row strip keeps the keys phone keyboards lack: Esc, Tab, Ctrl, Win/Cmd, Alt/Opt, arrows, Home/End/PgUp/PgDn, Delete, plus an **F1–12** page with F-keys and volume. A trackpad fills the rest of the screen (can be turned off).
+  - The phone's own **Alt** (or **Sym**) key types the numbers and symbols printed on its keys, for example Alt+W types "1". Tap it once for the next key, or twice to lock it; the **ALT** light in the toolbar shows its state. Use the on-screen **Alt** for computer shortcuts like Alt+Tab.
+  - Set it under *Settings → Keyboard → Hardware keyboard*: **Automatic** (default) turns it on when Android reports a keyboard, or choose **Always on** / **Off**.
 
 ---
 
