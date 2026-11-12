@@ -3,7 +3,7 @@
 All notable user-facing changes to Simply Bluke, a fork of [Bluke](https://github.com/arnav-kr/Bluke) by Arnav Kumar, are documented in this file. Entries before 1.1.1 come from the original Bluke project.
 For detailed usage instructions, see the [Usage Guide](docs/USAGE.md).
 
-## [Unreleased]
+## [1.1.3] - 2026-11-12
 
 ### Added
 - **Touchpad settings:** Settings → Controls & connection → Touchpad now has pointer speed and scroll speed sliders (0.25x to 3x), a **Gesture sensitivity** choice (Low, Medium, High) for how easily taps and scrolls are picked up, and switches for the new scrolling options below. Changes apply straight away to the Touchpad mode, the keyboard's trackpad and the Multimedia touchpad.

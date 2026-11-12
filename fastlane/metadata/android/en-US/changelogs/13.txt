@@ -1,0 +1,5 @@
+• Two-finger scrolling in any direction, including diagonally
+• Scroll glide: scrolling coasts to a stop after a flick
+• Touchpad settings: pointer speed, scroll speed and gesture sensitivity
+• Shift + wheel option if sideways scrolling does nothing on your computer
+• No pointer jump after scrolling, and two-finger taps no longer scroll
