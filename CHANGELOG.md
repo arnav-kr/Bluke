@@ -3,6 +3,19 @@
 All notable user-facing changes to Simply Bluke, a fork of [Bluke](https://github.com/arnav-kr/Bluke) by Arnav Kumar, are documented in this file. Entries before 1.1.1 come from the original Bluke project.
 For detailed usage instructions, see the [Usage Guide](docs/USAGE.md).
 
+## [1.1.8] - 2026-11-15
+
+### Added
+- **Trackpad button in the keyboard toolbar:** Turn the keyboard's trackpad on or off straight from the top bar, without opening Settings.
+- **Laptop layout for tablets and foldables:** On wide screens (600dp and up, like a tablet or an unfolded foldable), Settings → Keyboard → **Laptop layout** keeps your full keyboard layout with the trackpad on, in portrait and landscape. The trackpad spans the screen below the keyboard like a laptop, or above it; the toolbar button switches between the two.
+- **Resizable keyboard:** Drag the handle just above the keyboard to set how much of the screen it takes (15–90% of the screen height). With the trackpad above it, the trackpad gets the rest. Portrait and landscape each remember their own height; double-tap the handle to go back to the automatic height.
+- **Settings button in every top bar:** A gear at the right end of the Keyboard, Touchpad, Gamepad and Multimedia top bars opens that mode's settings (Keyboard settings, Controller settings, or the main settings for Touchpad and Multimedia).
+
+### Improved & Fixed
+- **One trackpad setting:** Settings → Keyboard now has a single "Trackpad with keyboard" switch for both the on-screen keyboard and hardware keyboard mode, instead of one for each. Until you change it, the trackpad shows in hardware keyboard mode and stays hidden otherwise.
+- **Layout button explains itself:** When the Touch keyboard is in use (portrait with the Touch layout, or landscape with the trackpad on), the layout button is greyed out, since switching layouts would change nothing. Tapping it shows a short message saying why and how to get the layouts back.
+- **New trackpad look:** Every trackpad (Touchpad mode, the one next to the keyboard and the media remote) is now OLED black with viewfinder-style corner brackets, edge ticks and a small centre reticle, drawn in your Material theme colour. The brackets brighten while you touch, and the touch point shows as a ring in the same colour.
+
 ## [1.1.6] - 2026-11-13
 
 ### Added

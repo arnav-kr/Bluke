@@ -15,6 +15,8 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Keyboard
+import androidx.compose.material.icons.filled.Laptop
+import androidx.compose.material.icons.filled.SwapVert
 import androidx.compose.material.icons.filled.LaptopMac
 import androidx.compose.material.icons.filled.LaptopWindows
 import androidx.compose.material.icons.filled.Palette
@@ -49,11 +51,15 @@ import androidx.compose.ui.platform.LocalConfiguration
 import androidx.compose.ui.unit.dp
 import androidx.core.content.edit
 import dev.arnv.bluke.ui.HARDWARE_KEYBOARD_MODE_PREFERENCE
-import dev.arnv.bluke.ui.HARDWARE_KEYBOARD_TRACKPAD_PREFERENCE
 import dev.arnv.bluke.ui.HardwareKeyboardMode
 import dev.arnv.bluke.ui.hardwareKeyboardMode
 import dev.arnv.bluke.ui.hasPhysicalKeyboard
-import dev.arnv.bluke.ui.isHardwareKeyboardTrackpadEnabled
+import dev.arnv.bluke.ui.keyboardTrackpadChoice
+import dev.arnv.bluke.ui.KEYBOARD_LAPTOP_LAYOUT_PREFERENCE
+import dev.arnv.bluke.ui.KEYBOARD_LAPTOP_TRACKPAD_PREFERENCE
+import dev.arnv.bluke.ui.LaptopTrackpadPosition
+import dev.arnv.bluke.ui.isWideEnoughForLaptopLayout
+import dev.arnv.bluke.ui.setKeyboardTrackpadEnabled
 import dev.arnv.bluke.ui.KEYBOARD_CHARACTER_LAYOUT_PREFERENCE
 import dev.arnv.bluke.ui.KeyboardCharacterLayout
 import dev.arnv.bluke.ui.KEYBOARD_HOST_OS_PREFERENCE
@@ -69,7 +75,6 @@ import dev.arnv.bluke.ui.isKeyVibrationEnabled
 import dev.arnv.bluke.ui.keyVibrationStrength
 import dev.arnv.bluke.ui.KeyboardOrientation
 import dev.arnv.bluke.ui.KEYBOARD_STYLE_PREFERENCE
-import dev.arnv.bluke.ui.KEYBOARD_TRACKPAD_PREFERENCE
 import dev.arnv.bluke.ui.KEYBOARD_TRACKPAD_SIDE_PREFERENCE
 import dev.arnv.bluke.ui.KeyboardStyle
 import dev.arnv.bluke.ui.TrackpadSide
@@ -108,13 +113,27 @@ class KeyboardSettingsActivity : ComponentActivity() {
                 var keyboardStyle by remember {
                     mutableStateOf(KeyboardStyle.fromPreference(preferences.getString(KEYBOARD_STYLE_PREFERENCE, null)))
                 }
-                var showTrackpad by remember { mutableStateOf(preferences.getBoolean(KEYBOARD_TRACKPAD_PREFERENCE, false)) }
+                var trackpadChoice by remember { mutableStateOf(preferences.keyboardTrackpadChoice()) }
                 var trackpadSide by remember {
                     mutableStateOf(TrackpadSide.fromPreference(preferences.getString(KEYBOARD_TRACKPAD_SIDE_PREFERENCE, null)))
                 }
                 var hardwareMode by remember { mutableStateOf(preferences.hardwareKeyboardMode()) }
-                var hardwareTrackpad by remember { mutableStateOf(preferences.isHardwareKeyboardTrackpadEnabled()) }
                 val physicalKeyboardFound = LocalConfiguration.current.hasPhysicalKeyboard()
+                val isWideScreen = isWideEnoughForLaptopLayout(LocalConfiguration.current.screenWidthDp)
+                var laptopLayout by remember { mutableStateOf(preferences.getBoolean(KEYBOARD_LAPTOP_LAYOUT_PREFERENCE, false)) }
+                var laptopTrackpad by remember {
+                    mutableStateOf(LaptopTrackpadPosition.fromPreference(preferences.getString(KEYBOARD_LAPTOP_TRACKPAD_PREFERENCE, null)))
+                }
+                fun setLaptopLayout(enabled: Boolean) {
+                    laptopLayout = enabled
+                    preferences.edit { putBoolean(KEYBOARD_LAPTOP_LAYOUT_PREFERENCE, enabled) }
+                }
+                // Same default as the keyboard screen until the user picks.
+                val showTrackpad = trackpadChoice ?: hardwareMode.isActive(physicalKeyboardFound)
+                fun setShowTrackpad(enabled: Boolean) {
+                    trackpadChoice = enabled
+                    preferences.setKeyboardTrackpadEnabled(enabled)
+                }
                 var dialog by remember { mutableStateOf<KeyboardDialog?>(null) }
                 val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior()
 
@@ -248,20 +267,39 @@ class KeyboardSettingsActivity : ComponentActivity() {
                                 ),
                                 SettingsItemData(
                                     title = "Trackpad with keyboard",
-                                    subtitle = "Show a trackpad above the keyboard in portrait, or beside it in landscape",
+                                    subtitle = "Above the keys in portrait, beside them in landscape, also in hardware keyboard mode. Also switchable from the keyboard toolbar",
                                     icon = { Icon(Icons.Default.ViewQuilt, null, tint = MaterialTheme.colorScheme.primary) },
                                     action = {
-                                        Switch(checked = showTrackpad, onCheckedChange = {
-                                            showTrackpad = it
-                                            preferences.edit { putBoolean(KEYBOARD_TRACKPAD_PREFERENCE, it) }
-                                        })
+                                        Switch(checked = showTrackpad, onCheckedChange = ::setShowTrackpad)
                                     },
-                                    onClick = {
-                                        showTrackpad = !showTrackpad
-                                        preferences.edit { putBoolean(KEYBOARD_TRACKPAD_PREFERENCE, showTrackpad) }
-                                    },
+                                    onClick = { setShowTrackpad(!showTrackpad) },
                                 ),
-                            ) + if (showTrackpad) listOf(
+                            ) + listOf(
+                                SettingsItemData(
+                                    title = "Laptop layout",
+                                    subtitle = if (isWideScreen) {
+                                        "Full keyboard layout with the trackpad above or below it, in portrait and landscape"
+                                    } else {
+                                        "Needs a wider screen, like a tablet or an unfolded foldable"
+                                    },
+                                    icon = { Icon(Icons.Default.Laptop, null, tint = MaterialTheme.colorScheme.primary) },
+                                    action = {
+                                        Switch(
+                                            checked = laptopLayout && isWideScreen,
+                                            onCheckedChange = ::setLaptopLayout,
+                                            enabled = isWideScreen,
+                                        )
+                                    },
+                                    onClick = if (isWideScreen) ({ setLaptopLayout(!laptopLayout) }) else null,
+                                ),
+                            ) + if (showTrackpad && laptopLayout && isWideScreen) listOf(
+                                SettingsItemData(
+                                    title = "Trackpad position",
+                                    subtitle = "${laptopTrackpad.displayName} · also switchable from the keyboard toolbar",
+                                    icon = { Icon(Icons.Default.SwapVert, null, tint = MaterialTheme.colorScheme.primary) },
+                                    onClick = { dialog = KeyboardDialog.LAPTOP_TRACKPAD },
+                                ),
+                            ) else if (showTrackpad) listOf(
                                 SettingsItemData(
                                     title = "Trackpad side in landscape",
                                     subtitle = "${trackpadSide.displayName} · also switchable from the keyboard toolbar",
@@ -284,23 +322,7 @@ class KeyboardSettingsActivity : ComponentActivity() {
                                     icon = { Icon(Icons.Default.Keyboard, null, tint = MaterialTheme.colorScheme.primary) },
                                     onClick = { dialog = KeyboardDialog.HARDWARE_MODE },
                                 ),
-                            ) + if (hardwareMode != HardwareKeyboardMode.OFF) listOf(
-                                SettingsItemData(
-                                    title = "Trackpad in hardware keyboard mode",
-                                    subtitle = "Fill the screen above the special keys with a trackpad",
-                                    icon = { Icon(Icons.Default.ViewQuilt, null, tint = MaterialTheme.colorScheme.primary) },
-                                    action = {
-                                        Switch(checked = hardwareTrackpad, onCheckedChange = {
-                                            hardwareTrackpad = it
-                                            preferences.edit { putBoolean(HARDWARE_KEYBOARD_TRACKPAD_PREFERENCE, it) }
-                                        })
-                                    },
-                                    onClick = {
-                                        hardwareTrackpad = !hardwareTrackpad
-                                        preferences.edit { putBoolean(HARDWARE_KEYBOARD_TRACKPAD_PREFERENCE, hardwareTrackpad) }
-                                    },
-                                ),
-                            ) else emptyList(),
+                            ),
                         )
                         SettingsCardGroup(
                             title = "Rotation",
@@ -416,6 +438,18 @@ class KeyboardSettingsActivity : ComponentActivity() {
                         },
                         onDismiss = { dialog = null },
                     )
+                    KeyboardDialog.LAPTOP_TRACKPAD -> ChoiceDialog(
+                        title = "Trackpad position",
+                        explanation = "In the laptop layout the trackpad spans the screen above or below the keyboard.",
+                        choices = LaptopTrackpadPosition.entries.map { it.displayName },
+                        selectedIndex = LaptopTrackpadPosition.entries.indexOf(laptopTrackpad),
+                        onSelect = { index ->
+                            laptopTrackpad = LaptopTrackpadPosition.entries[index]
+                            preferences.edit { putString(KEYBOARD_LAPTOP_TRACKPAD_PREFERENCE, laptopTrackpad.preferenceValue) }
+                            dialog = null
+                        },
+                        onDismiss = { dialog = null },
+                    )
                     KeyboardDialog.TRACKPAD_SIDE -> ChoiceDialog(
                         title = "Trackpad side in landscape",
                         explanation = "In portrait the trackpad is always above the keyboard.",
@@ -475,7 +509,7 @@ class KeyboardSettingsActivity : ComponentActivity() {
     }
 }
 
-private enum class KeyboardDialog { TYPING_LAYOUT, CAPS_LOCK, ORIENTATION, PORTRAIT_LAYOUT, STYLE, TRACKPAD_SIDE, VIBRATION_STRENGTH, HOST_OS, HARDWARE_MODE }
+private enum class KeyboardDialog { LAPTOP_TRACKPAD, TYPING_LAYOUT, CAPS_LOCK, ORIENTATION, PORTRAIT_LAYOUT, STYLE, TRACKPAD_SIDE, VIBRATION_STRENGTH, HOST_OS, HARDWARE_MODE }
 
 @Composable
 internal fun ChoiceDialog(
