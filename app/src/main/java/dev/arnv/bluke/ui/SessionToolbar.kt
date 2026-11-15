@@ -1,5 +1,11 @@
 package dev.arnv.bluke.ui
 
+import android.app.Activity
+import android.content.Intent
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Settings
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.testTag
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.combinedClickable
@@ -60,6 +66,8 @@ internal fun SessionToolbar(
     modifier: Modifier = Modifier,
     leading: @Composable RowScope.() -> Unit,
     trailing: @Composable RowScope.() -> Unit,
+    /** Settings page opened by a gear button at the far right, after [trailing]. */
+    settingsActivity: Class<out Activity>? = null,
 ) {
     BoxWithConstraints(
         modifier = modifier
@@ -86,9 +94,24 @@ internal fun SessionToolbar(
                 modifier = Modifier.padding(start = 16.dp),
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(SessionToolbarDefaults.ItemSpacing),
-                content = trailing,
-            )
+            ) {
+                trailing()
+                if (settingsActivity != null) ToolbarSettingsButton(settingsActivity)
+            }
         }
+    }
+}
+
+/** Gear button that opens [activity]. */
+@Composable
+internal fun ToolbarSettingsButton(activity: Class<out Activity>) {
+    val context = LocalContext.current
+    ToolbarIconButton(
+        onClick = { context.startActivity(Intent(context, activity)) },
+        onClickLabel = "Open settings",
+        modifier = Modifier.testTag("toolbar_settings_btn"),
+    ) {
+        ToolbarIcon(Icons.Default.Settings, "Settings")
     }
 }
 
@@ -102,6 +125,8 @@ internal fun ToolbarButton(
     onClickLabel: String? = null,
     onLongClickLabel: String? = null,
     enabled: Boolean = true,
+    /** Greyed out like a disabled button, but still clickable (e.g. to explain why). */
+    dimmed: Boolean = false,
     containerColor: Color = SessionToolbarDefaults.ButtonColor,
     horizontalPadding: Dp = SessionToolbarDefaults.ButtonPadding,
     content: @Composable RowScope.() -> Unit,
@@ -111,7 +136,7 @@ internal fun ToolbarButton(
             .height(SessionToolbarDefaults.ButtonHeight)
             .widthIn(min = SessionToolbarDefaults.ButtonHeight)
             .clip(RoundedCornerShape(SessionToolbarDefaults.ButtonCorner))
-            .background(if (enabled) containerColor else containerColor.copy(alpha = containerColor.alpha * 0.5f))
+            .background(if (enabled && !dimmed) containerColor else containerColor.copy(alpha = containerColor.alpha * 0.5f))
             .combinedClickable(
                 enabled = enabled,
                 onClickLabel = onClickLabel,

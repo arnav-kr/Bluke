@@ -139,15 +139,19 @@ fun HomeScreen(
     var keyboardStyle by remember {
         mutableStateOf(KeyboardStyle.fromPreference(sharedPrefs.getString(KEYBOARD_STYLE_PREFERENCE, null)))
     }
-    var isKeyboardTrackpadEnabled by remember {
-        mutableStateOf(sharedPrefs.getBoolean(KEYBOARD_TRACKPAD_PREFERENCE, false))
-    }
+    var trackpadChoice by remember { mutableStateOf(sharedPrefs.keyboardTrackpadChoice()) }
     var trackpadSide by remember {
         mutableStateOf(TrackpadSide.fromPreference(sharedPrefs.getString(KEYBOARD_TRACKPAD_SIDE_PREFERENCE, null)))
     }
     val isPortrait = LocalConfiguration.current.orientation == Configuration.ORIENTATION_PORTRAIT
+    // Set by dragging the handle above the keyboard; kept per orientation.
+    var isLaptopLayoutEnabled by remember { mutableStateOf(sharedPrefs.getBoolean(KEYBOARD_LAPTOP_LAYOUT_PREFERENCE, false)) }
+    var laptopTrackpadPosition by remember {
+        mutableStateOf(LaptopTrackpadPosition.fromPreference(sharedPrefs.getString(KEYBOARD_LAPTOP_TRACKPAD_PREFERENCE, null)))
+    }
+    val isWideScreen = isWideEnoughForLaptopLayout(LocalConfiguration.current.screenWidthDp)
+    var keyboardHeightFraction by remember(isPortrait) { mutableStateOf(sharedPrefs.keyboardHeightFraction(isPortrait)) }
     var hardwareKeyboardMode by remember { mutableStateOf(sharedPrefs.hardwareKeyboardMode()) }
-    var isHardwareTrackpadEnabled by remember { mutableStateOf(sharedPrefs.isHardwareKeyboardTrackpadEnabled()) }
     val hasPhysicalKeyboard = LocalConfiguration.current.hasPhysicalKeyboard()
     // Letter keys are hidden and the phone's own keyboard types instead.
     val isHardwareKeyboardMode = hardwareKeyboardMode.isActive(hasPhysicalKeyboard)
@@ -180,9 +184,12 @@ fun HomeScreen(
                 isKeyPreviewEnabled = sharedPrefs.getBoolean(KEY_PREVIEW_PREFERENCE, true)
                 keyboardHostOs = sharedPrefs.keyboardHostOs()
                 keyboardStyle = KeyboardStyle.fromPreference(sharedPrefs.getString(KEYBOARD_STYLE_PREFERENCE, null))
-                isKeyboardTrackpadEnabled = sharedPrefs.getBoolean(KEYBOARD_TRACKPAD_PREFERENCE, false)
+                trackpadChoice = sharedPrefs.keyboardTrackpadChoice()
+                isLaptopLayoutEnabled = sharedPrefs.getBoolean(KEYBOARD_LAPTOP_LAYOUT_PREFERENCE, false)
+                laptopTrackpadPosition = LaptopTrackpadPosition.fromPreference(
+                    sharedPrefs.getString(KEYBOARD_LAPTOP_TRACKPAD_PREFERENCE, null)
+                )
                 hardwareKeyboardMode = sharedPrefs.hardwareKeyboardMode()
-                isHardwareTrackpadEnabled = sharedPrefs.isHardwareKeyboardTrackpadEnabled()
                 trackpadSide = TrackpadSide.fromPreference(sharedPrefs.getString(KEYBOARD_TRACKPAD_SIDE_PREFERENCE, null))
                 characterLayout = KeyboardCharacterLayout.fromPreference(
                     sharedPrefs.getString(KEYBOARD_CHARACTER_LAYOUT_PREFERENCE, null)
@@ -919,6 +926,19 @@ fun HomeScreen(
                         verticalArrangement = Arrangement.SpaceBetween,
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
+                        // Hardware keyboard mode shows only a strip of keys the phone's keyboard lacks.
+                        val useHardwareStrip = isHardwareKeyboardMode
+                        val showTrackpad = trackpadChoice ?: useHardwareStrip
+                        // Wide screens (tablets, unfolded foldables) can keep the full layout
+                        // with the trackpad beside or below it.
+                        val useLaptopLayout = isLaptopLayoutEnabled && isWideScreen && !useHardwareStrip
+                        // A full-size layout is too cramped next to a trackpad in landscape,
+                        // so the Touch layout is used there too.
+                        val useTouchLayout = !useHardwareStrip && !useLaptopLayout && (
+                            (isPortrait && portraitKeyboardLayout == PortraitKeyboardLayout.TOUCH) ||
+                                (showTrackpad && !isPortrait)
+                            )
+
                         // 1. Top toolbar. Touch-sized buttons; it scrolls sideways when it doesn't fit.
                         SessionToolbar(
                             leading = {
@@ -960,9 +980,41 @@ fun HomeScreen(
 
                                 ReconnectHostButton(btManager)
 
-                                // Move the trackpad to the other side (landscape only)
-                                if (isKeyboardTrackpadEnabled && !isPortrait && !isHardwareKeyboardMode) {
-                                    ToolbarButton(
+                                // Show or hide the trackpad (one setting for both keyboard modes).
+                                ToolbarButton(
+                                    onClickLabel = if (showTrackpad) "Hide trackpad" else "Show trackpad",
+                                    onClick = {
+                                        trackpadChoice = !showTrackpad
+                                        sharedPrefs.setKeyboardTrackpadEnabled(!showTrackpad)
+                                        vibrateKeyPress()
+                                    },
+                                    modifier = Modifier.testTag("trackpad_toggle_btn"),
+                                ) {
+                                    ToolbarLed(on = showTrackpad)
+                                    ToolbarIcon(Icons.Default.Mouse, null)
+                                    ToolbarLabel("Trackpad", color = if (showTrackpad) Color.White else SessionToolbarDefaults.MutedContent)
+                                }
+
+                                // Move the trackpad: above/below in the laptop layout,
+                                // otherwise to the other side in landscape.
+                                if (showTrackpad && !isHardwareKeyboardMode && useLaptopLayout) {
+                                    val next = laptopTrackpadPosition.toggled()
+                                    ToolbarIconButton(
+                                        onClickLabel = if (next == LaptopTrackpadPosition.BELOW) {
+                                            "Move trackpad below the keyboard"
+                                        } else {
+                                            "Move trackpad above the keyboard"
+                                        },
+                                        onClick = {
+                                            laptopTrackpadPosition = next
+                                            sharedPrefs.edit { putString(KEYBOARD_LAPTOP_TRACKPAD_PREFERENCE, next.preferenceValue) }
+                                        },
+                                        modifier = Modifier.testTag("swap_trackpad_side_btn"),
+                                    ) {
+                                        ToolbarIcon(Icons.Default.SwapVert, "Move trackpad")
+                                    }
+                                } else if (showTrackpad && !isPortrait && !isHardwareKeyboardMode) {
+                                    ToolbarIconButton(
                                         onClickLabel = "Move trackpad to the other side",
                                         onClick = {
                                             trackpadSide = trackpadSide.flipped()
@@ -972,11 +1024,11 @@ fun HomeScreen(
                                         },
                                         modifier = Modifier.testTag("swap_trackpad_side_btn"),
                                     ) {
-                                        ToolbarIcon(Icons.Default.SwapHoriz, null)
-                                        ToolbarLabel("Trackpad")
+                                        ToolbarIcon(Icons.Default.SwapHoriz, "Move trackpad to the other side")
                                     }
                                 }
                             },
+                            settingsActivity = dev.arnv.bluke.KeyboardSettingsActivity::class.java,
                             trailing = {
                                 // 1. Lock keys: each is its own touch target with an LED.
                                 @Composable
@@ -1030,10 +1082,22 @@ fun HomeScreen(
 
                                 // 2. Layout selector (the hardware keyboard strip has a fixed layout)
                                 if (!isHardwareKeyboardMode) {
+                                    // The Touch layout replaces the chosen layout, so cycling would do nothing.
+                                    val layoutInert = useTouchLayout
                                     ToolbarButton(
                                         onClickLabel = "Next keyboard layout",
                                         onLongClickLabel = "Configure keyboard layout cycle",
+                                        dimmed = layoutInert,
                                         onClick = {
+                                            if (layoutInert) {
+                                                val reason = if (isPortrait) {
+                                                    "Layouts don't apply to the portrait Touch keyboard. Rotate the phone to use them."
+                                                } else {
+                                                    "Layouts don't apply next to the trackpad. Turn the trackpad off to use them."
+                                                }
+                                                android.widget.Toast.makeText(context, reason, android.widget.Toast.LENGTH_LONG).show()
+                                                return@ToolbarButton
+                                            }
                                             val savedSet = sharedPrefs.getStringSet(CYCLE_KEYBOARD_GEOMETRIES_PREFERENCE, null)
                                             val enabledLayouts = if (savedSet == null) {
                                                 KeyboardGeometry.entries
@@ -1050,8 +1114,9 @@ fun HomeScreen(
                                             context.startActivity(Intent(context, KeyboardLayoutsActivity::class.java))
                                         },
                                     ) {
-                                        ToolbarIcon(Icons.Default.Keyboard, "Layout")
-                                        ToolbarLabel(selectedGeometry.displayName, maxWidth = 120.dp)
+                                        val layoutContent = if (layoutInert) SessionToolbarDefaults.MutedContent else Color.White
+                                        ToolbarIcon(Icons.Default.Keyboard, "Layout", tint = layoutContent)
+                                        ToolbarLabel(selectedGeometry.displayName, color = layoutContent, maxWidth = 120.dp)
                                     }
                                 }
 
@@ -1144,15 +1209,6 @@ fun HomeScreen(
 
                         // 2. Keyboard, optionally with a trackpad above it (portrait) or beside it (landscape)
                         val isMinimal = keyboardStyle == KeyboardStyle.MINIMAL
-                        // Hardware keyboard mode shows only a strip of keys the phone's keyboard lacks.
-                        val useHardwareStrip = isHardwareKeyboardMode
-                        val showTrackpad = if (useHardwareStrip) isHardwareTrackpadEnabled else isKeyboardTrackpadEnabled
-                        // A full-size layout is too cramped next to a trackpad in landscape,
-                        // so the Touch layout is used there too.
-                        val useTouchLayout = !useHardwareStrip && (
-                            (isPortrait && portraitKeyboardLayout == PortraitKeyboardLayout.TOUCH) ||
-                                (showTrackpad && !isPortrait)
-                            )
                         val keyboardRows = remember(useHardwareStrip, useTouchLayout, touchLayer, characterLayout, selectedGeometry, keyboardHostOs) {
                             val rows = when {
                                 useHardwareStrip -> TouchKeyboardLayouts.hardwareStripLayout(touchLayer)
@@ -1171,7 +1227,7 @@ fun HomeScreen(
                         val fillKeyboardHeight = useTouchLayout || useHardwareStrip
 
                         @Composable
-                        fun KeyboardPanel(modifier: Modifier) {
+                        fun KeyboardPanel(modifier: Modifier, fixedHeight: Boolean) {
                             Box(modifier = modifier, contentAlignment = Alignment.Center) {
                                 KeyboardView(
                                     geometry = selectedGeometry,
@@ -1185,8 +1241,9 @@ fun HomeScreen(
                                     isFnActive = isFnActive,
                                     keySensitivity = keySensitivity,
                                     rowsOverride = keyboardRows,
-                                    fillHeight = fillKeyboardHeight,
-                                    maxKeyAspect = keyAspect,
+                                    // A height set by hand is filled, whatever the key shape.
+                                    fillHeight = fillKeyboardHeight || fixedHeight,
+                                    maxKeyAspect = if (fixedHeight) Float.MAX_VALUE else keyAspect,
                                     latchedKeys = latchedKeys,
                                     legendScale = when {
                                         useTouchLayout -> 1.5f
@@ -1213,6 +1270,14 @@ fun HomeScreen(
                             style = keyboardStyle,
                             keyboardRows = keyboardRows,
                             keyAspect = if (fillKeyboardHeight) keyAspect else 1f,
+                            laptopLayout = useLaptopLayout,
+                            laptopTrackpadBelow = laptopTrackpadPosition == LaptopTrackpadPosition.BELOW,
+                            heightFraction = keyboardHeightFraction,
+                            onHeightFractionChange = { fraction ->
+                                keyboardHeightFraction = fraction
+                                sharedPrefs.setKeyboardHeightFraction(isPortrait, fraction)
+                                vibrateKeyPress()
+                            },
                             modifier = Modifier
                                 .weight(1f)
                                 .fillMaxWidth()
@@ -1228,7 +1293,7 @@ fun HomeScreen(
                                     modifier = trackpadModifier,
                                 )
                             },
-                            keyboard = { keyboardModifier -> KeyboardPanel(keyboardModifier) },
+                            keyboard = { keyboardModifier, fixedHeight -> KeyboardPanel(keyboardModifier, fixedHeight) },
                         )
                     }
                 }

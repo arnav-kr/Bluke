@@ -596,6 +596,7 @@ fun GamepadView(
                     ToolbarHostChip(isConnected = isConnected, hostName = deviceName)
                     ReconnectHostButton(btManager, iconOnly = true)
                 },
+                settingsActivity = dev.arnv.bluke.ControllerSettingsActivity::class.java,
                 trailing = {
                     // Output profile selector. All profiles share one descriptor, so
                     // Native, Android and Web switch live without HID re-registration.

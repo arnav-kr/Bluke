@@ -5,7 +5,6 @@ import android.content.res.Configuration
 import android.view.KeyEvent
 
 const val HARDWARE_KEYBOARD_MODE_PREFERENCE = "hardware_keyboard_mode"
-const val HARDWARE_KEYBOARD_TRACKPAD_PREFERENCE = "hardware_keyboard_show_trackpad"
 
 /**
  * When the keyboard screen hides its letter keys and takes key presses from the
@@ -30,9 +29,6 @@ enum class HardwareKeyboardMode(val preferenceValue: String, val displayName: St
 
 fun SharedPreferences.hardwareKeyboardMode(): HardwareKeyboardMode =
     HardwareKeyboardMode.fromPreference(getString(HARDWARE_KEYBOARD_MODE_PREFERENCE, null))
-
-fun SharedPreferences.isHardwareKeyboardTrackpadEnabled(): Boolean =
-    getBoolean(HARDWARE_KEYBOARD_TRACKPAD_PREFERENCE, true)
 
 /** True when Android reports a usable physical letter keyboard (built in or attached). */
 fun Configuration.hasPhysicalKeyboard(): Boolean =

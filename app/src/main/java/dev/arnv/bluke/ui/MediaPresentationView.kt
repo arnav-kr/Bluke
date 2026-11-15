@@ -37,6 +37,7 @@ import androidx.compose.material.icons.automirrored.filled.VolumeUp
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Mouse
@@ -84,7 +85,6 @@ import kotlin.math.min
 
 private val RemoteCanvasColor = Color(0xFF1D1D1D)
 private val RemoteButtonColor = Color(0xFF333333)
-private val RemoteTouchpadColor = Color(0xFF333333)
 private val RemoteContentColor = Color(0xFFF4F4F6)
 
 internal enum class MultimediaPosture {
@@ -623,8 +623,7 @@ private fun MultimediaTouchpad(
 ) {
     Box(
         modifier = modifier
-            .clip(RoundedCornerShape(8.dp))
-            .background(RemoteTouchpadColor)
+            .cyberTrackpad(cornerRadius = 8.dp)
             .testTag("multimedia_touchpad"),
     ) {
         TouchGestureLayer(
@@ -898,6 +897,12 @@ private fun MultimediaUprightBar(
                 modifier = Modifier.size(20.dp),
             )
         }
+        val context = LocalContext.current
+        UprightToolbarButton("Open settings", {
+            context.startActivity(android.content.Intent(context, dev.arnv.bluke.SettingsActivity::class.java))
+        }) {
+            Icon(Icons.Default.Settings, null, tint = Color.White, modifier = Modifier.size(20.dp))
+        }
     }
 }
 
@@ -971,6 +976,7 @@ private fun MultimediaTopBar(
             ToolbarHostChip(isConnected = isConnected, hostName = hostLabel)
             ReconnectHostButton(btManager, iconOnly = true)
         },
+        settingsActivity = dev.arnv.bluke.SettingsActivity::class.java,
         trailing = {
             ToolbarButton(onClick = onSensitivityChange, onClickLabel = "Next pointer speed") {
                 ToolbarIcon(Icons.Default.Speed, "Sensitivity")

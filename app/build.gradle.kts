@@ -15,8 +15,8 @@ android {
     applicationId = "com.wylify.simplybluke"
     minSdk = 28
     targetSdk = 36
-    versionCode = 16
-    versionName = "1.1.6"
+    versionCode = 18
+    versionName = "1.1.8"
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
   }

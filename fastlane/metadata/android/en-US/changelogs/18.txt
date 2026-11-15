@@ -1,0 +1,7 @@
+• Trackpad button in the keyboard top bar
+• Drag the handle above the keyboard to resize it
+• Tablets and unfolded foldables: laptop layout with the trackpad above or below
+• One trackpad switch in Settings covers hardware keyboard mode too
+• Layout button is greyed out when it has no effect, and explains why
+• Settings button in every top bar
+• New trackpad look: OLED black with corner brackets in your theme colour
