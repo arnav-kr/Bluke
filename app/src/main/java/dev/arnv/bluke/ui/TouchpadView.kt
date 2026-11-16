@@ -97,7 +97,19 @@ fun TouchpadView(
             ),
         )
     }
-    val keyboardTheme = remember(context) { KeyboardThemeRepository(context).selectedTheme() }
+    val keyboardThemeRepository = remember(context) { KeyboardThemeRepository(context) }
+    var keyboardTheme by remember { mutableStateOf(keyboardThemeRepository.selectedTheme()) }
+    // Pick up a theme changed in Settings (or from the keyboard toolbar) when we come back.
+    val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
+                keyboardTheme = keyboardThemeRepository.selectedTheme()
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
     // Haptic buzz function using Android's Vibrator
     @Suppress("DEPRECATION")
     val triggerVibration = { milliseconds: Long ->

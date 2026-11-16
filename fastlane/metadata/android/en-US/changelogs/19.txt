@@ -1,0 +1,6 @@
+• Share keyboard themes as a QR code, gallery image, JSON or Markdown file
+• Import themes from a file, a picture of a QR code, or scan one with the camera
+• New theme from one colour, from blank, or as a copy
+• Theme editor previews the Touch layout and warns about hard-to-read key text
+• Asks before discarding unsaved theme edits
+• Camera is optional and used only for scanning theme QR codes

@@ -5,6 +5,10 @@
 -->
 <data-extraction-rules>
     <cloud-backup>
+        <!-- No rules are active, so Auto Backup saves all app data, including custom
+             keyboard themes in files/keyboard-themes.json. If you add <include> rules,
+             also include domain="file" path="keyboard-themes.json" or themes stop
+             being backed up. -->
         <!-- TODO: Use <include> and <exclude> to control what is backed up.
         <include .../>
         <exclude .../>
