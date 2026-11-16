@@ -31,7 +31,6 @@ import androidx.compose.material.icons.filled.ContentPaste
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.Image
-import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.QrCode2
 import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.material.icons.filled.Save
@@ -165,11 +164,6 @@ private fun shareFile(context: Context, fileName: String, mimeType: String, writ
     context.startActivity(chooser)
 }
 
-private fun shareText(context: Context, text: String) {
-    val send = Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, text)
-    context.startActivity(Intent.createChooser(send, "Share keyboard theme"))
-}
-
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun ShareThemeDialog(
@@ -177,7 +171,7 @@ internal fun ShareThemeDialog(
     onDismiss: () -> Unit,
 ) {
     val context = LocalContext.current
-    val clipboard = LocalClipboardManager.current
+    // The QR code holds the whole theme as a simplybluke://theme link; no server involved.
     val link = remember(theme) { KeyboardThemeSharing.toLink(theme) }
     val qrBitmap: Bitmap? = remember(link) { ThemeQrCode.encode(link)?.let { ThemeQrCode.toBitmap(it) } }
     val slug = remember(theme.name) { fileSlug(theme.name) }
@@ -214,8 +208,7 @@ internal fun ShareThemeDialog(
                             .align(Alignment.CenterHorizontally),
                     )
                     Text(
-                        "Scan it with Simply Bluke on another phone (Themes → Scan), import a screenshot of it, " +
-                            "or use a camera app that opens links.",
+                        "Scan it with Simply Bluke on another phone (Themes → Scan), or import a screenshot of it.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -224,7 +217,7 @@ internal fun ShareThemeDialog(
                         Icon(Icons.Default.Warning, contentDescription = null, tint = MaterialTheme.colorScheme.error)
                         Spacer(Modifier.width(8.dp))
                         Text(
-                            "This theme changes too many single keys to fit in a QR code. Share the file or link instead.",
+                            "This theme changes too many single keys to fit in a QR code. Share the file instead.",
                             style = MaterialTheme.typography.bodyMedium,
                         )
                     }
@@ -267,19 +260,6 @@ internal fun ShareThemeDialog(
                         },
                         label = { Text("Markdown file") },
                         leadingIcon = { Icon(Icons.Default.Description, contentDescription = null) },
-                    )
-                    AssistChip(
-                        onClick = { shareText(context, link) },
-                        label = { Text("Link") },
-                        leadingIcon = { Icon(Icons.Default.Link, contentDescription = null) },
-                    )
-                    AssistChip(
-                        onClick = {
-                            clipboard.setText(androidx.compose.ui.text.AnnotatedString(link))
-                            status = "Link copied."
-                        },
-                        label = { Text("Copy link") },
-                        leadingIcon = { Icon(Icons.Default.ContentPaste, contentDescription = null) },
                     )
                     AssistChip(
                         onClick = { saveJson.launch("$slug.json") },
@@ -408,7 +388,7 @@ internal fun ImportThemeDialog(
                 verticalArrangement = Arrangement.spacedBy(10.dp),
             ) {
                 Text(
-                    "Bring in a theme someone shared: a .json or .md file, a QR code picture, or a simplybluke:// link.",
+                    "Bring in a theme someone shared: a .json or .md file, or a theme QR code.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -452,7 +432,7 @@ internal fun ImportThemeDialog(
                 OutlinedTextField(
                     value = pasted,
                     onValueChange = { pasted = it.take(KeyboardThemeSharing.MAX_INPUT_CHARS) },
-                    label = { Text("Or paste a link or JSON") },
+                    label = { Text("Or paste theme text") },
                     textStyle = MaterialTheme.typography.bodySmall.copy(fontFamily = FontFamily.Monospace),
                     maxLines = 4,
                     trailingIcon = {

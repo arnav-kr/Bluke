@@ -16,7 +16,9 @@ import java.util.zip.Inflater
 
 /**
  * Turns keyboard themes into text people can pass around (a JSON file, a Markdown
- * file, or a simplybluke:// link that also fits in a QR code) and back.
+ * file, or a QR code) and back. The QR code holds a compact simplybluke://theme link
+ * with the whole theme inside it; there is no server. Pasted or opened links are
+ * still accepted on import.
  *
  * Everything read here comes from outside the app, so parsing is strict: sizes are
  * capped, colors are forced opaque, and the result always gets a fresh id.
@@ -83,7 +85,7 @@ object KeyboardThemeSharing {
         val name = markdownEscape(theme.name)
         appendLine("# $name")
         appendLine()
-        appendLine("A keyboard theme for Simply Bluke. To use it, open Settings → Keyboard → Themes → Import and pick this file, or open the link below on your phone.")
+        appendLine("A keyboard theme for Simply Bluke. To use it, open Settings → Keyboard → Themes → Import and pick this file.")
         appendLine()
         appendLine("| Part | Color | Text color | Text size |")
         appendLine("|---|---|---|---|")
@@ -93,8 +95,6 @@ object KeyboardThemeSharing {
         appendStyleRow("Control keys", theme.modifierStyle)
         appendStyleRow("Accent keys", theme.accentStyle)
         theme.keyOverrides.toSortedMap().forEach { (key, style) -> appendStyleRow("Key `$key`", style) }
-        appendLine()
-        appendLine("Link: <${toLink(theme)}>")
         appendLine()
         appendLine("```json")
         appendLine(toJsonText(theme))
@@ -132,7 +132,7 @@ object KeyboardThemeSharing {
             text.startsWith("{") -> text
             link != null -> decodeLink(link)
             else -> jsonFromMarkdown(text)
-                ?: throw ImportException("No keyboard theme found. Use a Simply Bluke theme link, .json or .md file.")
+                ?: throw ImportException("No keyboard theme found. Use a Simply Bluke theme .json or .md file, or a theme QR code.")
         }
         val root = try {
             JSONObject(json)

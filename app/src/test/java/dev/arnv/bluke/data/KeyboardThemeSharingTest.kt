@@ -62,6 +62,7 @@ class KeyboardThemeSharingTest {
         val markdown = KeyboardThemeSharing.toMarkdown(theme)
         assertTrue(markdown.contains("```json"))
         assertTrue(markdown.contains("Sunset \\| \\*bold\\*"))
+        assertTrue(!markdown.contains("simplybluke://"))
         assertSameLook(theme, KeyboardThemeSharing.parse(markdown))
         // A link pasted with surrounding chat text still works.
         val chat = "Try my theme: ${KeyboardThemeSharing.toLink(theme)} enjoy!"
