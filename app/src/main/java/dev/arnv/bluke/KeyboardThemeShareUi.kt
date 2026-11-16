@@ -240,10 +240,7 @@ internal fun ShareThemeDialog(
                         )
                     }
                 }
-                FlowRow(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalArrangement = Arrangement.spacedBy(0.dp),
-                ) {
+                ShareActionGroup("Send") {
                     if (qrBitmap != null) {
                         AssistChip(
                             onClick = {
@@ -257,6 +254,32 @@ internal fun ShareThemeDialog(
                             label = { Text("QR image") },
                             leadingIcon = { Icon(Icons.Default.QrCode2, contentDescription = null) },
                         )
+                    }
+                    AssistChip(
+                        onClick = {
+                            runCatching {
+                                shareFile(context, "$slug.json", "application/json") {
+                                    it.writeText(KeyboardThemeSharing.toJsonText(theme))
+                                }
+                            }.onFailure { status = "Couldn't share the file." }
+                        },
+                        label = { Text("JSON") },
+                        leadingIcon = { Icon(Icons.Default.Description, contentDescription = null) },
+                    )
+                    AssistChip(
+                        onClick = {
+                            runCatching {
+                                shareFile(context, "$slug.md", "text/markdown") {
+                                    it.writeText(KeyboardThemeSharing.toMarkdown(theme))
+                                }
+                            }.onFailure { status = "Couldn't share the file." }
+                        },
+                        label = { Text("Markdown") },
+                        leadingIcon = { Icon(Icons.Default.Description, contentDescription = null) },
+                    )
+                }
+                ShareActionGroup("Save to this phone") {
+                    if (qrBitmap != null) {
                         AssistChip(
                             onClick = {
                                 if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.Q) {
@@ -274,40 +297,18 @@ internal fun ShareThemeDialog(
                                     }
                                 }
                             },
-                            label = { Text("Save to gallery") },
+                            label = { Text("Gallery") },
                             leadingIcon = { Icon(Icons.Default.AddPhotoAlternate, contentDescription = null) },
                         )
                     }
                     AssistChip(
-                        onClick = {
-                            runCatching {
-                                shareFile(context, "$slug.json", "application/json") {
-                                    it.writeText(KeyboardThemeSharing.toJsonText(theme))
-                                }
-                            }.onFailure { status = "Couldn't share the file." }
-                        },
-                        label = { Text("JSON file") },
-                        leadingIcon = { Icon(Icons.Default.Description, contentDescription = null) },
-                    )
-                    AssistChip(
-                        onClick = {
-                            runCatching {
-                                shareFile(context, "$slug.md", "text/markdown") {
-                                    it.writeText(KeyboardThemeSharing.toMarkdown(theme))
-                                }
-                            }.onFailure { status = "Couldn't share the file." }
-                        },
-                        label = { Text("Markdown file") },
-                        leadingIcon = { Icon(Icons.Default.Description, contentDescription = null) },
-                    )
-                    AssistChip(
                         onClick = { saveJson.launch("$slug.json") },
-                        label = { Text("Save .json") },
+                        label = { Text("JSON") },
                         leadingIcon = { Icon(Icons.Default.Save, contentDescription = null) },
                     )
                     AssistChip(
                         onClick = { saveMarkdown.launch("$slug.md") },
-                        label = { Text("Save .md") },
+                        label = { Text("Markdown") },
                         leadingIcon = { Icon(Icons.Default.Save, contentDescription = null) },
                     )
                 }
@@ -345,6 +346,23 @@ private fun saveImageToGallery(context: Context, bitmap: Bitmap, baseName: Strin
     } catch (_: Exception) {
         resolver.delete(uri, null, null)
         false
+    }
+}
+
+/** A small heading over a wrapping row of share actions. */
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun ShareActionGroup(title: String, content: @Composable () -> Unit) {
+    Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Text(
+            title,
+            style = MaterialTheme.typography.labelLarge,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        FlowRow(
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(0.dp),
+        ) { content() }
     }
 }
 
