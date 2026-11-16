@@ -3,7 +3,7 @@
 All notable user-facing changes to Simply Bluke, a fork of [Bluke](https://github.com/arnav-kr/Bluke) by Arnav Kumar, are documented in this file. Entries before 1.1.1 come from the original Bluke project.
 For detailed usage instructions, see the [Usage Guide](docs/USAGE.md).
 
-## [Unreleased]
+## [1.1.9] - 2026-11-16
 
 ### Added
 - **Share keyboard themes:** Every theme's ⋮ menu has **Share**. It shows a QR code, with two rows of actions: **Send** the theme to another app as a QR image, a `.json` file or a readable `.md` file (color table plus the data), or **Save to this phone** as a gallery image, `.json` or `.md`. Themes carry colors only, not layout settings, and nothing is uploaded: the QR code holds the whole theme.
@@ -17,6 +17,7 @@ For detailed usage instructions, see the [Usage Guide](docs/USAGE.md).
 ### Improved & Fixed
 - Custom themes are read from storage once and kept in memory instead of on every screen, and one damaged theme no longer hides the others.
 - The Touchpad mode's modifier keys now follow a theme change as soon as you come back to it.
+- **No more lost edits:** Leaving the theme editor with unsaved changes (back, Cancel, or opening another theme to edit) now asks "Discard changes?" first.
 
 ## [1.1.8] - 2026-11-15
 
