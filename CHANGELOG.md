@@ -7,6 +7,7 @@ For detailed usage instructions, see the [Usage Guide](docs/USAGE.md).
 
 ### Added
 - **Share keyboard themes:** Every theme's ⋮ menu has **Share**. It shows a QR code and can send the theme as a QR image, a `.json` file, or a readable `.md` file (color table plus the data), or save the file to your device. Themes carry colors only, not layout settings, and nothing is uploaded: the QR code holds the whole theme.
+- **Theme card for the gallery:** Share → **Save to gallery** saves a clean image with the theme name, its QR code and its five base colors (case, plate, keys, mods, accent with hex codes) to Pictures/Simply Bluke. The **QR image** share uses the same card. On Android 9 you pick where to save it.
 - **Import themes:** Settings → Keyboard → Themes → **Import** reads a `.json` or `.md` theme file, or a QR code from a screenshot or photo. Opening a theme file from another app also offers to import it. You see a preview first; imported themes get their own copy and never replace an existing one (a number is added if the name is taken).
 - **New theme from scratch:** **New theme** can start from one color (a dark or light keyboard is built around it, with readable key text), from a blank grey keyboard, or as a copy of the current theme.
 - **Touch layout preview:** The theme editor can preview the Touch layout (ABC, ?123 and Fn pages) as well as the physical layouts, on flat keys or keycaps, on the theme's own case color.

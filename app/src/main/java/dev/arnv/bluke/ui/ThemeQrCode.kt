@@ -25,28 +25,53 @@ object ThemeQrCode {
     /**
      * The QR modules for [text], or null when it is too long for a QR code.
      * Error correction drops from M to L for long texts so more themes fit.
+     *
+     * Some codes contain data that looks like the corner markers, and then the
+     * finder (used for photos, screenshots and the camera) can't locate them. Each
+     * candidate is checked with that finder; if it fails, the other mask patterns
+     * (same data, scrambled differently) are tried and the first one that scans wins.
      */
     fun encode(text: String): BitMatrix? {
         for (level in listOf(ErrorCorrectionLevel.M, ErrorCorrectionLevel.L)) {
-            try {
-                return QRCodeWriter().encode(
-                    text,
-                    BarcodeFormat.QR_CODE,
-                    0,
-                    0,
-                    mapOf(
-                        EncodeHintType.ERROR_CORRECTION to level,
-                        EncodeHintType.MARGIN to 4,
-                        EncodeHintType.CHARACTER_SET to "UTF-8",
-                    ),
-                )
-            } catch (_: WriterException) {
-                // Too long at this level; try the next one.
-            } catch (_: IllegalArgumentException) {
-                return null
+            val default = encodeWith(text, level, mask = null) ?: continue
+            if (scansWithFinder(default, text)) return default
+            for (mask in 0..7) {
+                val candidate = encodeWith(text, level, mask) ?: continue
+                if (scansWithFinder(candidate, text)) return candidate
             }
+            return default
         }
         return null
+    }
+
+    private fun encodeWith(text: String, level: ErrorCorrectionLevel, mask: Int?): BitMatrix? = try {
+        val hints = mutableMapOf<EncodeHintType, Any>(
+            EncodeHintType.ERROR_CORRECTION to level,
+            EncodeHintType.MARGIN to 4,
+            EncodeHintType.CHARACTER_SET to "UTF-8",
+        )
+        if (mask != null) hints[EncodeHintType.QR_MASK_PATTERN] = mask
+        QRCodeWriter().encode(text, BarcodeFormat.QR_CODE, 0, 0, hints)
+    } catch (_: WriterException) {
+        null // Too long at this level.
+    } catch (_: IllegalArgumentException) {
+        null
+    }
+
+    /** True when the finder reads [matrix] back as [text] at a couple of sizes. */
+    private fun scansWithFinder(matrix: BitMatrix, text: String): Boolean = listOf(3, 8).all { scale ->
+        val size = matrix.width * scale
+        val pixels = IntArray(size * size) { index ->
+            if (matrix.get((index % size) / scale, (index / size) / scale)) BLACK else WHITE
+        }
+        try {
+            QRCodeReader().decode(
+                BinaryBitmap(HybridBinarizer(RGBLuminanceSource(size, size, pixels))),
+                mapOf(DecodeHintType.TRY_HARDER to true),
+            ).text == text
+        } catch (_: ReaderException) {
+            false
+        }
     }
 
     /** Black-on-white bitmap of [matrix], each module [scale] pixels wide. */

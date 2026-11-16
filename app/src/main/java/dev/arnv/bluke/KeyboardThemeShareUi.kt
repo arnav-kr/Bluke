@@ -27,6 +27,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AddPhotoAlternate
 import androidx.compose.material.icons.filled.ContentPaste
 import androidx.compose.material.icons.filled.Description
 import androidx.compose.material.icons.filled.FolderOpen
@@ -76,6 +77,7 @@ import dev.arnv.bluke.ui.KeyboardStyle
 import dev.arnv.bluke.ui.KeyboardThemeDefinition
 import dev.arnv.bluke.ui.KeyboardThemeGenerator
 import dev.arnv.bluke.ui.KeyboardView
+import dev.arnv.bluke.ui.ThemeCardRenderer
 import dev.arnv.bluke.ui.ThemeQrCode
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -173,9 +175,25 @@ internal fun ShareThemeDialog(
     val context = LocalContext.current
     // The QR code holds the whole theme as a simplybluke://theme link; no server involved.
     val link = remember(theme) { KeyboardThemeSharing.toLink(theme) }
-    val qrBitmap: Bitmap? = remember(link) { ThemeQrCode.encode(link)?.let { ThemeQrCode.toBitmap(it) } }
+    val qrMatrix = remember(link) { ThemeQrCode.encode(link) }
+    val qrBitmap: Bitmap? = remember(qrMatrix) { qrMatrix?.let { ThemeQrCode.toBitmap(it) } }
     val slug = remember(theme.name) { fileSlug(theme.name) }
     var status by remember { mutableStateOf<String?>(null) }
+    val scope = rememberCoroutineScope()
+    // The card (name, QR, base colors) is drawn only when it's first needed.
+    val card = remember(theme, qrMatrix) { lazy { qrMatrix?.let { ThemeCardRenderer.render(theme, it) } } }
+
+    // Android 9 can't add to the gallery without a storage permission, so it saves through the file picker.
+    val saveCardFile = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("image/png")) { uri ->
+        val bitmap = card.value
+        if (uri == null || bitmap == null) return@rememberLauncherForActivityResult
+        status = try {
+            context.contentResolver.openOutputStream(uri, "wt")?.use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
+                ?.let { "Image saved." } ?: "Couldn't save the image."
+        } catch (_: Exception) {
+            "Couldn't save the image."
+        }
+    }
 
     val saveJson = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/json")) { uri ->
         uri ?: return@rememberLauncherForActivityResult
@@ -231,12 +249,33 @@ internal fun ShareThemeDialog(
                             onClick = {
                                 runCatching {
                                     shareFile(context, "$slug-qr.png", "image/png") { file ->
-                                        file.outputStream().use { qrBitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
+                                        val image = card.value ?: qrBitmap
+                                        file.outputStream().use { image.compress(Bitmap.CompressFormat.PNG, 100, it) }
                                     }
                                 }.onFailure { status = "Couldn't share the QR image." }
                             },
                             label = { Text("QR image") },
                             leadingIcon = { Icon(Icons.Default.QrCode2, contentDescription = null) },
+                        )
+                        AssistChip(
+                            onClick = {
+                                if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.Q) {
+                                    saveCardFile.launch("$slug-qr.png")
+                                } else {
+                                    scope.launch {
+                                        status = withContext(Dispatchers.IO) {
+                                            val bitmap = card.value
+                                            if (bitmap != null && saveImageToGallery(context, bitmap, "$slug-qr")) {
+                                                "Saved to Pictures/Simply Bluke."
+                                            } else {
+                                                "Couldn't save the image."
+                                            }
+                                        }
+                                    }
+                                }
+                            },
+                            label = { Text("Save to gallery") },
+                            leadingIcon = { Icon(Icons.Default.AddPhotoAlternate, contentDescription = null) },
                         )
                     }
                     AssistChip(
@@ -279,6 +318,34 @@ internal fun ShareThemeDialog(
         },
         confirmButton = { TextButton(onClick = onDismiss) { Text("Done") } },
     )
+}
+
+/**
+ * Adds [bitmap] to the gallery under Pictures/Simply Bluke (Android 10 and newer;
+ * no permission needed). Returns false if it couldn't be written.
+ */
+@androidx.annotation.RequiresApi(android.os.Build.VERSION_CODES.Q)
+private fun saveImageToGallery(context: Context, bitmap: Bitmap, baseName: String): Boolean {
+    val resolver = context.contentResolver
+    val values = android.content.ContentValues().apply {
+        put(android.provider.MediaStore.Images.Media.DISPLAY_NAME, "$baseName.png")
+        put(android.provider.MediaStore.Images.Media.MIME_TYPE, "image/png")
+        put(android.provider.MediaStore.Images.Media.RELATIVE_PATH, "${android.os.Environment.DIRECTORY_PICTURES}/Simply Bluke")
+        put(android.provider.MediaStore.Images.Media.IS_PENDING, 1)
+    }
+    val collection = android.provider.MediaStore.Images.Media.getContentUri(android.provider.MediaStore.VOLUME_EXTERNAL_PRIMARY)
+    val uri = resolver.insert(collection, values) ?: return false
+    return try {
+        val written = resolver.openOutputStream(uri)?.use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) } == true
+        if (!written) error("not written")
+        values.clear()
+        values.put(android.provider.MediaStore.Images.Media.IS_PENDING, 0)
+        resolver.update(uri, values, null, null)
+        true
+    } catch (_: Exception) {
+        resolver.delete(uri, null, null)
+        false
+    }
 }
 
 private fun writeToUri(resolver: ContentResolver, uri: Uri, text: String): String = try {
