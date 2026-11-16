@@ -25,6 +25,15 @@
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/Theme.MyApplication">
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/shared_theme_paths" />
+        </provider>
         <service
             android:name=".BluetoothSessionService"
             android:exported="false"
@@ -43,7 +52,28 @@
         
         <activity android:name=".SettingsActivity" android:theme="@style/Theme.MyApplication" />
         <activity android:name=".LookAndFeelActivity" android:theme="@style/Theme.MyApplication" />
-        <activity android:name=".KeyboardThemesActivity" android:theme="@style/Theme.MyApplication" />
+        <activity
+            android:name=".KeyboardThemesActivity"
+            android:exported="true"
+            android:launchMode="singleTop"
+            android:theme="@style/Theme.MyApplication">
+            <!-- Theme links, e.g. from a QR code scanned with the camera app. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="simplybluke" android:host="theme" />
+            </intent-filter>
+            <!-- Shared theme files opened from a file manager or chat app. -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:scheme="content" />
+                <data android:mimeType="application/json" />
+                <data android:mimeType="text/markdown" />
+                <data android:mimeType="text/x-markdown" />
+            </intent-filter>
+        </activity>
         <activity android:name=".KeyboardSettingsActivity" android:theme="@style/Theme.MyApplication" />
         <activity android:name=".KeyboardLayoutsActivity" android:theme="@style/Theme.MyApplication" />
         <activity android:name=".ControllerSettingsActivity" android:theme="@style/Theme.MyApplication" />

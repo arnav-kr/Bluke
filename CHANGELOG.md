@@ -3,6 +3,19 @@
 All notable user-facing changes to Simply Bluke, a fork of [Bluke](https://github.com/arnav-kr/Bluke) by Arnav Kumar, are documented in this file. Entries before 1.1.1 come from the original Bluke project.
 For detailed usage instructions, see the [Usage Guide](docs/USAGE.md).
 
+## [Unreleased]
+
+### Added
+- **Share keyboard themes:** Every theme's ⋮ menu has **Share**. It shows a QR code and can send the theme as a QR image, a `.json` file, a readable `.md` file (color table plus the data), or a `simplybluke://theme` link, or save the file to your device.
+- **Import themes:** Settings → Keyboard → Themes → **Import** reads a `.json` or `.md` theme file, a QR code from a screenshot or photo, or a pasted link. Opening a theme link or file from another app also offers to import it. You see a preview first; imported themes get their own copy and never replace an existing one (a number is added if the name is taken). No camera permission is needed.
+- **New theme from scratch:** **New theme** can start from one color (a dark or light keyboard is built around it, with readable key text), from a blank grey keyboard, or as a copy of the current theme.
+- **Touch layout preview:** The theme editor can preview the Touch layout (ABC, ?123 and Fn pages) as well as the physical layouts, on flat keys or keycaps, on the theme's own case color.
+- **Readable text check:** The editor shows each key group's text contrast and warns when key text is hard to read, with a one-tap fix.
+
+### Improved & Fixed
+- Custom themes are read from storage once and kept in memory instead of on every screen, and one damaged theme no longer hides the others.
+- The Touchpad mode's modifier keys now follow a theme change as soon as you come back to it.
+
 ## [1.1.8] - 2026-11-15
 
 ### Added

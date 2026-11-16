@@ -93,6 +93,14 @@ class LicensesActivity : ComponentActivity() {
                             license = "Apache-2.0",
                             artifactId = "org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.0",
                             githubUrl = "https://github.com/Kotlin/kotlinx.serialization"
+                        ),
+                        LibraryData(
+                            name = "ZXing Core",
+                            author = "ZXing authors",
+                            version = "3.5.3",
+                            license = "Apache-2.0",
+                            artifactId = "com.google.zxing:core:3.5.3",
+                            githubUrl = "https://github.com/zxing/zxing"
                         )
                     )
                 }

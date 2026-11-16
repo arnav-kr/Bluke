@@ -13,6 +13,7 @@ import dev.arnv.bluke.ui.KeyboardThemeDefinition
 import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
+import java.util.UUID
 
 const val KEYBOARD_GEOMETRY_PREFERENCE = "keyboard_geometry"
 const val KEYBOARD_THEME_PREFERENCE = "keyboard_theme_id"
@@ -40,16 +41,41 @@ class KeyboardThemeRepository(context: Context) {
 
     fun allThemes(): List<KeyboardThemeDefinition> = KeyboardThemeCatalog.builtIns + listCustomThemes()
 
-    fun listCustomThemes(): List<KeyboardThemeDefinition> = runCatching {
+    /**
+     * Custom themes, parsed once and kept in memory until the file changes. Many
+     * screens make their own repository, so the cache is shared per file.
+     */
+    fun listCustomThemes(): List<KeyboardThemeDefinition> {
+        val stamp = file.stamp()
+        cache[file.absolutePath]?.takeIf { it.stamp == stamp }?.let { return it.themes }
+        val themes = readThemesFromDisk()
+        cache[file.absolutePath] = CachedThemes(stamp, themes)
+        return themes
+    }
+
+    private fun readThemesFromDisk(): List<KeyboardThemeDefinition> = runCatching {
         if (!file.isFile) return emptyList()
         val root = JSONObject(file.readText())
         val themes = root.optJSONArray("themes") ?: JSONArray()
         buildList {
             for (index in 0 until themes.length()) {
-                add(parseTheme(themes.getJSONObject(index)))
+                // One broken entry should not hide every other theme.
+                runCatching { parseTheme(themes.getJSONObject(index)) }.getOrNull()?.let(::add)
             }
         }.sortedBy { it.name.lowercase() }
     }.getOrDefault(emptyList())
+
+    /**
+     * Saves a theme that came from outside the app under a new id. When the name is
+     * already taken, a number is added, e.g. "Mizu (2)".
+     */
+    fun importTheme(theme: KeyboardThemeDefinition): KeyboardThemeDefinition {
+        val taken = allThemes().mapTo(mutableSetOf()) { it.name.lowercase() }
+        val base = theme.name.trim().take(34).ifEmpty { "Imported theme" }
+        val name = if (base.lowercase() !in taken) base
+        else (2..999).asSequence().map { "$base ($it)" }.first { it.lowercase() !in taken }
+        return save(theme.copy(id = "$CUSTOM_KEYBOARD_THEME_PREFIX${UUID.randomUUID()}", name = name))
+    }
 
     fun save(theme: KeyboardThemeDefinition): KeyboardThemeDefinition {
         require(theme.id.startsWith(CUSTOM_KEYBOARD_THEME_PREFIX))
@@ -76,6 +102,15 @@ class KeyboardThemeRepository(context: Context) {
             temporary.copyTo(file, overwrite = true)
             temporary.delete()
         }
+        cache[file.absolutePath] = CachedThemes(file.stamp(), themes.sortedBy { it.name.lowercase() })
+    }
+
+    private data class CachedThemes(val stamp: Pair<Long, Long>, val themes: List<KeyboardThemeDefinition>)
+
+    private companion object {
+        val cache = java.util.concurrent.ConcurrentHashMap<String, CachedThemes>()
+
+        fun File.stamp(): Pair<Long, Long> = if (isFile) lastModified() to length() else 0L to -1L
     }
 
     private fun themeToJson(theme: KeyboardThemeDefinition): JSONObject = JSONObject()
