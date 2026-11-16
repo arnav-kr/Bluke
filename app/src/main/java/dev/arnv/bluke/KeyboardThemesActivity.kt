@@ -159,13 +159,25 @@ class KeyboardThemesActivity : ComponentActivity() {
                 var sharingTheme by remember { mutableStateOf<KeyboardThemeDefinition?>(null) }
                 var importCandidate by remember { mutableStateOf<KeyboardThemeDefinition?>(null) }
                 var importError by remember { mutableStateOf<String?>(null) }
+                // The editor reports whether it holds edits that are not saved yet.
+                var editorDirty by remember { mutableStateOf(false) }
+                var pendingLeave by remember { mutableStateOf<(() -> Unit)?>(null) }
+
+                /** Runs [then] right away, or after confirming when unsaved edits would be lost. */
+                fun leaveEditor(then: () -> Unit) {
+                    if (editingTheme != null && editorDirty) pendingLeave = then else then()
+                }
+
+                fun closeEditor() {
+                    editingTheme = null
+                    editorDirty = false
+                }
 
                 // Opened from a simplybluke://theme link or a shared file.
                 val incoming = incomingImport.value
                 LaunchedEffect(incoming) {
                     if (incoming == null) return@LaunchedEffect
                     incomingImport.value = null
-                    editingTheme = null
                     try {
                         importCandidate = if (incoming.scheme == KeyboardThemeSharing.LINK_SCHEME) {
                             KeyboardThemeSharing.parse(incoming.toString())
@@ -195,7 +207,7 @@ class KeyboardThemesActivity : ComponentActivity() {
                     preferences.edit { putStringSet(CYCLE_KEYBOARD_THEMES_PREFERENCE, cycleThemes) }
                 }
 
-                BackHandler(enabled = editingTheme != null) { editingTheme = null }
+                BackHandler(enabled = editingTheme != null) { leaveEditor(::closeEditor) }
                 Scaffold(
                     modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
                     topBar = {
@@ -211,7 +223,7 @@ class KeyboardThemesActivity : ComponentActivity() {
                             },
                             navigationIcon = {
                                 IconButton(onClick = {
-                                    if (editingTheme == null) finish() else editingTheme = null
+                                    if (editingTheme == null) finish() else leaveEditor(::closeEditor)
                                 }) {
                                     Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
                                 }
@@ -259,10 +271,11 @@ class KeyboardThemesActivity : ComponentActivity() {
                                 getSharedPreferences("app_prefs", MODE_PRIVATE)
                                     .getString(KEYBOARD_GEOMETRY_PREFERENCE, null),
                             ),
-                            onCancel = { editingTheme = null },
+                            onDirtyChange = { editorDirty = it },
+                            onCancel = { leaveEditor(::closeEditor) },
                             onSave = { updated ->
                                 useSavedTheme(repository.save(updated))
-                                editingTheme = null
+                                closeEditor()
                             },
                         )
                     }
@@ -300,7 +313,12 @@ class KeyboardThemesActivity : ComponentActivity() {
                             importCandidate = null
                             val saved = repository.importTheme(candidate)
                             useSavedTheme(saved)
-                            if (edit) editingTheme = saved
+                            if (edit) {
+                                leaveEditor {
+                                    closeEditor()
+                                    editingTheme = saved
+                                }
+                            }
                         },
                     )
                 }
@@ -314,6 +332,23 @@ class KeyboardThemesActivity : ComponentActivity() {
                     )
                 }
                 sharingTheme?.let { ShareThemeDialog(theme = it, onDismiss = { sharingTheme = null }) }
+
+                pendingLeave?.let { leave ->
+                    AlertDialog(
+                        onDismissRequest = { pendingLeave = null },
+                        title = { Text("Discard changes?") },
+                        text = { Text("Your changes to this theme haven't been saved.") },
+                        confirmButton = {
+                            TextButton(onClick = {
+                                pendingLeave = null
+                                leave()
+                            }) { Text("Discard") }
+                        },
+                        dismissButton = {
+                            TextButton(onClick = { pendingLeave = null }) { Text("Keep editing") }
+                        },
+                    )
+                }
 
                 pendingDelete?.let { themeToDelete ->
                     AlertDialog(
@@ -588,6 +623,7 @@ private fun KeyboardThemeEditor(
     initialTheme: KeyboardThemeDefinition,
     keyboardStyle: KeyboardStyle,
     initialGeometry: KeyboardGeometry,
+    onDirtyChange: (Boolean) -> Unit,
     onCancel: () -> Unit,
     onSave: (KeyboardThemeDefinition) -> Unit,
 ) {
@@ -637,6 +673,9 @@ private fun KeyboardThemeEditor(
         keyOverrides = overrides.toMap(),
         editable = true,
     )
+    // Only the theme itself counts; preview layout, style and the selected key are not saved.
+    val dirty = previewTheme != initialTheme.copy(editable = true)
+    LaunchedEffect(dirty) { onDirtyChange(dirty) }
     val selectedStyle = when (target) {
         ThemeEditTarget.ALPHA -> alphaStyle
         ThemeEditTarget.MODIFIER -> modifierStyle
