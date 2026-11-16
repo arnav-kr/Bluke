@@ -1,6 +1,6 @@
 # Privacy Policy for Bluke
 
-Last updated: November 13, 2026
+Last updated: November 16, 2026
 
 **Bluke** ("the App") is committed to protecting your privacy. This Privacy Policy explains how the App handles user information and data.
 
@@ -24,6 +24,7 @@ To function properly, Bluke requires the following system permissions on your An
 * **Bluetooth / Bluetooth Connect / Bluetooth Advertise / Bluetooth Scan**: Used exclusively to discover, pair with, and connect to host devices (PCs, Macs, TVs, etc.) as a Bluetooth HID device.
 * **Vibrate**: Used solely to provide tactile feedback (haptics) when keys are pressed.
 * **Internet**: Used only by the optional update check described above. It is never used while the update check is off, except when you tap "Check now".
+* **Camera** (optional): Used only while the keyboard theme QR scanner is open, to read a theme QR code. The App asks for it the first time you tap Scan, and you can say no and import a QR code from a picture instead. Camera frames are read on your device and discarded right away; no picture is saved, shared, or sent anywhere.
 
 None of these permissions are used to collect data or track your behavior.
 

@@ -39,6 +39,7 @@ import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Palette
+import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
@@ -156,6 +157,8 @@ class KeyboardThemesActivity : ComponentActivity() {
                 }
                 var showNewTheme by remember { mutableStateOf(false) }
                 var showImport by remember { mutableStateOf(false) }
+                var showScanner by remember { mutableStateOf(false) }
+                val canScan = remember { canScanQrCodes() }
                 var sharingTheme by remember { mutableStateOf<KeyboardThemeDefinition?>(null) }
                 var importCandidate by remember { mutableStateOf<KeyboardThemeDefinition?>(null) }
                 var importError by remember { mutableStateOf<String?>(null) }
@@ -226,6 +229,13 @@ class KeyboardThemesActivity : ComponentActivity() {
                                     if (editingTheme == null) finish() else leaveEditor(::closeEditor)
                                 }) {
                                     Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                                }
+                            },
+                            actions = {
+                                if (editingTheme == null && canScan) {
+                                    IconButton(onClick = { showScanner = true }) {
+                                        Icon(Icons.Default.QrCodeScanner, contentDescription = "Scan a theme QR code")
+                                    }
                                 }
                             },
                             scrollBehavior = scrollBehavior,
@@ -300,6 +310,23 @@ class KeyboardThemesActivity : ComponentActivity() {
                         onDismiss = { showImport = false },
                         onParsed = {
                             showImport = false
+                            importCandidate = it
+                        },
+                        onScan = if (canScan) {
+                            {
+                                showImport = false
+                                showScanner = true
+                            }
+                        } else {
+                            null
+                        },
+                    )
+                }
+                if (showScanner) {
+                    ThemeQrScannerDialog(
+                        onDismiss = { showScanner = false },
+                        onScanned = {
+                            showScanner = false
                             importCandidate = it
                         },
                     )

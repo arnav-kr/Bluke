@@ -101,6 +101,14 @@ class LicensesActivity : ComponentActivity() {
                             license = "Apache-2.0",
                             artifactId = "com.google.zxing:core:3.5.3",
                             githubUrl = "https://github.com/zxing/zxing"
+                        ),
+                        LibraryData(
+                            name = "CameraX",
+                            author = "Android Open Source Project",
+                            version = "1.5.1",
+                            license = "Apache-2.0",
+                            artifactId = "androidx.camera:camera-camera2:1.5.1",
+                            githubUrl = "https://developer.android.com/jetpack/androidx/releases/camera"
                         )
                     )
                 }

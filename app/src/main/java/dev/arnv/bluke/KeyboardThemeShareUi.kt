@@ -33,6 +33,7 @@ import androidx.compose.material.icons.filled.FolderOpen
 import androidx.compose.material.icons.filled.Image
 import androidx.compose.material.icons.filled.Link
 import androidx.compose.material.icons.filled.QrCode2
+import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.material.icons.filled.Save
 import androidx.compose.material.icons.filled.Share
 import androidx.compose.material.icons.filled.Warning
@@ -213,8 +214,8 @@ internal fun ShareThemeDialog(
                             .align(Alignment.CenterHorizontally),
                     )
                     Text(
-                        "Scan it in Simply Bluke (Themes → Import → Image) from a screenshot or photo, " +
-                            "or with a camera app that opens links.",
+                        "Scan it with Simply Bluke on another phone (Themes → Scan), import a screenshot of it, " +
+                            "or use a camera app that opens links.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -367,6 +368,8 @@ private fun readCapped(stream: InputStream): String {
 internal fun ImportThemeDialog(
     onDismiss: () -> Unit,
     onParsed: (KeyboardThemeDefinition) -> Unit,
+    /** Opens the camera scanner; null on devices without a camera. */
+    onScan: (() -> Unit)? = null,
 ) {
     val context = LocalContext.current
     val clipboard = LocalClipboardManager.current
@@ -409,6 +412,17 @@ internal fun ImportThemeDialog(
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+                if (onScan != null) {
+                    FilledTonalButton(
+                        enabled = !busy,
+                        onClick = onScan,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Icon(Icons.Default.QrCodeScanner, contentDescription = null)
+                        Spacer(Modifier.width(8.dp))
+                        Text("Scan a QR code")
+                    }
+                }
                 FilledTonalButton(
                     enabled = !busy,
                     onClick = {

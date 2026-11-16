@@ -9,6 +9,7 @@ import com.google.zxing.BinaryBitmap
 import com.google.zxing.DecodeHintType
 import com.google.zxing.EncodeHintType
 import com.google.zxing.NotFoundException
+import com.google.zxing.PlanarYUVLuminanceSource
 import com.google.zxing.ReaderException
 import com.google.zxing.RGBLuminanceSource
 import com.google.zxing.WriterException
@@ -95,7 +96,24 @@ object ThemeQrCode {
         return null
     }
 
-    private fun decodeSource(source: RGBLuminanceSource): String? {
+    /**
+     * Reads a QR code from a camera frame's luminance (Y) plane, where each row is
+     * [rowStride] bytes long. Uses only the fast detector passes so the live
+     * scanner keeps up with the camera.
+     */
+    fun decodeLuminance(luminance: ByteArray, rowStride: Int, width: Int, height: Int): String? {
+        val source = PlanarYUVLuminanceSource(luminance, rowStride, height, 0, 0, width, height, false)
+        val hints = mapOf(DecodeHintType.TRY_HARDER to true)
+        for (bitmap in listOf(BinaryBitmap(HybridBinarizer(source)), BinaryBitmap(HybridBinarizer(source.invert())))) {
+            try {
+                return QRCodeReader().decode(bitmap, hints).text
+            } catch (_: ReaderException) {
+            }
+        }
+        return null
+    }
+
+    private fun decodeSource(source: com.google.zxing.LuminanceSource): String? {
         val attempts = listOf(
             BinaryBitmap(HybridBinarizer(source)) to mapOf(DecodeHintType.PURE_BARCODE to true),
             BinaryBitmap(HybridBinarizer(source)) to mapOf(DecodeHintType.TRY_HARDER to true),

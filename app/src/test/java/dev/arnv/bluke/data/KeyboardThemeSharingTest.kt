@@ -102,6 +102,22 @@ class KeyboardThemeSharingTest {
     }
 
     @Test
+    fun cameraFrameWithRowPaddingIsRead() {
+        val link = KeyboardThemeSharing.toLink(theme)
+        // A 640x480 grey frame with the code off-centre, like a camera Y plane whose
+        // rows are padded to a 704-byte stride.
+        val (pixels, size, _) = qrPixels(link, scale = 5, canvas = 480, left = 40, top = 30)
+        val width = 640
+        val stride = 704
+        val luminance = ByteArray(stride * size) { 0x80.toByte() }
+        for (y in 0 until size) for (x in 0 until size) {
+            luminance[y * stride + x + 60] = (pixels[y * size + x] and 0xFF).toByte()
+        }
+        assertEquals(link, ThemeQrCode.decodeLuminance(luminance, stride, width, size))
+        assertEquals(null, ThemeQrCode.decodeLuminance(ByteArray(stride * size) { 0x80.toByte() }, stride, width, size))
+    }
+
+    @Test
     fun themeWithManyKeyOverridesStillFitsInAQrCode() {
         val busy = theme.copy(
             keyOverrides = (0 until 110).associate { code ->
