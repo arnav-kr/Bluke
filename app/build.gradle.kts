@@ -122,6 +122,33 @@ dependencies {
 }
 
 
+/** Copies the repo's CHANGELOG.md into the APK so the app can show "What's new" after an update. */
+abstract class BundleChangelogTask : DefaultTask() {
+  @get:InputFile
+  @get:PathSensitive(PathSensitivity.NONE)
+  abstract val changelog: RegularFileProperty
+
+  @get:OutputDirectory
+  abstract val outputDir: DirectoryProperty
+
+  @TaskAction
+  fun copy() {
+    val out = outputDir.get().asFile
+    out.deleteRecursively()
+    out.mkdirs()
+    changelog.get().asFile.copyTo(out.resolve("CHANGELOG.md"))
+  }
+}
+
+val bundleChangelog = tasks.register<BundleChangelogTask>("bundleChangelog") {
+  changelog.set(rootProject.layout.projectDirectory.file("CHANGELOG.md"))
+}
+
+androidComponents {
+  onVariants { variant ->
+    variant.sources.assets?.addGeneratedSourceDirectory(bundleChangelog, BundleChangelogTask::outputDir)
+  }
+}
 
 kotlin {
   compilerOptions {
