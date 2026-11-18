@@ -38,13 +38,14 @@ import dev.arnv.bluke.ui.SettingsGroup
 import dev.arnv.bluke.ui.SettingsCardGroup
 import dev.arnv.bluke.ui.SettingsItemData
 import dev.arnv.bluke.ui.UpdateSettingsSection
+import dev.arnv.bluke.ui.WhatsNewDialog
+import dev.arnv.bluke.update.loadBundledChangelog
 import dev.arnv.bluke.ui.theme.MyApplicationTheme
 import dev.arnv.bluke.ui.theme.getCookieShape
 
 private const val ORIGINAL_REPO_URL = "https://github.com/arnav-kr/Bluke"
 private const val ORIGINAL_RELEASES_URL = "https://github.com/arnav-kr/Bluke/releases/latest"
 private const val ORIGINAL_DEVELOPER_URL = "https://github.com/arnav-kr"
-private const val FORK_RELEASES_URL = "https://github.com/wylify/Bluke_Simplified/releases"
 
 class AboutActivity : ComponentActivity() {
     @OptIn(ExperimentalMaterial3Api::class)
@@ -73,6 +74,11 @@ class AboutActivity : ComponentActivity() {
                 val sharedPrefs = context.getSharedPreferences("app_prefs", MODE_PRIVATE)
 
                 val scrollBehavior = TopAppBarDefaults.exitUntilCollapsedScrollBehavior(rememberTopAppBarState())
+                var showChangelog by remember { mutableStateOf(false) }
+                if (showChangelog) {
+                    val releases = remember { context.loadBundledChangelog() }
+                    WhatsNewDialog(releases = releases, onDismiss = { showChangelog = false }, title = "Changelog")
+                }
 
                 Scaffold(
                     modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
@@ -305,9 +311,9 @@ class AboutActivity : ComponentActivity() {
                             items = listOf(
                                 SettingsItemData(
                                     title = "Changelog",
-                                    subtitle = "Release history of Simply Bluke",
+                                    subtitle = "What changed in each version of Simply Bluke",
                                     icon = { Icon(Icons.Default.History, null, tint = MaterialTheme.colorScheme.primary) },
-                                    onClick = { openUrl(FORK_RELEASES_URL) }
+                                    onClick = { showChangelog = true }
                                 ),
                                 SettingsItemData(
                                     title = "Licenses",

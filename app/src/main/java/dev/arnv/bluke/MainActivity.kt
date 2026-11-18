@@ -20,6 +20,12 @@ import dev.arnv.bluke.ui.theme.MyApplicationTheme
 import dev.arnv.bluke.ui.HomeScreen
 import dev.arnv.bluke.ui.UpdateAvailableDialog
 import dev.arnv.bluke.ui.UpdateOptInDialog
+import dev.arnv.bluke.ui.WhatsNewDialog
+import dev.arnv.bluke.update.isFreshInstall
+import dev.arnv.bluke.update.loadBundledChangelog
+import dev.arnv.bluke.update.markChangelogSeen
+import dev.arnv.bluke.update.pendingWhatsNew
+import dev.arnv.bluke.update.releasesToShow
 import dev.arnv.bluke.update.GitHubRelease
 import dev.arnv.bluke.update.UpdateCheckResult
 import dev.arnv.bluke.update.UpdateChecker
@@ -121,21 +127,37 @@ class MainActivity : ComponentActivity(), RemoteVolumeKeyHost, HardwareKeyHost {
             repeatOnLifecycle(Lifecycle.State.STARTED) { checkForUpdate() }
         }
 
+        // Changes since the last version the user saw, shown once after an update (never on a fresh install).
+        // Developer options → "mock update popup" previews it with this version's entry.
+        val changelog = loadBundledChangelog()
+        val mockWhatsNew = sharedPrefs.getBoolean("is_developer_mode", false) &&
+            sharedPrefs.getBoolean("mock_update_popup", false)
+        val whatsNew = pendingWhatsNew(sharedPrefs, changelog, BuildConfig.VERSION_NAME, isFreshInstall())
+            .ifEmpty { if (mockWhatsNew) releasesToShow(changelog, null, BuildConfig.VERSION_NAME) else emptyList() }
+
         setContent {
             MyApplicationTheme {
                 HomeScreen(btManager = btManager)
+                var showWhatsNew by remember { mutableStateOf(whatsNew.isNotEmpty()) }
                 var askOptIn by remember { mutableStateOf(sharedPrefs.shouldAskUpdateOptIn) }
                 val update by pendingUpdate.collectAsState()
                 val connectedHost by btManager.connectedDevice.collectAsState()
-                // Both dialogs are held while a host is connected so they can't land under a finger that is typing.
-                if (askOptIn && connectedHost == null) {
+                // These dialogs are held while a host is connected so they can't land under a finger that is typing.
+                if (showWhatsNew && connectedHost == null) {
+                    WhatsNewDialog(releases = whatsNew, onDismiss = {
+                        sharedPrefs.markChangelogSeen(BuildConfig.VERSION_NAME)
+                        sharedPrefs.edit().putBoolean("mock_update_popup", false).apply()
+                        showWhatsNew = false
+                    })
+                }
+                if (askOptIn && connectedHost == null && !showWhatsNew) {
                     UpdateOptInDialog { enable ->
                         sharedPrefs.answerUpdateOptIn(enable)
                         askOptIn = false
                         if (enable) lifecycleScope.launch { checkForUpdate() }
                     }
                 }
-                update?.takeIf { connectedHost == null && !askOptIn }?.let { release ->
+                update?.takeIf { connectedHost == null && !askOptIn && !showWhatsNew }?.let { release ->
                     UpdateAvailableDialog(
                         release = release,
                         currentVersion = BuildConfig.VERSION_NAME,

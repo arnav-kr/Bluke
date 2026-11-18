@@ -299,10 +299,8 @@ fun HomeScreen(
             isExistingInstallation = savedVersionCode > 0 || hasSeenOnboarding,
         )
         
-        // If they have seen onboarding, they are an existing user.
-        // If savedVersionCode < currentVersionCode, it's an update.
-        if ((savedVersionCode > 0 && savedVersionCode < currentVersionCode) || 
-            (savedVersionCode == 0 && hasSeenOnboarding) || descriptorRefreshRequired) {
+        // A plain update shows "What's new" from MainActivity; this dialog is only for re-pairing.
+        if (descriptorRefreshRequired) {
             showUpdateDialog = true
         }
         
@@ -311,58 +309,30 @@ fun HomeScreen(
         }
     }
     
-    if (sharedPrefs.getBoolean("is_developer_mode", false) && sharedPrefs.getBoolean("mock_update_popup", false)) {
-        showUpdateDialog = true
-    }
-
-    val uriHandler = androidx.compose.ui.platform.LocalUriHandler.current
     if (showUpdateDialog) {
         val versionName = dev.arnv.bluke.BuildConfig.VERSION_NAME
         androidx.compose.material3.AlertDialog(
-            onDismissRequest = { 
-                showUpdateDialog = false
-                sharedPrefs.edit { putBoolean("mock_update_popup", false) }
-            },
-            title = {
-                Text(
-                    if (descriptorRefreshRequired) "Bluetooth pairing refresh required"
-                    else "Updated to v$versionName"
-                )
-            },
+            onDismissRequest = { showUpdateDialog = false },
+            title = { Text("Bluetooth pairing refresh required") },
             text = {
                 Text(
-                    if (descriptorRefreshRequired) {
-                        "This update changes the input layout Simply Bluke advertises over Bluetooth, " +
-                            "for example to add horizontal touchpad scrolling. Bluetooth hosts cache the old layout, " +
-                            "so the touchpad and other controls may misbehave until you forget the host on this phone, " +
-                            "remove Simply Bluke on the host, then pair again once. Reinstalling the app alone is not enough."
-                    } else {
-                        "We've added new features and made significant underlying changes to the controller!\n" +
-                            "For detailed information, see the changelog."
-                    }
+                    "Simply Bluke $versionName changes the input layout it advertises over Bluetooth, " +
+                        "for example to add horizontal touchpad scrolling. Bluetooth hosts cache the old layout, " +
+                        "so the touchpad and other controls may misbehave until you forget the host on this phone, " +
+                        "remove Simply Bluke on the host, then pair again once. Reinstalling the app alone is not enough."
                 )
             },
             confirmButton = {
                 Button(onClick = { 
                     showUpdateDialog = false 
                     sharedPrefs.edit {
-                        putBoolean("mock_update_popup", false)
-                        if (descriptorRefreshRequired) {
-                            putInt(HID_DESCRIPTOR_REVISION_PREFERENCE, CURRENT_HID_DESCRIPTOR_REVISION)
-                        }
+                        putInt(HID_DESCRIPTOR_REVISION_PREFERENCE, CURRENT_HID_DESCRIPTOR_REVISION)
                     }
                     descriptorRefreshRequired = false
                 }) {
                     Text("Got it")
                 }
             },
-            dismissButton = {
-                androidx.compose.material3.TextButton(onClick = { 
-                    uriHandler.openUri("https://github.com/wylify/Bluke_Simplified/releases")
-                }) {
-                    Text("Changelog")
-                }
-            }
         )
     }
 
