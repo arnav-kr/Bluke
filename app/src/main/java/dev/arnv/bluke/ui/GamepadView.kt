@@ -34,6 +34,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.*
 import androidx.compose.ui.layout.onGloballyPositioned
@@ -149,6 +150,7 @@ fun GamepadView(
     sharedPrefs: SharedPreferences,
     @Suppress("UNUSED_PARAMETER") caseBrush: Brush
 ) {
+    val gp = rememberControlSurfaceColors()
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val layoutRepository = remember(context) { LayoutRepository(context) }
@@ -556,7 +558,7 @@ fun GamepadView(
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color(0xFF28282A))
+            .background(gp.casing)
             .testTag("gamepad_view_root")
     ) {
         Column(modifier = Modifier.fillMaxSize()) {
@@ -587,9 +589,10 @@ fun GamepadView(
                             context.startActivity(Intent(context, QuickCycleActivity::class.java))
                         },
                         modifier = Modifier.testTag("gamepad_mode_cycle_btn"),
+                        containerColor = gp.toolbar.accentButton,
                     ) {
-                        ToolbarIcon(Icons.Default.SportsEsports, "Switch Mode")
-                        ToolbarLabel("Gamepad")
+                        ToolbarIcon(Icons.Default.SportsEsports, "Switch Mode", tint = gp.toolbar.onAccentButton)
+                        ToolbarLabel("Gamepad", color = gp.toolbar.onAccentButton)
                     }
 
                     // Connection status
@@ -597,6 +600,7 @@ fun GamepadView(
                     ReconnectHostButton(btManager, iconOnly = true)
                 },
                 settingsActivity = dev.arnv.bluke.ControllerSettingsActivity::class.java,
+                colors = gp.toolbar,
                 trailing = {
                     // Output profile selector. All profiles share one descriptor, so
                     // Native, Android and Web switch live without HID re-registration.
@@ -628,11 +632,11 @@ fun GamepadView(
                     if (isEditMode && isModified) {
                         ToolbarButton(
                             onClick = { resetDefaults() },
-                            containerColor = SessionToolbarDefaults.DangerColor,
+                            containerColor = MaterialTheme.colorScheme.errorContainer,
                             modifier = Modifier.testTag("reset_layout_defaults_btn"),
                         ) {
-                            ToolbarIcon(Icons.Default.Refresh, "Reset Defaults")
-                            ToolbarLabel("Reset Defaults")
+                            ToolbarIcon(Icons.Default.Refresh, "Reset Defaults", tint = MaterialTheme.colorScheme.onErrorContainer)
+                            ToolbarLabel("Reset Defaults", color = MaterialTheme.colorScheme.onErrorContainer)
                         }
                     }
 
@@ -643,9 +647,11 @@ fun GamepadView(
                             triggerVibration(30)
                         },
                         modifier = Modifier.testTag("edit_layout_toggle_btn"),
+                        containerColor = if (isEditMode) gp.accent else gp.toolbar.button,
                     ) {
-                        ToolbarIcon(if (isEditMode) Icons.Default.Check else Icons.Default.Edit, "Edit Layout")
-                        ToolbarLabel(if (isEditMode) "Done" else "Edit Layout")
+                        val editContent = if (isEditMode) gp.onAccent else gp.toolbar.content
+                        ToolbarIcon(if (isEditMode) Icons.Default.Check else Icons.Default.Edit, "Edit Layout", tint = editContent)
+                        ToolbarLabel(if (isEditMode) "Done" else "Edit Layout", color = editContent)
                     }
 
                     // Console layout selector
@@ -1217,6 +1223,7 @@ private fun GamepadBumperButton(
     onPress: (Int) -> Unit,
     onRelease: (Int) -> Unit
 ) {
+    val gp = rememberControlSurfaceColors()
     var isPressed by remember { mutableStateOf(false) }
     val pressOffsetY by animateDpAsState(
         targetValue = if (isPressed) (-0.6).dp else 0.dp,
@@ -1246,8 +1253,8 @@ private fun GamepadBumperButton(
         modifier = Modifier
             .width(120.dp)
             .height(34.dp)
-            .background(Color(0xFF1B1B1C), outerShape)
-            .border(1.2.dp, Color.Black.copy(alpha = 0.5f), outerShape),
+            .background(gp.well, outerShape)
+            .border(1.2.dp, gp.shadow(0.5f), outerShape),
         contentAlignment = Alignment.Center
     ) {
         // Inner button cap
@@ -1263,16 +1270,16 @@ private fun GamepadBumperButton(
                 .background(
                     Brush.verticalGradient(
                         colors = if (isPressed) {
-                            listOf(Color(0xFF202022), Color(0xFF19191B))
+                            listOf(gp.capPressedTop, gp.capPressedBottom)
                         } else {
-                            listOf(Color(0xFF38383B), Color(0xFF2D2D30))
+                            listOf(gp.capTop, gp.capBottom)
                         }
                     )
                 )
                 .border(
                     0.8.dp,
                     Brush.verticalGradient(
-                        colors = listOf(Color.White.copy(alpha = 0.15f), Color.Transparent)
+                        colors = listOf(gp.highlight, Color.Transparent)
                     ),
                     innerShape
                 )
@@ -1285,7 +1292,7 @@ private fun GamepadBumperButton(
         ) {
             Text(
                 text = button.label,
-                color = Color.White.copy(alpha = 0.85f),
+                color = if (isPressed) gp.labelPressed else gp.label,
                 fontSize = 10.sp,
                 fontWeight = FontWeight.Bold,
                 fontFamily = FontFamily.SansSerif
@@ -1301,6 +1308,7 @@ private fun GamepadTriggerButton(
     onPress: (Int) -> Unit,
     onRelease: (Int) -> Unit
 ) {
+    val gp = rememberControlSurfaceColors()
     var isPressed by remember { mutableStateOf(false) }
     val pressOffsetY by animateDpAsState(
         targetValue = if (isPressed) 0.6.dp else 0.dp,
@@ -1330,8 +1338,8 @@ private fun GamepadTriggerButton(
         modifier = Modifier
             .width(120.dp)
             .height(48.dp)
-            .background(Color(0xFF1B1B1C), outerShape)
-            .border(1.2.dp, Color.Black.copy(alpha = 0.5f), outerShape),
+            .background(gp.well, outerShape)
+            .border(1.2.dp, gp.shadow(0.5f), outerShape),
         contentAlignment = Alignment.Center
     ) {
         // Inner button cap
@@ -1347,16 +1355,16 @@ private fun GamepadTriggerButton(
                 .background(
                     Brush.verticalGradient(
                         colors = if (isPressed) {
-                            listOf(Color(0xFF202022), Color(0xFF19191B))
+                            listOf(gp.capPressedTop, gp.capPressedBottom)
                         } else {
-                            listOf(Color(0xFF38383B), Color(0xFF2D2D30))
+                            listOf(gp.capTop, gp.capBottom)
                         }
                     )
                 )
                 .border(
                     0.8.dp,
                     Brush.verticalGradient(
-                        colors = listOf(Color.White.copy(alpha = 0.15f), Color.Transparent)
+                        colors = listOf(gp.highlight, Color.Transparent)
                     ),
                     innerShape
                 )
@@ -1369,7 +1377,7 @@ private fun GamepadTriggerButton(
         ) {
             Text(
                 text = button.label,
-                color = Color.White.copy(alpha = 0.85f),
+                color = if (isPressed) gp.labelPressed else gp.label,
                 fontSize = 10.sp,
                 fontWeight = FontWeight.Bold,
                 fontFamily = FontFamily.SansSerif
@@ -1405,6 +1413,7 @@ private fun GamepadFaceButton(
     modifier: Modifier = Modifier,
     externalIsPressed: Boolean = false
 ) {
+    val gp = rememberControlSurfaceColors()
     var internalIsPressed by remember { mutableStateOf(false) }
     val isPressed = internalIsPressed || externalIsPressed
 
@@ -1420,10 +1429,10 @@ private fun GamepadFaceButton(
     )
 
     // Base color of the disk itself (dark gray, themed to the background #28282A)
-    val baseColor = Color(0xFF333336)
+    val baseColor = gp.capTop
     
     // Label/Symbol color (A, B, X, Y or △, ◯, ✕, ☐)
-    val labelColor = button.color
+    val labelColor = gp.harmonize(button.color)
 
     // Gap clearance reduced to 1.5.dp (well size 48.dp, cap size 45.dp)
     Box(
@@ -1436,8 +1445,8 @@ private fun GamepadFaceButton(
             modifier = Modifier
                 .fillMaxSize()
                 .clip(CircleShape)
-                .background(Color(0xFF1B1B1C))
-                .border(0.8.dp, Color.Black.copy(alpha = 0.25f), CircleShape)
+                .background(gp.well)
+                .border(0.8.dp, gp.shadow(0.25f), CircleShape)
         )
 
         // 2. Button Cap (presses down into the well)
@@ -1470,13 +1479,14 @@ private fun GamepadFaceButton(
 
                 // Draw 3D side edge of the disk (darker than the face)
                 drawCircle(
-                    color = Color(0xFF1F1F21),
+                    color = gp.capEdge,
                     radius = edgeR,
                     center = Offset(r, r + edgeOffset / 2f)
                 )
 
-                // Top face of the disk (themed to the background, soft vertical gradient)
-                val faceColor = if (isPressed) Color(0xFF232325) else baseColor
+                // Top face of the disk: the theme's cap tone, faintly tinted by the button's
+                // own color, lighting up in that color while pressed.
+                val faceColor = if (isPressed) lerp(gp.capBottom, labelColor, 0.30f) else lerp(baseColor, labelColor, 0.06f)
                 drawCircle(
                     brush = Brush.verticalGradient(
                         colors = listOf(faceColor.gpLighter(0.08f), faceColor.gpDarker(0.12f))
@@ -1487,7 +1497,7 @@ private fun GamepadFaceButton(
 
                 // Flat face bevel edge highlight
                 drawCircle(
-                    color = Color.White.copy(alpha = if (isPressed) 0.05f else 0.15f),
+                    color = gp.highlight(if (isPressed) 0.35f else 1f),
                     radius = faceR - 0.5.dp.toPx(),
                     center = Offset(r, r - faceOffset),
                     style = Stroke(width = 0.8.dp.toPx())
@@ -1495,7 +1505,7 @@ private fun GamepadFaceButton(
 
                 // Bezel shadow
                 drawCircle(
-                    color = Color.Black.copy(alpha = if (isPressed) 0.10f else 0.25f),
+                    color = gp.shadow(if (isPressed) 0.10f else 0.25f),
                     radius = faceR,
                     center = Offset(r, r - faceOffset),
                     style = Stroke(width = 0.8.dp.toPx())
@@ -1669,7 +1679,9 @@ private fun GamepadCenterButton(
     onPress: (Int) -> Unit,
     onRelease: (Int) -> Unit
 ) {
+    val gp = rememberControlSurfaceColors()
     var isPressed by remember { mutableStateOf(false) }
+    val iconColor = if (isPressed) gp.labelPressed else gp.label
     val pressOffsetY by animateDpAsState(
         targetValue = if (isPressed) 0.6.dp else 0.dp,
         animationSpec = tween(durationMillis = 65, easing = LinearEasing),
@@ -1692,8 +1704,8 @@ private fun GamepadCenterButton(
             modifier = Modifier
                 .fillMaxSize()
                 .clip(CircleShape)
-                .background(Color(0xFF1B1B1C))
-                .border(0.8.dp, Color.Black.copy(alpha = 0.25f), CircleShape)
+                .background(gp.well)
+                .border(0.8.dp, gp.shadow(0.25f), CircleShape)
         )
 
         // Button Cap (Flat Disk)
@@ -1713,7 +1725,7 @@ private fun GamepadCenterButton(
                 ),
             contentAlignment = Alignment.Center
         ) {
-            val baseColor = Color(0xFF333336)
+            val baseColor = gp.capTop
             Canvas(modifier = Modifier.fillMaxSize()) {
                 val r = size.width / 2f
 
@@ -1727,13 +1739,13 @@ private fun GamepadCenterButton(
 
                 // 3D side edge
                 drawCircle(
-                    color = Color(0xFF1F1F21),
+                    color = gp.capEdge,
                     radius = edgeR,
                     center = Offset(r, r + edgeOffset / 2f)
                 )
 
                 // Top face
-                val faceColor = if (isPressed) Color(0xFF232325) else baseColor
+                val faceColor = if (isPressed) gp.capPressedTop else baseColor
                 drawCircle(
                     brush = Brush.verticalGradient(
                         colors = listOf(faceColor.gpLighter(0.08f), faceColor.gpDarker(0.12f))
@@ -1746,9 +1758,9 @@ private fun GamepadCenterButton(
                 drawCircle(
                     brush = Brush.verticalGradient(
                         colors = if (isPressed) {
-                            listOf(Color.White.copy(alpha = 0.05f), Color.Transparent)
+                            listOf(gp.highlight(0.35f), Color.Transparent)
                         } else {
-                            listOf(Color.White.copy(alpha = 0.15f), Color.Transparent)
+                            listOf(gp.highlight, Color.Transparent)
                         }
                     ),
                     radius = faceR - 0.5.dp.toPx(),
@@ -1772,14 +1784,14 @@ private fun GamepadCenterButton(
                         
                         // Back window
                         drawRect(
-                            color = Color.White.copy(alpha = 0.75f),
+                            color = iconColor,
                             topLeft = Offset(w * 0.25f, 0f),
                             size = androidx.compose.ui.geometry.Size(w * 0.75f, h * 0.75f),
                             style = Stroke(strokeW)
                         )
                         // Front window
                         drawRect(
-                            color = Color.White.copy(alpha = 0.75f),
+                            color = iconColor,
                             topLeft = Offset(0f, h * 0.25f),
                             size = androidx.compose.ui.geometry.Size(w * 0.75f, h * 0.75f),
                             style = Stroke(strokeW)
@@ -1789,7 +1801,7 @@ private fun GamepadCenterButton(
                     Icon(
                         imageVector = Icons.Default.IosShare,
                         contentDescription = "Share",
-                        tint = Color.White.copy(alpha = 0.75f),
+                        tint = iconColor,
                         modifier = Modifier.size(11.dp)
                     )
                 } else {
@@ -1803,7 +1815,7 @@ private fun GamepadCenterButton(
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .height(1.6.dp)
-                                    .background(Color.White.copy(alpha = 0.75f))
+                                    .background(iconColor)
                             )
                         }
                     }
@@ -1818,7 +1830,9 @@ private fun GamepadShareButton(
     onPress: (Int) -> Unit,
     onRelease: (Int) -> Unit
 ) {
+    val gp = rememberControlSurfaceColors()
     var isPressed by remember { mutableStateOf(false) }
+    val iconColor = if (isPressed) gp.labelPressed else gp.label
     val pressOffsetY by animateDpAsState(
         targetValue = if (isPressed) 0.6.dp else 0.dp,
         animationSpec = tween(durationMillis = 65, easing = LinearEasing),
@@ -1843,8 +1857,8 @@ private fun GamepadShareButton(
         Box(
             modifier = Modifier
                 .fillMaxSize()
-                .background(Color(0xFF1B1B1C), outerShape)
-                .border(1.2.dp, Color.Black.copy(alpha = 0.5f), outerShape)
+                .background(gp.well, outerShape)
+                .border(1.2.dp, gp.shadow(0.5f), outerShape)
         )
 
         // Button Cap (Flat Disk 3D) - Gap clearance reduced to 1.5.dp
@@ -1865,7 +1879,7 @@ private fun GamepadShareButton(
                 ),
             contentAlignment = Alignment.Center
         ) {
-            val baseColor = Color(0xFF333336)
+            val baseColor = gp.capTop
             Canvas(modifier = Modifier.fillMaxSize()) {
                 val w = size.width
                 val h = size.height
@@ -1876,14 +1890,14 @@ private fun GamepadShareButton(
 
                 // 3D side edge
                 drawRoundRect(
-                    color = Color(0xFF1F1F21),
+                    color = gp.capEdge,
                     topLeft = Offset(0f, edgeOffset),
                     size = androidx.compose.ui.geometry.Size(w, h - edgeOffset),
                     cornerRadius = androidx.compose.ui.geometry.CornerRadius(6.dp.toPx(), 6.dp.toPx())
                 )
 
                 // Top face
-                val faceColor = if (isPressed) Color(0xFF232325) else baseColor
+                val faceColor = if (isPressed) gp.capPressedTop else baseColor
                 drawRoundRect(
                     brush = Brush.verticalGradient(
                         colors = listOf(faceColor.gpLighter(0.08f), faceColor.gpDarker(0.12f))
@@ -1895,7 +1909,7 @@ private fun GamepadShareButton(
 
                 // Bevel highlight
                 drawRoundRect(
-                    color = Color.White.copy(alpha = if (isPressed) 0.05f else 0.15f),
+                    color = gp.highlight(if (isPressed) 0.35f else 1f),
                     topLeft = Offset(0.5.dp.toPx(), faceOffset + 0.5.dp.toPx()),
                     size = androidx.compose.ui.geometry.Size(w - 1.dp.toPx(), h - maxOffset - 1.dp.toPx()),
                     cornerRadius = androidx.compose.ui.geometry.CornerRadius(5.5.dp.toPx(), 5.5.dp.toPx()),
@@ -1912,7 +1926,7 @@ private fun GamepadShareButton(
                 Icon(
                     imageVector = Icons.Default.IosShare,
                     contentDescription = "Share",
-                    tint = Color.White.copy(alpha = 0.75f),
+                    tint = iconColor,
                     modifier = Modifier.size(12.dp)
                 )
             }
@@ -1926,6 +1940,7 @@ private fun XboxLogoGuideButton(
     onPress: (Int) -> Unit,
     onRelease: (Int) -> Unit
 ) {
+    val gp = rememberControlSurfaceColors()
     var isPressed by remember { mutableStateOf(false) }
     val pressOffsetY by animateDpAsState(
         targetValue = if (isPressed) 0.6.dp else 0.dp,
@@ -1949,8 +1964,8 @@ private fun XboxLogoGuideButton(
             modifier = Modifier
                 .fillMaxSize()
                 .clip(CircleShape)
-                .background(Color(0xFF1B1B1C))
-                .border(0.8.dp, Color.Black.copy(alpha = 0.25f), CircleShape)
+                .background(gp.well)
+                .border(0.8.dp, gp.shadow(0.25f), CircleShape)
         )
 
         // 2. Button Cap (Flat Disk)
@@ -1969,7 +1984,7 @@ private fun XboxLogoGuideButton(
                     onPressedStateChange = { isPressed = it }
                 )
         ) {
-            val baseColor = Color(0xFF333336)
+            val baseColor = gp.capTop
             Canvas(modifier = Modifier.fillMaxSize()) {
                 val r = size.width / 2f
 
@@ -1983,13 +1998,13 @@ private fun XboxLogoGuideButton(
 
                 // 3D side edge
                 drawCircle(
-                    color = Color(0xFF1F1F21),
+                    color = gp.capEdge,
                     radius = edgeR,
                     center = Offset(r, r + edgeOffset / 2f)
                 )
 
                 // Top face
-                val faceColor = if (isPressed) Color(0xFF232325) else baseColor
+                val faceColor = if (isPressed) gp.capPressedTop else baseColor
                 drawCircle(
                     brush = Brush.verticalGradient(
                         colors = listOf(faceColor.gpLighter(0.08f), faceColor.gpDarker(0.12f))
@@ -2002,9 +2017,9 @@ private fun XboxLogoGuideButton(
                 drawCircle(
                     brush = Brush.verticalGradient(
                         colors = if (isPressed) {
-                            listOf(Color.White.copy(alpha = 0.05f), Color.Transparent)
+                            listOf(gp.highlight(0.35f), Color.Transparent)
                         } else {
-                            listOf(Color.White.copy(alpha = 0.15f), Color.Transparent)
+                            listOf(gp.highlight, Color.Transparent)
                         }
                     ),
                     radius = faceR - 0.5.dp.toPx(),
@@ -2024,7 +2039,7 @@ private fun XboxLogoGuideButton(
                 Icon(
                     painter = painterResource(id = R.drawable.ic_launcher_foreground),
                     contentDescription = "Logo",
-                    tint = Color.White.copy(alpha = 0.85f),
+                    tint = if (isPressed) gp.labelPressed else gp.accent,
                     modifier = Modifier.size(32.dp)
                 )
             }
@@ -2038,6 +2053,7 @@ private fun PlayStationLogoButton(
     onPress: (Int) -> Unit,
     onRelease: (Int) -> Unit
 ) {
+    val gp = rememberControlSurfaceColors()
     var isPressed by remember { mutableStateOf(false) }
     val pressOffsetY by animateDpAsState(
         targetValue = if (isPressed) 0.6.dp else 0.dp,
@@ -2061,8 +2077,8 @@ private fun PlayStationLogoButton(
             modifier = Modifier
                 .fillMaxSize()
                 .clip(CircleShape)
-                .background(Color(0xFF1B1B1C))
-                .border(0.8.dp, Color.Black.copy(alpha = 0.25f), CircleShape)
+                .background(gp.well)
+                .border(0.8.dp, gp.shadow(0.25f), CircleShape)
         )
 
         // Button Cap (Flat Disk)
@@ -2081,7 +2097,7 @@ private fun PlayStationLogoButton(
                     onPressedStateChange = { isPressed = it }
                 )
         ) {
-            val baseColor = Color(0xFF333336)
+            val baseColor = gp.capTop
             Canvas(modifier = Modifier.fillMaxSize()) {
                 val r = size.width / 2f
 
@@ -2095,13 +2111,13 @@ private fun PlayStationLogoButton(
 
                 // 3D side edge
                 drawCircle(
-                    color = Color(0xFF1F1F21),
+                    color = gp.capEdge,
                     radius = edgeR,
                     center = Offset(r, r + edgeOffset / 2f)
                 )
 
                 // Top face
-                val faceColor = if (isPressed) Color(0xFF232325) else baseColor
+                val faceColor = if (isPressed) gp.capPressedTop else baseColor
                 drawCircle(
                     brush = Brush.verticalGradient(
                         colors = listOf(faceColor.gpLighter(0.08f), faceColor.gpDarker(0.12f))
@@ -2114,9 +2130,9 @@ private fun PlayStationLogoButton(
                 drawCircle(
                     brush = Brush.verticalGradient(
                         colors = if (isPressed) {
-                            listOf(Color.White.copy(alpha = 0.05f), Color.Transparent)
+                            listOf(gp.highlight(0.35f), Color.Transparent)
                         } else {
-                            listOf(Color.White.copy(alpha = 0.15f), Color.Transparent)
+                            listOf(gp.highlight, Color.Transparent)
                         }
                     ),
                     radius = faceR - 0.5.dp.toPx(),
@@ -2136,7 +2152,7 @@ private fun PlayStationLogoButton(
                 Icon(
                     painter = painterResource(id = R.drawable.ic_launcher_foreground),
                     contentDescription = "Logo",
-                    tint = Color.White.copy(alpha = 0.85f),
+                    tint = if (isPressed) gp.labelPressed else gp.accent,
                     modifier = Modifier.size(32.dp)
                 )
             }
@@ -2153,6 +2169,7 @@ private fun GamepadStickHoldButton(
     onToggle: (Boolean) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val gp = rememberControlSurfaceColors()
     val pressOffsetY by animateDpAsState(
         targetValue = if (isHeld) 0.6.dp else 0.dp,
         animationSpec = tween(durationMillis = 65, easing = LinearEasing),
@@ -2175,8 +2192,8 @@ private fun GamepadStickHoldButton(
             modifier = Modifier
                 .fillMaxSize()
                 .clip(CircleShape)
-                .background(Color(0xFF171718))
-                .border(0.8.dp, Color.Black.copy(alpha = 0.5f), CircleShape)
+                .background(gp.well)
+                .border(0.8.dp, gp.shadow(0.5f), CircleShape)
         )
 
         // 2. 3D Circular Button Cap
@@ -2192,7 +2209,7 @@ private fun GamepadStickHoldButton(
                 .clickable { onToggle(!isHeld) },
             contentAlignment = Alignment.Center
         ) {
-            val baseColor = if (isHeld) Color(0xFF3A3A3E) else Color(0xFF28282B)
+            val baseColor = if (isHeld) gp.accentContainer else gp.capBottom
             Canvas(modifier = Modifier.fillMaxSize()) {
                 val r = size.width / 2f
 
@@ -2205,7 +2222,7 @@ private fun GamepadStickHoldButton(
 
                 // 3D Side shadow edge
                 drawCircle(
-                    color = Color(0xFF161618),
+                    color = gp.capEdge,
                     radius = edgeR,
                     center = Offset(r, r + edgeOffset / 2f)
                 )
@@ -2221,7 +2238,7 @@ private fun GamepadStickHoldButton(
 
                 // Top bevel highlight / active border
                 drawCircle(
-                    color = if (isHeld) Color(0xFFE5E5EA) else Color.White.copy(alpha = 0.15f),
+                    color = if (isHeld) gp.accent else gp.highlight,
                     radius = faceR - 0.5.dp.toPx(),
                     center = Offset(r, r - faceOffset),
                     style = Stroke(width = if (isHeld) 1.dp.toPx() else 0.8.dp.toPx())
@@ -2231,7 +2248,7 @@ private fun GamepadStickHoldButton(
             // Centered Text "L3" / "R3"
             Text(
                 text = label,
-                color = if (isHeld) Color(0xFFFFFFFF) else Color.White.copy(alpha = 0.70f),
+                color = if (isHeld) gp.onAccentContainer else gp.label,
                 fontSize = 9.5.sp,
                 fontWeight = FontWeight.ExtraBold,
                 fontFamily = FontFamily.SansSerif,
@@ -2251,6 +2268,7 @@ private fun GamepadAnalogStick(
     onStickClick: () -> Unit,
     onToggleHold: ((Boolean) -> Unit)? = null
 ) {
+    val gp = rememberControlSurfaceColors()
     val clicked = isClicked()
     val held = isHeld()
     var stickOffsetX by remember { mutableFloatStateOf(0f) }
@@ -2341,14 +2359,14 @@ private fun GamepadAnalogStick(
             // Neumorphic outer lip molding (top-left highlight, bottom-right shadow)
             drawCircle(
                 brush = Brush.linearGradient(
-                    colors = listOf(Color(0xFF3B3B3E), Color(0xFF1B1B1C)),
+                    colors = listOf(gp.capTop, gp.well),
                     start = Offset(0f, 0f),
                     end = Offset(w, w)
                 ),
                 radius = w / 2f + 3.dp.toPx()
             )
             drawCircle(
-                color = Color(0xFF121213),
+                color = gp.wellRim,
                 radius = w / 2f + 3.dp.toPx(),
                 style = Stroke(width = 0.8.dp.toPx())
             )
@@ -2356,14 +2374,14 @@ private fun GamepadAnalogStick(
             // Recessed well background
             drawCircle(
                 brush = Brush.verticalGradient(
-                    colors = listOf(Color(0xFF141416), Color(0xFF222224))
+                    colors = listOf(gp.well, gp.capEdge)
                 ),
                 radius = w / 2f - 1.dp.toPx()
             )
             
             // Soft inner shadow ring inside the well for depth
             drawCircle(
-                color = Color.Black.copy(alpha = 0.45f),
+                color = gp.shadow(0.45f),
                 radius = w / 2f - 2.dp.toPx(),
                 style = Stroke(width = 3.dp.toPx())
             )
@@ -2377,7 +2395,7 @@ private fun GamepadAnalogStick(
         ) {
             drawCircle(
                 brush = Brush.radialGradient(
-                    colors = listOf(Color.Black.copy(alpha = 0.6f), Color.Black.copy(alpha = 0.2f), Color.Transparent),
+                    colors = listOf(gp.shadow(0.6f), gp.shadow(0.2f), Color.Transparent),
                     center = Offset(size.width / 2f, size.height / 2f),
                     radius = size.width / 2f
                 ),
@@ -2405,13 +2423,13 @@ private fun GamepadAnalogStick(
                 
                 // Outer base edge (very dark ring)
                 drawCircle(
-                    color = Color(0xFF161719),
+                    color = gp.wellRim,
                     radius = r
                 )
                 
                 // Outer ring highlight/shadow
                 drawCircle(
-                    color = Color.White.copy(alpha = 0.08f),
+                    color = gp.highlight(0.55f),
                     radius = r - 0.5.dp.toPx(),
                     style = Stroke(width = 1.dp.toPx())
                 )
@@ -2438,14 +2456,14 @@ private fun GamepadAnalogStick(
                 drawPath(
                     path = ringPath,
                     brush = Brush.verticalGradient(
-                        colors = listOf(Color(0xFF38383B), Color(0xFF232325))
+                        colors = listOf(gp.capTop, gp.capBottom)
                     )
                 )
                 
                 // Flatter recessed cup gradient (no radial concentration in center)
                 val cupRadius = r * 0.58f
                 val concaveBrush = Brush.verticalGradient(
-                    colors = listOf(Color(0xFF1B1C1E), Color(0xFF292A2E))
+                    colors = listOf(gp.capEdge, gp.capBottom)
                 )
                 
                 // 3D Inner cup recessed background
@@ -2457,7 +2475,7 @@ private fun GamepadAnalogStick(
                 
                 // Bevel ring border (simple dark separator)
                 drawCircle(
-                    color = Color(0xFF141517),
+                    color = gp.wellRim,
                     radius = cupRadius,
                     center = Offset(cupCx, cupCy),
                     style = Stroke(width = 1.2.dp.toPx())
@@ -2465,7 +2483,7 @@ private fun GamepadAnalogStick(
                 
                 // Bevel highlight (simple soft outline ring)
                 drawCircle(
-                    color = Color.White.copy(alpha = 0.09f),
+                    color = if (clicked) gp.accent else gp.highlight(0.6f),
                     radius = cupRadius - 0.6.dp.toPx(),
                     center = Offset(cupCx, cupCy),
                     style = Stroke(width = 0.8.dp.toPx())
@@ -2494,6 +2512,7 @@ private fun GamepadDpad(
     onDpadChange: (Int) -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val gp = rememberControlSurfaceColors()
     var activeDirection by remember { mutableIntStateOf(0) }
     val currentOnDpadChange by rememberUpdatedState(onDpadChange)
     
@@ -2586,18 +2605,18 @@ private fun GamepadDpad(
             // Fill plus-shaped well
             drawPath(
                 path = wellPath,
-                color = Color(0xFF1B1B1C)
+                color = gp.well
             )
             // Well border
             drawPath(
                 path = wellPath,
-                color = Color.Black.copy(alpha = 0.5f),
+                color = gp.shadow(0.5f),
                 style = Stroke(width = 1.2.dp.toPx())
             )
             // Inner shadow for depth
             drawPath(
                 path = wellPath,
-                color = Color.Black.copy(alpha = 0.2f),
+                color = gp.shadow(0.2f),
                 style = Stroke(width = 3.dp.toPx())
             )
         }
@@ -2650,7 +2669,7 @@ private fun GamepadDpad(
             }) {
                 drawPath(
                     path = crossPath,
-                    color = Color.Black.copy(alpha = 0.4f)
+                    color = gp.shadow(0.4f)
                 )
             }
         }
@@ -2703,7 +2722,7 @@ private fun GamepadDpad(
 
                 // Draw cross body (matte vertical gradient remains static/unpressed color on tap)
                 val bodyBrush = Brush.verticalGradient(
-                    colors = listOf(Color(0xFF38383B), Color(0xFF2D2D30))
+                    colors = listOf(gp.capTop, gp.capBottom)
                 )
                 drawPath(
                     path = crossPath,
@@ -2712,7 +2731,7 @@ private fun GamepadDpad(
 
                 // Beveled highlight stroke remains static/unpressed on tap
                 val highlightBrush = Brush.verticalGradient(
-                    colors = listOf(Color.White.copy(alpha = 0.15f), Color.Transparent)
+                    colors = listOf(gp.highlight, Color.Transparent)
                 )
                 drawPath(
                     path = crossPath,
@@ -2722,14 +2741,14 @@ private fun GamepadDpad(
                 // Outer dark border stroke remains static on tap
                 drawPath(
                     path = crossPath,
-                    color = Color.Black.copy(alpha = 0.35f),
+                    color = gp.shadow(0.35f),
                     style = Stroke(width = 1.2.dp.toPx())
                 )
 
                 // Central depressed dish (concave look)
                 drawCircle(
                     brush = Brush.radialGradient(
-                        colors = listOf(Color(0xFF1B1B1D), Color(0xFF2C2C30)),
+                        colors = listOf(gp.capEdge, gp.capBottom),
                         center = Offset(cx, cy),
                         radius = barW / 1.5f
                     ),
@@ -2737,14 +2756,14 @@ private fun GamepadDpad(
                 )
                 // Soft outline for dish
                 drawCircle(
-                    color = Color.White.copy(alpha = 0.04f),
+                    color = gp.highlight(0.3f),
                     radius = barW / 1.8f,
                     style = Stroke(width = 0.8.dp.toPx())
                 )
 
                 // Elegant, thin directional markers/arrows (static subtle white/grey)
                 val arrowColor = { directionBit: Int ->
-                    if (activeDirection and directionBit != 0) Color.White.copy(alpha = 0.45f) else Color.White.copy(alpha = 0.15f)
+                    if (activeDirection and directionBit != 0) gp.accent else gp.label.copy(alpha = 0.35f)
                 }
                 val arrowDist = w * 0.34f
                 val arrowSize = w * 0.04f
@@ -2897,7 +2916,7 @@ private fun EditableComponentWrapper(
                 Icon(
                     imageVector = Icons.Default.OpenInFull,
                     contentDescription = "Resize",
-                    tint = Color.White,
+                    tint = MaterialTheme.colorScheme.onPrimary,
                     modifier = Modifier.size(11.dp)
                 )
             }

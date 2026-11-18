@@ -1,4 +1,5 @@
 package dev.arnv.bluke.ui
+import dev.arnv.bluke.ui.theme.MyApplicationTheme
 import android.annotation.SuppressLint
 import android.app.Activity
 import android.util.Log
@@ -859,7 +860,9 @@ fun HomeScreen(
                                     caseBrush = caseBrush,
                                 )
                             }
-                            2 -> {
+                            // Gamepad and multimedia use the full dark palette of the app
+                            // (wallpaper colors or accent), not just its primary color.
+                            2 -> MyApplicationTheme(forceDark = true) {
                                 GamepadView(
                                     btManager = btManager,
                                     onClose = { isKeyboardActive = false },
@@ -871,7 +874,7 @@ fun HomeScreen(
                                     caseBrush = caseBrush
                                 )
                             }
-                            4 -> {
+                            4 -> MyApplicationTheme(forceDark = true) {
                                 MediaPresentationView(
                                     btManager = btManager,
                                     onClose = { isKeyboardActive = false },

@@ -47,6 +47,7 @@ import androidx.compose.material.icons.filled.SkipPrevious
 import androidx.compose.material.icons.filled.Speed
 import androidx.compose.material.icons.filled.Vibration
 import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -83,9 +84,49 @@ import dev.arnv.bluke.bluetooth.ConsumerControl
 import kotlin.math.abs
 import kotlin.math.min
 
-private val RemoteCanvasColor = Color(0xFF1D1D1D)
-private val RemoteButtonColor = Color(0xFF333333)
-private val RemoteContentColor = Color(0xFFF4F4F6)
+/** Which Material color role a remote button is drawn in; groups related buttons by color. */
+private enum class RemoteTone {
+    /** Keyboard keys: Esc, Home, PgUp and the like. */
+    NEUTRAL,
+    /** Arrow keys and mouse buttons. */
+    NAVIGATION,
+    VOLUME,
+    /** Previous and next track. */
+    TRANSPORT,
+    /** The primary action of a group: Play/Pause, OK. */
+    EMPHASIS,
+    /** Previous and next slide. */
+    SLIDE,
+}
+
+@Composable
+private fun RemoteTone.containerColor(): Color {
+    val scheme = MaterialTheme.colorScheme
+    val colors = rememberControlSurfaceColors()
+    val dark = colors.isDark
+    return when (this) {
+        RemoteTone.NEUTRAL -> if (dark) scheme.surfaceContainerHigh else scheme.surfaceContainerLowest
+        RemoteTone.NAVIGATION -> if (dark) scheme.surfaceContainerHighest else scheme.surfaceContainerLowest
+        RemoteTone.VOLUME -> scheme.secondaryContainer
+        RemoteTone.TRANSPORT -> colors.accentContainer
+        RemoteTone.EMPHASIS -> colors.accent
+        RemoteTone.SLIDE -> scheme.tertiaryContainer
+    }
+}
+
+@Composable
+private fun RemoteTone.contentColor(): Color {
+    val scheme = MaterialTheme.colorScheme
+    val colors = rememberControlSurfaceColors()
+    return when (this) {
+        RemoteTone.NEUTRAL -> scheme.onSurface
+        RemoteTone.NAVIGATION -> scheme.onSurfaceVariant
+        RemoteTone.VOLUME -> scheme.onSecondaryContainer
+        RemoteTone.TRANSPORT -> colors.onAccentContainer
+        RemoteTone.EMPHASIS -> colors.onAccent
+        RemoteTone.SLIDE -> scheme.onTertiaryContainer
+    }
+}
 
 internal enum class MultimediaPosture {
     LANDSCAPE,
@@ -262,7 +303,7 @@ internal fun MediaPresentationView(
     }
     val rootModifier = Modifier
         .fillMaxSize()
-        .background(RemoteCanvasColor)
+        .background(rememberControlSurfaceColors().casing)
         .testTag("media_presentation_view_root")
 
     if (resolvedPosture == MultimediaPosture.UPRIGHT) {
@@ -490,7 +531,7 @@ private fun MultimediaButtonDeck(
                 horizontalArrangement = Arrangement.Center,
             ) {
                 MultimediaActionButton(
-                    RemoteAction.Key("Up", Icons.Default.KeyboardArrowUp, KeyboardLayouts.KEY_UP),
+                    RemoteAction.Key("Up", Icons.Default.KeyboardArrowUp, KeyboardLayouts.KEY_UP, RemoteTone.NAVIGATION),
                     btManager,
                     buttonWidth,
                     buttonHeight,
@@ -499,14 +540,14 @@ private fun MultimediaButtonDeck(
             }
             Row(horizontalArrangement = Arrangement.spacedBy(horizontalGap)) {
                 MultimediaActionButton(
-                    RemoteAction.Key("Left", Icons.AutoMirrored.Filled.KeyboardArrowLeft, KeyboardLayouts.KEY_LEFT),
+                    RemoteAction.Key("Left", Icons.AutoMirrored.Filled.KeyboardArrowLeft, KeyboardLayouts.KEY_LEFT, RemoteTone.NAVIGATION),
                     btManager,
                     buttonWidth,
                     buttonHeight,
                     triggerVibration = triggerVibration,
                 )
                 MultimediaActionButton(
-                    RemoteAction.Key("OK", null, KeyboardLayouts.KEY_ENTER),
+                    RemoteAction.Key("OK", null, KeyboardLayouts.KEY_ENTER, RemoteTone.EMPHASIS),
                     btManager,
                     buttonWidth,
                     buttonHeight,
@@ -514,7 +555,7 @@ private fun MultimediaButtonDeck(
                     triggerVibration,
                 )
                 MultimediaActionButton(
-                    RemoteAction.Key("Right", Icons.AutoMirrored.Filled.KeyboardArrowRight, KeyboardLayouts.KEY_RIGHT),
+                    RemoteAction.Key("Right", Icons.AutoMirrored.Filled.KeyboardArrowRight, KeyboardLayouts.KEY_RIGHT, RemoteTone.NAVIGATION),
                     btManager,
                     buttonWidth,
                     buttonHeight,
@@ -526,7 +567,7 @@ private fun MultimediaButtonDeck(
                 horizontalArrangement = Arrangement.Center,
             ) {
                 MultimediaActionButton(
-                    RemoteAction.Key("Down", Icons.Default.KeyboardArrowDown, KeyboardLayouts.KEY_DOWN),
+                    RemoteAction.Key("Down", Icons.Default.KeyboardArrowDown, KeyboardLayouts.KEY_DOWN, RemoteTone.NAVIGATION),
                     btManager,
                     buttonWidth,
                     buttonHeight,
@@ -646,13 +687,13 @@ private fun SlideNavigationColumn(
 ) {
     Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(gap)) {
         MultimediaActionButton(
-            RemoteAction.Key("Previous slide", Icons.Default.KeyboardArrowUp, KeyboardLayouts.KEY_PAGEUP),
+            RemoteAction.Key("Previous slide", Icons.Default.KeyboardArrowUp, KeyboardLayouts.KEY_PAGEUP, RemoteTone.SLIDE),
             btManager,
             Modifier.weight(1f).fillMaxWidth(),
             triggerVibration = triggerVibration,
         )
         MultimediaActionButton(
-            RemoteAction.Key("Next slide", Icons.Default.KeyboardArrowDown, KeyboardLayouts.KEY_PAGEDOWN),
+            RemoteAction.Key("Next slide", Icons.Default.KeyboardArrowDown, KeyboardLayouts.KEY_PAGEDOWN, RemoteTone.SLIDE),
             btManager,
             Modifier.weight(1f).fillMaxWidth(),
             triggerVibration = triggerVibration,
@@ -669,13 +710,13 @@ private fun SlideNavigationRow(
 ) {
     Row(modifier = modifier, horizontalArrangement = Arrangement.spacedBy(gap)) {
         MultimediaActionButton(
-            RemoteAction.Key("Previous slide", Icons.AutoMirrored.Filled.KeyboardArrowLeft, KeyboardLayouts.KEY_PAGEUP),
+            RemoteAction.Key("Previous slide", Icons.AutoMirrored.Filled.KeyboardArrowLeft, KeyboardLayouts.KEY_PAGEUP, RemoteTone.SLIDE),
             btManager,
             Modifier.weight(1f).fillMaxHeight(),
             triggerVibration = triggerVibration,
         )
         MultimediaActionButton(
-            RemoteAction.Key("Next slide", Icons.AutoMirrored.Filled.KeyboardArrowRight, KeyboardLayouts.KEY_PAGEDOWN),
+            RemoteAction.Key("Next slide", Icons.AutoMirrored.Filled.KeyboardArrowRight, KeyboardLayouts.KEY_PAGEDOWN, RemoteTone.SLIDE),
             btManager,
             Modifier.weight(1f).fillMaxHeight(),
             triggerVibration = triggerVibration,
@@ -727,8 +768,8 @@ private fun MouseHoldButton(
         showLabel = false,
         cornerRadius = 8.dp,
         showBorder = false,
-        containerColor = RemoteButtonColor,
-        contentColor = RemoteContentColor,
+        containerColor = RemoteTone.NAVIGATION.containerColor(),
+        contentColor = RemoteTone.NAVIGATION.contentColor(),
         onPressFeedback = { triggerVibration(15) },
         onPressedChange = { pressed ->
             btManager.sendMouseReport(if (pressed) mask.toByte() else 0, 0, 0, 0)
@@ -767,8 +808,8 @@ private fun MultimediaActionButton(
         contentRotation = contentRotation,
         cornerRadius = 8.dp,
         showBorder = false,
-        containerColor = RemoteButtonColor,
-        contentColor = RemoteContentColor,
+        containerColor = action.tone.containerColor(),
+        contentColor = action.tone.contentColor(),
         onPressFeedback = { triggerVibration(15) },
         onPressedChange = { pressed ->
             when (action) {
@@ -784,30 +825,33 @@ private fun MultimediaActionButton(
 private sealed interface RemoteAction {
     val label: String
     val icon: ImageVector?
+    val tone: RemoteTone
 
     data class Consumer(
         override val label: String,
         override val icon: ImageVector,
         val control: ConsumerControl,
+        override val tone: RemoteTone = RemoteTone.NEUTRAL,
     ) : RemoteAction
 
     data class Key(
         override val label: String,
         override val icon: ImageVector?,
         val keyCode: Int,
+        override val tone: RemoteTone = RemoteTone.NEUTRAL,
     ) : RemoteAction
 }
 
-private val muteAction = RemoteAction.Consumer("Mute", Icons.AutoMirrored.Filled.VolumeOff, ConsumerControl.MUTE)
-private val volumeUpAction = RemoteAction.Consumer("Volume up", Icons.AutoMirrored.Filled.VolumeUp, ConsumerControl.VOLUME_UP)
-private val volumeDownAction = RemoteAction.Consumer("Volume down", Icons.AutoMirrored.Filled.VolumeDown, ConsumerControl.VOLUME_DOWN)
-private val previousAction = RemoteAction.Consumer("Previous track", Icons.Default.SkipPrevious, ConsumerControl.PREVIOUS_TRACK)
-private val playAction = RemoteAction.Consumer("Play or pause", Icons.Default.PlayArrow, ConsumerControl.PLAY_PAUSE)
-private val nextAction = RemoteAction.Consumer("Next track", Icons.Default.SkipNext, ConsumerControl.NEXT_TRACK)
+private val muteAction = RemoteAction.Consumer("Mute", Icons.AutoMirrored.Filled.VolumeOff, ConsumerControl.MUTE, RemoteTone.VOLUME)
+private val volumeUpAction = RemoteAction.Consumer("Volume up", Icons.AutoMirrored.Filled.VolumeUp, ConsumerControl.VOLUME_UP, RemoteTone.VOLUME)
+private val volumeDownAction = RemoteAction.Consumer("Volume down", Icons.AutoMirrored.Filled.VolumeDown, ConsumerControl.VOLUME_DOWN, RemoteTone.VOLUME)
+private val previousAction = RemoteAction.Consumer("Previous track", Icons.Default.SkipPrevious, ConsumerControl.PREVIOUS_TRACK, RemoteTone.TRANSPORT)
+private val playAction = RemoteAction.Consumer("Play or pause", Icons.Default.PlayArrow, ConsumerControl.PLAY_PAUSE, RemoteTone.EMPHASIS)
+private val nextAction = RemoteAction.Consumer("Next track", Icons.Default.SkipNext, ConsumerControl.NEXT_TRACK, RemoteTone.TRANSPORT)
 // Upright content is rotated -90 degrees. Use the opposite source glyphs so the rendered
 // Previous/Next symbols retain their intended visual direction without swapping HID commands.
-private val uprightPreviousAction = RemoteAction.Consumer("Previous track", Icons.Default.SkipNext, ConsumerControl.PREVIOUS_TRACK)
-private val uprightNextAction = RemoteAction.Consumer("Next track", Icons.Default.SkipPrevious, ConsumerControl.NEXT_TRACK)
+private val uprightPreviousAction = RemoteAction.Consumer("Previous track", Icons.Default.SkipNext, ConsumerControl.PREVIOUS_TRACK, RemoteTone.TRANSPORT)
+private val uprightNextAction = RemoteAction.Consumer("Next track", Icons.Default.SkipPrevious, ConsumerControl.NEXT_TRACK, RemoteTone.TRANSPORT)
 private val escapeAction = RemoteAction.Key("Esc", null, KeyboardLayouts.KEY_ESC)
 private val homeAction = RemoteAction.Key("Home", null, KeyboardLayouts.KEY_HOME)
 private val endAction = RemoteAction.Key("End", null, KeyboardLayouts.KEY_END)
@@ -842,26 +886,28 @@ private fun MultimediaUprightBar(
     isVibrationEnabled: Boolean,
     onToggleVibration: () -> Unit,
 ) {
+    val toolbarColors = rememberControlSurfaceColors().toolbar
+    val content = toolbarColors.content
     Column(
         modifier = Modifier
             .width(56.dp)
             .fillMaxHeight()
-            .background(Color.Black.copy(alpha = 0.45f))
+            .background(toolbarColors.bar)
             .padding(horizontal = 6.dp, vertical = 8.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         UprightToolbarButton("Close Multimedia", onClose) {
-            Icon(Icons.Default.Close, null, tint = Color.White, modifier = Modifier.size(20.dp))
+            Icon(Icons.Default.Close, null, tint = content, modifier = Modifier.size(20.dp))
         }
-        UprightToolbarButton("Switch input mode", onModeChange) {
-            Icon(Icons.Default.Mouse, null, tint = Color.White, modifier = Modifier.size(20.dp))
+        UprightToolbarButton("Switch input mode", onModeChange, containerColor = toolbarColors.accentButton) {
+            Icon(Icons.Default.Mouse, null, tint = toolbarColors.onAccentButton, modifier = Modifier.size(20.dp))
         }
         Box(
             Modifier
                 .size(10.dp)
                 .clip(CircleShape)
-                .background(if (isConnected) Color(0xFF39FF14) else Color(0xFFFF9800))
+                .background(if (isConnected) SessionToolbarDefaults.LedOn else SessionToolbarDefaults.LedOff)
                 .semantics {
                     contentDescription = if (isConnected) "Host connected" else "Host offline"
                 },
@@ -873,8 +919,8 @@ private fun MultimediaUprightBar(
                 horizontalArrangement = Arrangement.spacedBy(2.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Icon(Icons.Default.Speed, null, tint = Color.White, modifier = Modifier.size(14.dp))
-                Text("${sensitivity}x", color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                Icon(Icons.Default.Speed, null, tint = content, modifier = Modifier.size(14.dp))
+                Text("${sensitivity}x", color = content, fontSize = 10.sp, fontWeight = FontWeight.Bold)
             }
         }
         UprightToolbarButton("Scroll sensitivity ${scrollSensitivity}x", onScrollSensitivityChange) {
@@ -882,8 +928,8 @@ private fun MultimediaUprightBar(
                 horizontalArrangement = Arrangement.spacedBy(2.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Icon(Icons.Default.KeyboardArrowUp, null, tint = Color.White, modifier = Modifier.size(14.dp))
-                Text("${scrollSensitivity}x", color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                Icon(Icons.Default.KeyboardArrowUp, null, tint = content, modifier = Modifier.size(14.dp))
+                Text("${scrollSensitivity}x", color = content, fontSize = 10.sp, fontWeight = FontWeight.Bold)
             }
         }
         UprightToolbarButton(
@@ -893,7 +939,7 @@ private fun MultimediaUprightBar(
             Icon(
                 Icons.Default.Vibration,
                 null,
-                tint = if (isVibrationEnabled) Color.White else Color.White.copy(alpha = 0.4f),
+                tint = if (isVibrationEnabled) content else toolbarColors.mutedContent,
                 modifier = Modifier.size(20.dp),
             )
         }
@@ -901,7 +947,7 @@ private fun MultimediaUprightBar(
         UprightToolbarButton("Open settings", {
             context.startActivity(android.content.Intent(context, dev.arnv.bluke.SettingsActivity::class.java))
         }) {
-            Icon(Icons.Default.Settings, null, tint = Color.White, modifier = Modifier.size(20.dp))
+            Icon(Icons.Default.Settings, null, tint = content, modifier = Modifier.size(20.dp))
         }
     }
 }
@@ -910,6 +956,7 @@ private fun MultimediaUprightBar(
 private fun UprightToolbarButton(
     description: String,
     onClick: () -> Unit,
+    containerColor: Color = rememberControlSurfaceColors().toolbar.button,
     content: @Composable () -> Unit,
 ) {
     Surface(
@@ -917,7 +964,7 @@ private fun UprightToolbarButton(
         modifier = Modifier
             .size(44.dp)
             .semantics { contentDescription = description },
-        color = Color.White.copy(alpha = 0.15f),
+        color = containerColor,
         shape = RoundedCornerShape(12.dp),
     ) {
         Box(
@@ -946,6 +993,7 @@ private fun MultimediaTopBar(
     onToggleVibration: () -> Unit,
 ) {
     val context = LocalContext.current
+    val toolbarColors = rememberControlSurfaceColors().toolbar
     val connectedDevice by btManager.connectedDevice.collectAsState()
     val hostLabel = try {
         (connectedDevice ?: btManager.getReconnectTarget())?.name ?: "No Host"
@@ -969,14 +1017,16 @@ private fun MultimediaTopBar(
                 onLongClick = {
                     context.startActivity(Intent(context, QuickCycleActivity::class.java))
                 },
+                containerColor = toolbarColors.accentButton,
             ) {
-                ToolbarIcon(Icons.Default.Mouse, "Switch mode")
-                ToolbarLabel("Multimedia")
+                ToolbarIcon(Icons.Default.Mouse, "Switch mode", tint = toolbarColors.onAccentButton)
+                ToolbarLabel("Multimedia", color = toolbarColors.onAccentButton)
             }
             ToolbarHostChip(isConnected = isConnected, hostName = hostLabel)
             ReconnectHostButton(btManager, iconOnly = true)
         },
         settingsActivity = dev.arnv.bluke.SettingsActivity::class.java,
+        colors = toolbarColors,
         trailing = {
             ToolbarButton(onClick = onSensitivityChange, onClickLabel = "Next pointer speed") {
                 ToolbarIcon(Icons.Default.Speed, "Sensitivity")
@@ -990,7 +1040,7 @@ private fun MultimediaTopBar(
                 ToolbarIcon(
                     Icons.Default.Vibration,
                     if (isVibrationEnabled) "Disable vibration" else "Enable vibration",
-                    tint = if (isVibrationEnabled) Color.White else Color.White.copy(alpha = 0.4f),
+                    tint = if (isVibrationEnabled) toolbarColors.content else toolbarColors.mutedContent,
                 )
             }
         },

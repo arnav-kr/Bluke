@@ -63,6 +63,12 @@ private val LightColorScheme =
 @Composable
 fun MyApplicationTheme(
   darkTheme: Boolean = isSystemInDarkTheme(),
+  /**
+   * Always use the dark version of the app's palette (wallpaper colors or chosen accent),
+   * whatever the dark theme setting. For screens that stay dark, such as the input modes.
+   * Leaves the system bar icons to the enclosing theme.
+   */
+  forceDark: Boolean = false,
   content: @Composable () -> Unit,
 ) {
   val context = LocalContext.current
@@ -104,12 +110,12 @@ fun MyApplicationTheme(
   val isVibrant = paletteStyle == "Vibrant"
 
   val baseColor = if (isMonochrome) {
-      if (themeMode == 2 || (themeMode == 0 && darkTheme)) Color(0xFF6E6E6E) else Color(0xFF424242)
+      if (forceDark || themeMode == 2 || (themeMode == 0 && darkTheme)) Color(0xFF6E6E6E) else Color(0xFF424242)
   } else {
       AccentColors.getOrElse(accentColorIndex) { AccentColors.first() }
   }
 
-  val useDarkTheme = when (themeMode) {
+  val useDarkTheme = forceDark || when (themeMode) {
       1 -> false // Off
       2 -> true  // On
       else -> darkTheme // System
@@ -142,7 +148,7 @@ fun MyApplicationTheme(
 
   // Bar icons follow the in-app dark theme setting, which can differ from the system one.
   val view = androidx.compose.ui.platform.LocalView.current
-  if (!view.isInEditMode) {
+  if (!view.isInEditMode && !forceDark) {
     androidx.compose.runtime.LaunchedEffect(useDarkTheme) {
       val window = (view.context as? android.app.Activity)?.window ?: return@LaunchedEffect
       androidx.core.view.WindowCompat.getInsetsController(window, view).apply {

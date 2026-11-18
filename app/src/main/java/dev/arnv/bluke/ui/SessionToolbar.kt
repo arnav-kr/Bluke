@@ -26,6 +26,9 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.Immutable
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -57,6 +60,32 @@ internal object SessionToolbarDefaults {
     val MutedContent = Color.White.copy(alpha = 0.45f)
 }
 
+/** Colors of a [SessionToolbar] and its buttons. */
+@Immutable
+internal data class SessionToolbarColors(
+    val bar: Color,
+    val button: Color,
+    val content: Color,
+    val mutedContent: Color,
+    val hostChip: Color,
+    /** A tonal button that stands out from the rest, such as the current input mode. */
+    val accentButton: Color,
+    val onAccentButton: Color,
+)
+
+/** Translucent look that works over any keyboard theme; screens with a palette provide their own. */
+internal val DefaultSessionToolbarColors = SessionToolbarColors(
+    bar = SessionToolbarDefaults.BarColor,
+    button = SessionToolbarDefaults.ButtonColor,
+    content = Color.White,
+    mutedContent = SessionToolbarDefaults.MutedContent,
+    hostChip = Color.White.copy(alpha = 0.06f),
+    accentButton = SessionToolbarDefaults.ButtonColor,
+    onAccentButton = Color.White,
+)
+
+internal val LocalSessionToolbarColors = staticCompositionLocalOf { DefaultSessionToolbarColors }
+
 /**
  * Full-width toolbar holding a [leading] and a [trailing] group. The groups sit at the two
  * edges while they fit, and the whole bar scrolls sideways once they don't.
@@ -68,12 +97,14 @@ internal fun SessionToolbar(
     trailing: @Composable RowScope.() -> Unit,
     /** Settings page opened by a gear button at the far right, after [trailing]. */
     settingsActivity: Class<out Activity>? = null,
-) {
+    /** Colors for the bar and every toolbar button inside it. */
+    colors: SessionToolbarColors = LocalSessionToolbarColors.current,
+) = CompositionLocalProvider(LocalSessionToolbarColors provides colors) {
     BoxWithConstraints(
         modifier = modifier
             .fillMaxWidth()
             .height(SessionToolbarDefaults.BarHeight)
-            .background(SessionToolbarDefaults.BarColor),
+            .background(LocalSessionToolbarColors.current.bar),
     ) {
         val barWidth = maxWidth
         Row(
@@ -127,7 +158,7 @@ internal fun ToolbarButton(
     enabled: Boolean = true,
     /** Greyed out like a disabled button, but still clickable (e.g. to explain why). */
     dimmed: Boolean = false,
-    containerColor: Color = SessionToolbarDefaults.ButtonColor,
+    containerColor: Color = LocalSessionToolbarColors.current.button,
     horizontalPadding: Dp = SessionToolbarDefaults.ButtonPadding,
     content: @Composable RowScope.() -> Unit,
 ) {
@@ -176,7 +207,7 @@ internal fun ToolbarIconButton(
 internal fun ToolbarIcon(
     imageVector: ImageVector,
     contentDescription: String?,
-    tint: Color = Color.White,
+    tint: Color = LocalSessionToolbarColors.current.content,
 ) {
     Icon(imageVector, contentDescription, tint = tint, modifier = Modifier.size(SessionToolbarDefaults.IconSize))
 }
@@ -185,7 +216,7 @@ internal fun ToolbarIcon(
 internal fun ToolbarIcon(
     painter: Painter,
     contentDescription: String?,
-    tint: Color = Color.White,
+    tint: Color = LocalSessionToolbarColors.current.content,
 ) {
     Icon(painter, contentDescription, tint = tint, modifier = Modifier.size(SessionToolbarDefaults.IconSize))
 }
@@ -193,7 +224,7 @@ internal fun ToolbarIcon(
 @Composable
 internal fun ToolbarLabel(
     text: String,
-    color: Color = Color.White,
+    color: Color = LocalSessionToolbarColors.current.content,
     maxWidth: Dp = Dp.Unspecified,
 ) {
     Text(
@@ -225,7 +256,7 @@ internal fun ToolbarHostChip(isConnected: Boolean, hostName: String) {
         modifier = Modifier
             .height(SessionToolbarDefaults.ButtonHeight)
             .clip(RoundedCornerShape(SessionToolbarDefaults.ButtonCorner))
-            .background(Color.White.copy(alpha = 0.06f))
+            .background(LocalSessionToolbarColors.current.hostChip)
             .padding(horizontal = SessionToolbarDefaults.ButtonPadding)
             .semantics(mergeDescendants = true) {
                 contentDescription = if (isConnected) "Connected to $hostName" else "$hostName, offline"
